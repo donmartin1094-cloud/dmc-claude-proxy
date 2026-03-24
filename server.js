@@ -20,6 +20,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 
 app.post('/claude', async (req, res) => {
+  console.log('body keys:', Object.keys(req.body || {}), 'model:', req.body?.model);
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'API key not configured. Add ANTHROPIC_API_KEY to Railway environment variables.' });
   }
