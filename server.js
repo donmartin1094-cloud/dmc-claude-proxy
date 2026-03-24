@@ -33,8 +33,10 @@ app.post('/claude', async (req, res) => {
       },
       body: JSON.stringify(req.body)
     });
-    const data = await response.json();
+        const data = await response.json();
+    if (!response.ok) console.error('Anthropic error:', JSON.stringify(data));
     res.status(response.status).json(data);
+
   } catch (err) {
     res.status(500).json({ error: 'proxy_error', message: err.message });
   }
