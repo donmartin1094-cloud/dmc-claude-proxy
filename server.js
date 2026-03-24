@@ -42,4 +42,6 @@ app.post('/claude', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`DMC Claude proxy running on port ${PORT}`);
+  console.log('API key set:', !!process.env.ANTHROPIC_API_KEY);
+  console.log('Test var:', process.env.TEST_VAR);
 });
