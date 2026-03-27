@@ -42,7 +42,20 @@ app.post('/claude', async (req, res) => {
     res.status(500).json({ error: 'proxy_error', message: err.message });
   }
 });
-
+app.get('/gps/devices', async (_req, res) => {
+  const key = process.env.ONESTEPGPS_API_KEY;
+  if (!key)
+    return res.status(500).json({ error: 'ONESTEPGPS_API_KEY not configured' });
+  try {
+    const response = await fetch(
+      `https://track.onestepgps.com/v3/api/public/device?latest_point=true&api-key=${key}`
+    );
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`DMC Claude proxy running on port ${PORT}`);
   console.log('API key set:', !!process.env.ANTHROPIC_API_KEY);
