@@ -174,23 +174,24 @@ async function hdFsSet(docName, value) {
 
 const TABS = ["Dashboard", "Equipment", "Dispatch Sheets", "Daily Schedule", "Field Intel", "Conflicts", "Export"];
 
-// ─── HOVER API CONFIG ─────────────────────────────────────────────────────────
-const HOVER_API_BASE = "https://hover.to/api/v3";
+// ─── HOVER API ────────────────────────────────────────────────────────────────
 
 async function fetchHoverJobs(token) {
-  const res = await fetch(`${HOVER_API_BASE}/jobs?status=complete`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const r = await fetch('https://api.hover.to/projects', {
+    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
   });
-  if (!res.ok) throw new Error("Hover auth failed");
-  return res.json();
+  if (!r.ok) throw new Error('Hover API error ' + r.status);
+  const data = await r.json();
+  return data.projects || data || [];
 }
 
-async function fetchHoverJobMedia(token, hoverId) {
-  const res = await fetch(`${HOVER_API_BASE}/jobs/${hoverId}/attachments`, {
-    headers: { Authorization: `Bearer ${token}` },
+async function fetchHoverJobMedia(token, projectId) {
+  const r = await fetch(`https://api.hover.to/projects/${projectId}/deliverables`, {
+    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
   });
-  if (!res.ok) throw new Error("Failed to fetch media");
-  return res.json();
+  if (!r.ok) throw new Error('Hover media error ' + r.status);
+  const data = await r.json();
+  return (data.deliverables || []).filter(d => d.type === 'image').map(d => d.url);
 }
 
 // ─── ONESTEPGPS — proxied through Railway backend (key stays server-side) ────
@@ -318,10 +319,10 @@ const mockEquipment = [
 ];
 
 const mockJobs = [
-  { id: "JOB-2244", name: "I-485 Loop Grading", startDate: "2026-03-27", site: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", equipmentNeeded: ["EQ-101", "EQ-103"], status: "Needs Move", hoverId: "demo-2244" },
-  { id: "JOB-2245", name: "Union County Rd Widening", startDate: "2026-03-28", site: "Monroe, NC", address: "Hwy 74 & Rocky River Rd, Monroe, NC", equipmentNeeded: ["EQ-105"], status: "Needs Move", hoverId: "demo-2245" },
-  { id: "JOB-2241", name: "Hwy 74 Widening", startDate: "2026-03-10", site: "Gastonia, NC", address: "Hwy 74 W, Gastonia, NC", equipmentNeeded: ["EQ-102"], status: "Active", hoverId: "demo-2241" },
-  { id: "JOB-2246", name: "Cabarrus Grading Pkg", startDate: "2026-03-30", site: "Concord, NC", address: "George W Liles Pkwy, Concord, NC", equipmentNeeded: ["EQ-104"], status: "Conflict", hoverId: null },
+  { id: "JOB-2244", name: "I-485 Loop Grading", startDate: "2026-03-27", site: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", equipmentNeeded: ["EQ-101", "EQ-103"], status: "Needs Move" },
+  { id: "JOB-2245", name: "Union County Rd Widening", startDate: "2026-03-28", site: "Monroe, NC", address: "Hwy 74 & Rocky River Rd, Monroe, NC", equipmentNeeded: ["EQ-105"], status: "Needs Move" },
+  { id: "JOB-2241", name: "Hwy 74 Widening", startDate: "2026-03-10", site: "Gastonia, NC", address: "Hwy 74 W, Gastonia, NC", equipmentNeeded: ["EQ-102"], status: "Active" },
+  { id: "JOB-2246", name: "Cabarrus Grading Pkg", startDate: "2026-03-30", site: "Concord, NC", address: "George W Liles Pkwy, Concord, NC", equipmentNeeded: ["EQ-104"], status: "Conflict" },
 ];
 
 const mockDrivers = [
@@ -339,54 +340,15 @@ const mockMoveHistory = [
 ];
 
 const autoDispatches = [
-  { id: "DISP-001", jobId: "JOB-2244", jobName: "I-485 Loop Grading", eqId: "EQ-101", eqName: "CAT 349 Excavator", driverId: "DRV-01", driverName: "Mike Harrell", truck: "TR-11", from: "Main Yard", to: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", date: "2026-03-26", time: "06:00", miles: 22, permit: "Required", status: "Pending", hoverId: "demo-2244" },
-  { id: "DISP-002", jobId: "JOB-2244", jobName: "I-485 Loop Grading", eqId: "EQ-103", eqName: "CAT 140 Grader", driverId: "DRV-02", driverName: "Tony Vasquez", truck: "TR-14", from: "Main Yard", to: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", date: "2026-03-26", time: "07:30", miles: 22, permit: "Required", status: "Pending", hoverId: "demo-2244" },
-  { id: "DISP-003", jobId: "JOB-2245", jobName: "Union County Rd Widening", eqId: "EQ-105", eqName: "CAT 745 Art. Truck", driverId: "DRV-04", driverName: "Dale Pruitt", truck: "TR-19", from: "Main Yard", to: "Monroe, NC", address: "Hwy 74 & Rocky River Rd, Monroe, NC", date: "2026-03-27", time: "06:00", miles: 31, permit: "Not Required", status: "Pending", hoverId: "demo-2245" },
+  { id: "DISP-001", jobId: "JOB-2244", jobName: "I-485 Loop Grading", eqId: "EQ-101", eqName: "CAT 349 Excavator", driverId: "DRV-01", driverName: "Mike Harrell", truck: "TR-11", from: "Main Yard", to: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", date: "2026-03-26", time: "06:00", miles: 22, permit: "Required", status: "Pending" },
+  { id: "DISP-002", jobId: "JOB-2244", jobName: "I-485 Loop Grading", eqId: "EQ-103", eqName: "CAT 140 Grader", driverId: "DRV-02", driverName: "Tony Vasquez", truck: "TR-14", from: "Main Yard", to: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", date: "2026-03-26", time: "07:30", miles: 22, permit: "Required", status: "Pending" },
+  { id: "DISP-003", jobId: "JOB-2245", jobName: "Union County Rd Widening", eqId: "EQ-105", eqName: "CAT 745 Art. Truck", driverId: "DRV-04", driverName: "Dale Pruitt", truck: "TR-19", from: "Main Yard", to: "Monroe, NC", address: "Hwy 74 & Rocky River Rd, Monroe, NC", date: "2026-03-27", time: "06:00", miles: 31, permit: "Not Required", status: "Pending" },
 ];
 
 const conflicts = [
   { id: "CON-001", severity: "High", type: "Equipment Not Returned", desc: "EQ-104 (Volvo EC300) needed at Job #2246 by 3/30 but currently committed to Job #2238 with no scheduled return.", affectedJob: "JOB-2246", resolution: "Coordinate early release from Job #2238 or source alternate excavator." },
   { id: "CON-002", severity: "Medium", type: "Driver Unavailable", desc: "Josh Bennett (TR-07) is unavailable 3/26-3/27 — no coverage for backup hauls during peak move window.", affectedJob: "General", resolution: "Assign Dale Pruitt as backup after DISP-003 completes." },
 ];
-
-const mockHoverMedia = {
-  "demo-2244": {
-    jobName: "I-485 Loop Grading",
-    address: "I-485 & Lawyers Rd, Charlotte, NC",
-    captureDate: "2026-03-21",
-    thumbnail: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&q=80",
-    images: [
-      { label: "Site Overview", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&q=80" },
-      { label: "North Access", url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800&q=80" },
-      { label: "Staging Area", url: "https://images.unsplash.com/photo-1590496793929-36417d3117de?w=800&q=80" },
-    ],
-    videoUrl: null,
-    stagingNotes: "Stage excavator on north pad. Grader enters via west gate off Lawyers Rd.",
-  },
-  "demo-2245": {
-    jobName: "Union County Rd Widening",
-    address: "Hwy 74 & Rocky River Rd, Monroe, NC",
-    captureDate: "2026-03-19",
-    thumbnail: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=600&q=80",
-    images: [
-      { label: "Full Site", url: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&q=80" },
-      { label: "Drop Zone", url: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80" },
-    ],
-    videoUrl: null,
-    stagingNotes: "Articulated truck drop zone is marked on south shoulder. Contact foreman before entering.",
-  },
-  "demo-2241": {
-    jobName: "Hwy 74 Widening",
-    address: "Hwy 74 W, Gastonia, NC",
-    captureDate: "2026-03-15",
-    thumbnail: "https://images.unsplash.com/photo-1617791160505-6f00504e3519?w=600&q=80",
-    images: [
-      { label: "Aerial Overview", url: "https://images.unsplash.com/photo-1617791160505-6f00504e3519?w=800&q=80" },
-    ],
-    videoUrl: null,
-    stagingNotes: "Active site. Hard hat required. Check in with flagman at east entrance.",
-  },
-};
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -403,70 +365,6 @@ const severityColor = (s) =>
   s === "High"
     ? "bg-red-100 text-red-800 border-red-200"
     : "bg-yellow-100 text-yellow-800 border-yellow-200";
-
-// ─── HOVER MEDIA CARD ─────────────────────────────────────────────────────────
-
-function HoverMediaCard({ hoverId, compact = false }) {
-  const [expanded, setExpanded] = useState(false);
-  const [activeImg, setActiveImg] = useState(0);
-  const media = mockHoverMedia[hoverId];
-
-  if (!hoverId) return (
-    <div className="rounded border border-dashed border-gray-200 p-2 text-xs text-gray-400 text-center">
-      📷 No Hover data linked to this job yet
-    </div>
-  );
-
-  if (!media) return null;
-
-  return (
-    <div className="rounded-lg border border-blue-100 overflow-hidden bg-blue-50">
-      <div className="relative cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <img src={media.thumbnail} alt="Site aerial" className={`w-full object-cover ${compact ? "h-24" : "h-36"}`} />
-        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center">
-          <div className="text-white text-center">
-            <div className="text-lg">🚁</div>
-            <div className="text-xs font-bold">Hover Aerial</div>
-            <div className="text-xs opacity-80">{media.captureDate} · {media.images.length} photos</div>
-          </div>
-        </div>
-        <div className="absolute top-1.5 right-1.5 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded font-semibold">
-          {expanded ? "▲ Close" : "▼ View"}
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="p-2 space-y-2">
-          <img
-            src={media.images[activeImg].url}
-            alt={media.images[activeImg].label}
-            className="w-full h-48 object-cover rounded"
-          />
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {media.images.map((img, i) => (
-              <button key={i} onClick={() => setActiveImg(i)}
-                className={`shrink-0 rounded overflow-hidden border-2 ${activeImg === i ? "border-blue-500" : "border-transparent"}`}>
-                <img src={img.url} alt={img.label} className="w-16 h-12 object-cover" />
-              </button>
-            ))}
-          </div>
-          <div className="text-xs font-semibold text-gray-600">{media.images[activeImg].label}</div>
-
-          {media.stagingNotes && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs">
-              <span className="font-semibold text-yellow-800">📍 Staging Notes: </span>
-              <span className="text-gray-700">{media.stagingNotes}</span>
-            </div>
-          )}
-
-          <div className="bg-gray-100 border border-gray-200 rounded p-2 text-xs text-gray-500 text-center">
-            🎥 Video walkthrough will appear here once Hover account is connected
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── ANALYSIS RESULT CARD ─────────────────────────────────────────────────────
 
@@ -757,6 +655,17 @@ function App() {
   const [hoverConnected, setHoverConnected] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [hoverSyncing, setHoverSyncing] = useState(false);
+  const [hoverJobs, setHoverJobs] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('hd_hover_jobs') || 'null');
+      if (cached && cached.ts && (Date.now() - cached.ts) < 12 * 60 * 60 * 1000) return cached.jobs || [];
+    } catch(e) {}
+    return [];
+  });
+  const hoverTokenRef = useRef(null);
+  // ── Hover aerial lightbox state ──
+  const [hoverLightbox, setHoverLightbox] = useState(null); // { jobName, urls } | null
+  const [hoverLightboxLoading, setHoverLightboxLoading] = useState(false);
   // Drivers cannot use AI features
   const isDriverUser = (() => {
     try {
@@ -1384,6 +1293,26 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Hover token persistence: restore from localStorage on mount ──
+  useEffect(() => {
+    const saved = localStorage.getItem('hd_hover_token');
+    if (saved) {
+      setHoverToken(saved);
+      setHoverConnected(true);
+      // Refresh cache if stale (> 12 hours)
+      try {
+        const cached = JSON.parse(localStorage.getItem('hd_hover_jobs') || 'null');
+        const stale = !cached || !cached.ts || (Date.now() - cached.ts) >= 12 * 60 * 60 * 1000;
+        if (stale) {
+          fetchHoverJobs(saved).then(jobs => {
+            localStorage.setItem('hd_hover_jobs', JSON.stringify({ ts: Date.now(), jobs }));
+            setHoverJobs(jobs);
+          }).catch(() => {});
+        }
+      } catch(e) {}
+    }
+  }, []);
+
   // ── Stale detection: true if unit hasn't reported in 24+ hours ──
   const isDeviceStale = (device) => {
     const pt = device.latest_device_point;
@@ -1554,10 +1483,20 @@ function App() {
     }
   };
 
-  const handleHoverConnect = () => {
-    if (hoverToken.trim()) {
-      setHoverSyncing(true);
-      setTimeout(() => { setHoverSyncing(false); setHoverConnected(true); }, 1800);
+  const handleHoverConnect = async () => {
+    const tok = hoverToken.trim();
+    if (!tok) return;
+    setHoverSyncing(true);
+    try {
+      const jobs = await fetchHoverJobs(tok);
+      localStorage.setItem('hd_hover_token', tok);
+      localStorage.setItem('hd_hover_jobs', JSON.stringify({ ts: Date.now(), jobs }));
+      setHoverJobs(jobs);
+      setHoverConnected(true);
+    } catch(e) {
+      alert('Hover connection failed: ' + e.message);
+    } finally {
+      setHoverSyncing(false);
     }
   };
 
@@ -1955,6 +1894,39 @@ Be specific, practical, and flag any uncertainties clearly.`;
     <div className="min-h-screen bg-gray-50 font-sans">
       <NameEditorModal />
 
+      {/* ── Hover Aerial Lightbox ── */}
+      {hoverLightbox && (
+        <div style={{position:'fixed',inset:0,zIndex:9800,background:'rgba(0,0,0,0.88)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'16px'}}
+          onClick={e => { if (e.target === e.currentTarget) setHoverLightbox(null); }}>
+          <div style={{background:'#1a1a1a',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'12px',padding:'16px',maxWidth:'min(720px,95vw)',width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'#5ab4f5'}}>📷 Hover Aerial</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.7)',marginTop:'2px'}}>{hoverLightbox.jobName}</div>
+              </div>
+              <button onClick={() => setHoverLightbox(null)}
+                style={{background:'rgba(255,100,100,0.15)',border:'1px solid rgba(255,100,100,0.4)',borderRadius:'6px',color:'#ff6464',fontFamily:"'DM Mono',monospace",fontSize:'13px',fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
+                ×
+              </button>
+            </div>
+            {hoverLightboxLoading ? (
+              <div style={{textAlign:'center',padding:'32px',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'rgba(155,148,136,0.6)'}}>Loading aerial photos…</div>
+            ) : hoverLightbox.urls && hoverLightbox.urls.length > 0 ? (
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px'}}>
+                {hoverLightbox.urls.slice(0,6).map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                    style={{display:'block',borderRadius:'6px',overflow:'hidden',border:'1px solid rgba(90,180,245,0.2)',cursor:'zoom-in'}}>
+                    <img src={url} alt={`Aerial ${i+1}`} style={{width:'100%',aspectRatio:'4/3',objectFit:'cover',display:'block'}} />
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div style={{textAlign:'center',padding:'24px',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'rgba(155,148,136,0.6)'}}>No aerial images found for this project.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Header — DMC branded, dark theme ── */}
       <div style={{background:'var(--asphalt-mid)',borderBottom:'2px solid var(--stripe)',position:'sticky',top:0,zIndex:1500,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}>
 
@@ -1979,12 +1951,12 @@ Be specific, practical, and flag any uncertainties clearly.`;
             </span>
           </div>
 
-          {/* Right: connect button (admins only, when GPS disconnected) */}
-          <div style={{flex:'1 1 0',display:'flex',justifyContent:'flex-end',alignItems:'center',gap:'6px',minWidth:0}}>
+          {/* Right: connect buttons (admins only) */}
+          <div style={{flex:'1 1 0',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
             {!gpsConnected && !isDriverUser && (
-              <>
+              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                 <input
-                  style={{background:'var(--asphalt)',border:'1px solid var(--asphalt-light)',borderRadius:'var(--radius)',color:'var(--white)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'5px 10px',width:'180px'}}
+                  style={{background:'var(--asphalt)',border:'1px solid var(--asphalt-light)',borderRadius:'var(--radius)',color:'var(--white)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'5px 10px',width:'150px'}}
                   placeholder="OneStepGPS API key…"
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
@@ -1994,7 +1966,23 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   style={{background:'rgba(245,197,24,0.12)',border:'1px solid rgba(245,197,24,0.4)',borderRadius:'var(--radius)',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,padding:'5px 12px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
                   {syncing ? "⏳" : "🛰 Connect"}
                 </button>
-              </>
+              </div>
+            )}
+            {!isDriverUser && (
+              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+                <input
+                  ref={hoverTokenRef}
+                  style={{background:'var(--asphalt)',border:`1px solid ${hoverConnected?'rgba(61,158,106,0.5)':'rgba(90,180,245,0.4)'}`,borderRadius:'var(--radius)',color:'var(--white)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'5px 10px',width:'150px'}}
+                  placeholder="Hover bearer token…"
+                  value={hoverToken}
+                  onChange={e => setHoverToken(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleHoverConnect()}
+                />
+                <button onClick={handleHoverConnect} disabled={hoverSyncing}
+                  style={{background: hoverConnected?'rgba(61,158,106,0.15)':'rgba(90,180,245,0.12)',border:`1px solid ${hoverConnected?'rgba(61,158,106,0.4)':'rgba(90,180,245,0.4)'}`,borderRadius:'var(--radius)',color:hoverConnected?'#7ecb8f':'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,padding:'5px 12px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,opacity:hoverSyncing?0.6:1}}>
+                  {hoverSyncing ? "⏳" : hoverConnected ? "📷 Hover ✓" : "📷 Connect Hover"}
+                </button>
+              </div>
             )}
           </div>
 
@@ -2864,7 +2852,25 @@ Be specific, practical, and flag any uncertainties clearly.`;
                             return eqId;
                           }).join(", ")}
                         </div>
-                        <HoverMediaCard hoverId={job.hoverId} />
+                        {(() => {
+                          const jNameL = (job.name||'').toLowerCase();
+                          const hp = hoverConnected && hoverJobs.length > 0
+                            ? hoverJobs.find(p => { const pn=(p.name||p.title||p.job_name||'').toLowerCase(); return pn && jNameL && (pn.includes(jNameL)||jNameL.includes(pn)); })
+                            : null;
+                          if (!hp && !hoverConnected) return <div className="text-xs text-gray-400 text-center border border-dashed border-gray-200 rounded p-2">Connect Hover in the header to view aerial photos</div>;
+                          if (!hp) return null;
+                          return (
+                            <button onClick={async () => {
+                              setHoverLightbox({ jobName: job.name, urls: null });
+                              setHoverLightboxLoading(true);
+                              try { const urls = await fetchHoverJobMedia(hoverToken, hp.id); setHoverLightbox({ jobName: job.name, urls }); }
+                              catch(e) { setHoverLightbox({ jobName: job.name, urls: [] }); }
+                              finally { setHoverLightboxLoading(false); }
+                            }} className="w-full text-xs py-2 rounded border border-blue-200 bg-blue-50 text-blue-700 font-semibold">
+                              📷 View Aerial Photos
+                            </button>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -3463,8 +3469,17 @@ Be specific, practical, and flag any uncertainties clearly.`;
           return (
             <div className="space-y-4">
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)'}}>
-                  {plan.status === 'verified' ? '✅ Plan Verified' : '⏳ Pending Verification'} · {plan.jobs.length} job{plan.jobs.length!==1?'s':''} · {plan.jobs.reduce((a,j)=>a+(j.moves||[]).length,0)} total moves
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)',display:'flex',alignItems:'center',gap:'10px'}}>
+                  <span>{plan.status === 'verified' ? '✅ Plan Verified' : '⏳ Pending Verification'} · {plan.jobs.length} job{plan.jobs.length!==1?'s':''} · {plan.jobs.reduce((a,j)=>a+(j.moves||[]).length,0)} total moves</span>
+                  {!hoverConnected && !isDriverUser && (
+                    <button onClick={() => { setTimeout(() => hoverTokenRef.current?.focus(), 50); }}
+                      style={{background:'none',border:'none',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'10px',cursor:'pointer',padding:0,textDecoration:'underline',opacity:0.75}}>
+                      📷 Connect Hover →
+                    </button>
+                  )}
+                  {hoverConnected && (
+                    <span style={{color:'rgba(61,158,106,0.9)',fontSize:'9px'}}>📷 Hover connected · {hoverJobs.length} projects</span>
+                  )}
                 </div>
                 <div style={{display:'flex',gap:'6px'}}>
                   <button onClick={() => { const p = JSON.parse(localStorage.getItem('dmc_lowbed_plan')||'null'); setLowbedPlan(p); }}
@@ -3481,6 +3496,27 @@ Be specific, practical, and flag any uncertainties clearly.`;
               {plan.jobs.map((job, ji) => {
                 const totalMoves = (job.moves||[]).length;
                 const doneMoves  = (job.moves||[]).filter(m=>m.status==='complete').length;
+                // Match against Hover projects by case-insensitive partial name
+                const jobNameLower = (job.jobName||'').toLowerCase();
+                const matchedHoverProject = hoverConnected && hoverJobs.length > 0
+                  ? hoverJobs.find(p => {
+                      const pname = (p.name||p.title||p.job_name||'').toLowerCase();
+                      return pname && jobNameLower && (pname.includes(jobNameLower) || jobNameLower.includes(pname));
+                    })
+                  : null;
+                const openAerial = async () => {
+                  if (!matchedHoverProject) return;
+                  setHoverLightbox({ jobName: job.jobName, urls: null });
+                  setHoverLightboxLoading(true);
+                  try {
+                    const urls = await fetchHoverJobMedia(hoverToken, matchedHoverProject.id);
+                    setHoverLightbox({ jobName: job.jobName, urls });
+                  } catch(e) {
+                    setHoverLightbox({ jobName: job.jobName, urls: [] });
+                  } finally {
+                    setHoverLightboxLoading(false);
+                  }
+                };
                 return (
                   <div key={ji} style={{background:'var(--asphalt-mid)',border:'1px solid rgba(245,197,24,0.25)',borderRadius:'10px',overflow:'hidden'}}>
                     {/* Job header */}
@@ -3489,9 +3525,17 @@ Be specific, practical, and flag any uncertainties clearly.`;
                         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'17px',letterSpacing:'2px',color:'var(--stripe)'}}>{job.jobName||'Unnamed Job'}{job.jobNum&&<span style={{fontSize:'11px',opacity:0.65,marginLeft:'6px'}}>#{job.jobNum}</span>}</div>
                         <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)',marginTop:'1px'}}>{job.date}{job.location&&' · '+job.location}</div>
                       </div>
-                      <span style={{background: doneMoves===totalMoves?'rgba(126,203,143,0.15)':'rgba(90,180,245,0.1)',border:'1px solid '+(doneMoves===totalMoves?'rgba(126,203,143,0.4)':'rgba(90,180,245,0.3)'),borderRadius:'20px',padding:'3px 10px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:doneMoves===totalMoves?'#7ecb8f':'#5ab4f5',flexShrink:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'6px',flexShrink:0}}>
+                        {matchedHoverProject && (
+                          <button onClick={openAerial}
+                            style={{background:'rgba(90,180,245,0.15)',border:'1px solid rgba(90,180,245,0.45)',borderRadius:'8px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,padding:'3px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                            📷 Aerial
+                          </button>
+                        )}
+                      <span style={{background: doneMoves===totalMoves?'rgba(126,203,143,0.15)':'rgba(90,180,245,0.1)',border:'1px solid '+(doneMoves===totalMoves?'rgba(126,203,143,0.4)':'rgba(90,180,245,0.3)'),borderRadius:'20px',padding:'3px 10px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:doneMoves===totalMoves?'#7ecb8f':'#5ab4f5'}}>
                         {doneMoves}/{totalMoves} done
                       </span>
+                      </div>
                     </div>
 
                     {/* All equipment for this job */}
@@ -3588,7 +3632,22 @@ Be specific, practical, and flag any uncertainties clearly.`;
                         <div className={`inline-block mt-0.5 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(d.status)}`}>{d.status}</div>
                       </div>
                     </div>
-                    <HoverMediaCard hoverId={d.hoverId} compact />
+                    {hoverConnected && (() => {
+                      const jnl = (d.jobName||'').toLowerCase();
+                      const hp = hoverJobs.find(p => { const pn=(p.name||p.title||p.job_name||'').toLowerCase(); return pn && jnl && (pn.includes(jnl)||jnl.includes(pn)); });
+                      if (!hp) return null;
+                      return (
+                        <button onClick={async () => {
+                          setHoverLightbox({ jobName: d.jobName, urls: null });
+                          setHoverLightboxLoading(true);
+                          try { const urls = await fetchHoverJobMedia(hoverToken, hp.id); setHoverLightbox({ jobName: d.jobName, urls }); }
+                          catch(e) { setHoverLightbox({ jobName: d.jobName, urls: [] }); }
+                          finally { setHoverLightboxLoading(false); }
+                        }} className="w-full text-xs py-1.5 mt-1 rounded border border-blue-200 bg-blue-50 text-blue-700 font-semibold">
+                          📷 Aerial
+                        </button>
+                      );
+                    })()}
                   </div>
                 ))}
                 {dispatches.filter(d => d.date === day).length === 0 && (
