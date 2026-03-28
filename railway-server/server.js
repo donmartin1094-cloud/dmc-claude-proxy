@@ -191,6 +191,37 @@ app.post('/mail/message', async (req, res) => {
   }
 });
 
+// ── Mail: download attachment ───────────────────────────────────────────────
+app.post('/mail/attachment', async (req, res) => {
+  const { user, pass, folder = 'INBOX', uid, filename } = req.body;
+  if (!user || !pass || !uid || !filename) return res.status(400).json({ error: 'Missing params' });
+  const client = makeImap(user, pass);
+  try {
+    await client.connect();
+    await client.mailboxOpen(folder, { readOnly: true });
+    let found = false;
+    for await (const msg of client.fetch(
+      { uid: parseInt(uid) },
+      { source: true },
+      { uid: true }
+    )) {
+      const parsed = await simpleParser(msg.source);
+      const att = (parsed.attachments || []).find(a => a.filename === filename);
+      if (!att) { found = false; break; }
+      found = true;
+      res.setHeader('Content-Type', att.contentType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+      res.setHeader('Content-Length', att.size || att.content.length);
+      res.send(att.content);
+    }
+    if (!found) res.status(404).json({ error: 'Attachment not found' });
+    await client.logout();
+  } catch(err) {
+    try { await client.logout(); } catch(e) {}
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Mail: send ──────────────────────────────────────────────────────────────
 app.post('/mail/send', async (req, res) => {
   const { user, pass, to, cc, subject, html, text, inReplyTo, references } = req.body;
