@@ -22844,6 +22844,7 @@ function saveQCReports() {
 function renderQCReports() {
   const wrap = document.getElementById('qcReportsView');
   if (!wrap) return;
+  _injectReportsPrintStyles();
   const canManage = canManageQC();
 
   const content = qcView === 'gc' ? renderQCByGC() : renderQCList();
@@ -22853,6 +22854,7 @@ function renderQCReports() {
       <div class="qc-header">
         <div class="qc-title">🔬 QC Reports</div>
         <div style="display:flex;align-items:center;gap:8px;">
+          <button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;white-space:nowrap;">🖨 Print / Save PDF</button>
           ${canManage ? `<button class="btn btn-primary btn-sm" onclick="openQCJobModal()" style="white-space:nowrap;">+ New QC Job</button>` : ''}
           <div class="qc-view-toggle">
             <button class="qc-toggle-btn ${qcView==='list'?'active':''}" onclick="setQCView('list')">≡ List</button>
@@ -23284,6 +23286,7 @@ function saveForemanReports() {
 // ── Repository list rendering ────────────────────────────────────────────────
 function renderForemanReports(containerEl) {
   if (!containerEl) return;
+  _injectReportsPrintStyles();
   var sorted = foremanReports.slice().sort(function(a, b) {
     if (_frSortBy === 'foreman') {
       var fc = (a.foreman||'').localeCompare(b.foreman||'');
@@ -23301,6 +23304,7 @@ function renderForemanReports(containerEl) {
       '<button onclick="_frSortBy=\'foreman\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
         'style="background:'+(_frSortBy==='foreman'?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(_frSortBy==='foreman'?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:3px;color:'+(_frSortBy==='foreman'?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 10px;cursor:pointer;">👷 Foreman</button>'+
       '<div style="flex:1;"></div>'+
+      '<button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;">🖨 Print / Save PDF</button>'+
       '<button onclick="openForemanReportForm(null)" style="background:var(--stripe);border:none;border-radius:var(--radius);padding:4px 14px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;cursor:pointer;">+ New Report</button>'+
     '</div>';
 
@@ -24177,14 +24181,15 @@ function _mailOpenMessage(uid, folder) {
           '<div><span style="color:var(--concrete-dim);">From: </span><span style="color:var(--white);">'+escHtml(from)+'</span></div>'+
           '<div><span style="color:var(--concrete-dim);">To: </span><span style="color:var(--white);">'+escHtml(toStr)+'</span></div>'+
           '<div><span style="color:var(--concrete-dim);">Date: </span>'+escHtml(dt)+'</div>'+
-          (hasAtt ? '<div>📎 '+msg.attachments.map(function(a){return escHtml(a.filename)+' ('+_mailFmtSize(a.size)+')'}).join(', ')+'</div>' : '')+
+          (hasAtt ? '<div id="mailAttachmentBar" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>' : '')+
         '</div>'+
       '</div>'+
       '<div style="flex:1;overflow:hidden;">'+
         (msg.html
-          ? '<iframe srcdoc="'+msg.html.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" style="width:100%;height:100%;border:none;" sandbox="allow-same-origin allow-popups"></iframe>'
+          ? '<iframe srcdoc="'+msg.html.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+" style="width:100%;height:100%;border:none;" sandbox="allow-same-origin allow-popups"></iframe>'
           : '<div style="padding:18px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);white-space:pre-wrap;overflow-y:auto;height:100%;box-sizing:border-box;">'+escHtml(msg.text||'(empty)')+'</div>')+
       '</div>';
+    if (hasAtt) { _mailRenderAttachments(msg.attachments, uid, folder); }
   }).catch(function(err) {
     if (v) v.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(err.message)+'</div>';
   });
@@ -24248,6 +24253,92 @@ function _mailFmtSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1048576) return Math.round(bytes/1024) + ' KB';
   return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// ── Attachment chips: download, image preview, large-file warning ─────────────
+function _mailRenderAttachments(attachments, uid, folder) {
+  var bar = document.getElementById('mailAttachmentBar');
+  if (!bar) return;
+  var c = _mailCreds();
+  if (!c) return;
+  var LARGE = 5 * 1024 * 1024;
+
+  attachments.forEach(function(att) {
+    var chip = document.createElement('div');
+    chip.style.cssText = 'display:flex;align-items:center;gap:6px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);';
+
+    var isImage = att.contentType && att.contentType.startsWith('image/');
+    if (isImage) {
+      var img = document.createElement('img');
+      img.style.cssText = 'max-height:56px;border-radius:4px;margin-right:8px;display:block;';
+      img.alt = att.filename;
+      chip.appendChild(img);
+      (function(imgEl) {
+        fetch(_mailRailBase() + '/mail/attachment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: c.email, pass: c.pass, folder: folder, uid: uid, filename: att.filename })
+        }).then(function(r) {
+          if (!r.ok) return;
+          return r.blob();
+        }).then(function(blob) {
+          if (!blob) return;
+          imgEl.src = URL.createObjectURL(blob);
+        }).catch(function() {});
+      })(img);
+    }
+
+    if (att.size > LARGE) {
+      var warn = document.createElement('span');
+      warn.textContent = '⚠';
+      warn.title = 'Large file — download may be slow';
+      warn.style.cssText = 'color:#f5a623;cursor:default;';
+      chip.appendChild(warn);
+    }
+
+    var label = document.createElement('span');
+    label.textContent = att.filename + ' (' + _mailFmtSize(att.size) + ')';
+    label.style.color = 'var(--white)';
+    chip.appendChild(label);
+
+    var btn = document.createElement('button');
+    btn.textContent = '⬇';
+    btn.title = 'Download ' + att.filename;
+    btn.style.cssText = 'background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:2px 6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;';
+    btn.onclick = (function(filename, btnEl) {
+      return function() {
+        btnEl.disabled = true;
+        btnEl.textContent = '…';
+        fetch(_mailRailBase() + '/mail/attachment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: c.email, pass: c.pass, folder: folder, uid: uid, filename: filename })
+        }).then(function(r) {
+          if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'HTTP ' + r.status); });
+          return r.blob();
+        }).then(function(blob) {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          btnEl.textContent = '✓';
+          btnEl.disabled = false;
+        }).catch(function(err) {
+          btnEl.textContent = '⬇';
+          btnEl.disabled = false;
+          var toast = document.createElement('div');
+          toast.textContent = 'Download failed: ' + err.message;
+          toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#c62828;color:#fff;padding:8px 16px;border-radius:var(--radius);font-family:\'DM Mono\',monospace;font-size:10px;z-index:9999;';
+          document.body.appendChild(toast);
+          setTimeout(function() { toast.remove(); }, 4000);
+        });
+      };
+    })(att.filename, btn);
+    chip.appendChild(btn);
+
+    bar.appendChild(chip);
+  });
 }
 
 // ── Compose modal ────────────────────────────────────────────────────────────
