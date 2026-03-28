@@ -5471,8 +5471,8 @@ function widgetJobPhotos() {
     ? recent.map(function(p, i) {
         var caption = escHtml(p.displayName || p.jobName || p.folder || 'Unassigned');
         var safeId = escHtml(p.id || '');
-        return '<div style="position:relative;border-radius:4px;overflow:hidden;background:var(--asphalt-light);aspect-ratio:1;">' +
-          '<div onclick="if(window._jpWidgetPreviewArr[' + i + ']?.url)_openPhotoPreview(window._jpWidgetPreviewArr[' + i + '].url,window._jpWidgetPreviewArr[' + i + '].caption,{photoId:window._jpWidgetPreviewArr[' + i + '].photoId,photos:window._jpWidgetPreviewArr,currentIndex:' + i + '})" ' +
+        return '<div data-jp-thumb-id="' + safeId + '" style="position:relative;border-radius:4px;overflow:hidden;background:var(--asphalt-light);aspect-ratio:1;transition:opacity 0.2s;">' +
+          '<div onclick="_jpOpenPreview(' + i + ')" ' +
             'style="width:100%;height:100%;cursor:' + (p.url ? 'pointer' : 'default') + ';display:block;">' +
             (p.url ? '<img src="' + p.url.replace(/'/g,'%27') + '" style="width:100%;height:100%;object-fit:cover;pointer-events:none;">' : '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:20px;">📸</div>') +
             '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);padding:2px 4px;font-family:\'DM Mono\',monospace;font-size:7px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + caption + '</div>' +
@@ -5496,6 +5496,41 @@ function widgetJobPhotos() {
       '<button onclick="_jpOpenUpload()" style="width:100%;padding:7px;background:rgba(90,180,245,0.1);border:1px dashed rgba(90,180,245,0.4);border-radius:5px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">📷 Upload Photo</button>' +
     '</div>' +
   '</div>';
+}
+
+// ── Full-screen photo preview for widget thumbnails ───────────────────────────
+// Called with a numeric index into window._jpWidgetPreviewArr
+function _jpOpenPreview(idx) {
+  var arr = window._jpWidgetPreviewArr || [];
+  var item = arr[idx];
+  if (!item || !item.url) return;
+  // Find the full photo object for metadata
+  var photo = jobPhotos.find(function(p) { return p.id === item.photoId; }) || {};
+  var dateStr = photo.uploadedAt ? new Date(photo.uploadedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  var jobLabel = escHtml(photo.jobName || photo.folder || 'Job Photos');
+  var folderLabel = escHtml(photo.folder || '');
+
+  document.getElementById('_jpPreviewOverlay')?.remove();
+  var ov = document.createElement('div');
+  ov.id = '_jpPreviewOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.93);display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+  ov.innerHTML =
+    '<button onclick="document.getElementById(\'_jpPreviewOverlay\').remove()" ' +
+      'style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;width:38px;height:38px;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:1;">×</button>' +
+    '<img src="' + item.url.replace(/'/g, '%27') + '" ' +
+      'style="max-width:min(92vw,960px);max-height:75vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,0.7);">' +
+    '<div style="margin-top:16px;text-align:center;padding:0 20px;">' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:15px;font-weight:600;color:#fff;margin-bottom:4px;">' + jobLabel + '</div>' +
+      (folderLabel && folderLabel !== jobLabel ? '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:4px;">📁 ' + folderLabel + '</div>' : '') +
+      (dateStr ? '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.4);">' + dateStr + '</div>' : '') +
+    '</div>';
+
+  // Tap outside image closes overlay
+  ov.addEventListener('click', function(evt) {
+    if (evt.target === ov) ov.remove();
+  });
+  document.body.appendChild(ov);
 }
 
 // Returns true if the current user may delete the given photo object
@@ -5790,25 +5825,79 @@ function _jpSavePhoto(file, lat, lon, folder, job) {
       var hv = document.getElementById('homeView');
       if (hv && hv.style.display !== 'none') renderHomeView(hv);
 
-      // Upload to Firebase Storage for permanent cross-device URL
+      // Dim the thumbnail while uploading to indicate pending state
+      function _jpSetThumbOpacity(pid, opacity) {
+        try {
+          var thumbs = document.querySelectorAll('[data-jp-thumb-id="' + pid + '"]');
+          thumbs.forEach(function(el) { el.style.opacity = opacity; });
+        } catch(e) {}
+      }
+      _jpSetThumbOpacity(photoId, '0.6');
+
+      // Helper: write flat-field Firestore doc for cross-device sync
+      function _jpWriteFirestoreDoc(p) {
+        if (!db) return;
+        try {
+          db.collection('job_photos').doc(p.id).set({
+            id:         p.id,
+            fileName:   p.fileName  || '',
+            folder:     p.folder    || 'Job Photos',
+            jobName:    p.jobName   || null,
+            jobId:      p.jobId     || null,
+            lat:        p.lat       || null,
+            lon:        p.lon       || null,
+            uploadedAt: p.uploadedAt || Date.now(),
+            url:        (p.url && !p.url.startsWith('data:')) ? p.url : null
+          });
+        } catch(e) {}
+        // Also write legacy wrapper format so existing snapshot listener stays compatible
+        _jpPushToCloud(p);
+      }
+
+      // Upload to Firebase Storage — canonical path: job-photos/{photo.id}.jpg
       if (storage) {
-        uploadFileToStorage(compressedDataUrl, storageFolder).then(function(result) {
-          // Replace local base64 with permanent Storage URL
-          photo.url = result.url;
-          photo.storagePath = result.path;
-          // Update in local array
-          var idx = jobPhotos.findIndex(function(p) { return p.id === photoId; });
-          if (idx !== -1) jobPhotos[idx] = photo;
-          saveJobPhotos();
-          _jpPushToCloud(photo);
-          // Refresh view if visible
-          var hv2 = document.getElementById('homeView');
-          if (hv2 && hv2.style.display !== 'none') renderHomeView(hv2);
-        }).catch(function() {
-          // Storage upload failed — push metadata without URL (base64 stays local only)
-          _jpPushToCloud(photo);
-        });
+        var _b64Parts = compressedDataUrl.split(',');
+        var _b64Bytes = atob(_b64Parts[1] || '');
+        var _b64Arr   = new Uint8Array(_b64Bytes.length);
+        for (var _bi = 0; _bi < _b64Bytes.length; _bi++) _b64Arr[_bi] = _b64Bytes.charCodeAt(_bi);
+        var _blob        = new Blob([_b64Arr], { type: 'image/jpeg' });
+        var _storagePath = 'job-photos/' + photoId + '.jpg';
+        var _ref         = storage.ref(_storagePath);
+        var _task        = _ref.put(_blob, { contentType: 'image/jpeg' });
+        _task.on('state_changed', null,
+          function() {
+            // Storage upload failed — restore opacity and push metadata without URL
+            _jpSetThumbOpacity(photoId, '1');
+            _jpWriteFirestoreDoc(photo);
+          },
+          function() {
+            _ref.getDownloadURL().then(function(downloadUrl) {
+              // Replace local base64 with permanent Firebase Storage URL
+              photo.url         = downloadUrl;
+              photo.storagePath = _storagePath;
+              var idx = jobPhotos.findIndex(function(p) { return p.id === photoId; });
+              if (idx !== -1) jobPhotos[idx] = photo;
+              saveJobPhotos();
+              // Remove dim and swap thumbnail src to the real Storage URL
+              _jpSetThumbOpacity(photoId, '1');
+              try {
+                document.querySelectorAll('[data-jp-thumb-id="' + photoId + '"] img').forEach(function(img) {
+                  img.src = downloadUrl;
+                });
+              } catch(e) {}
+              // Write Firestore doc with real Storage URL (flat fields + legacy wrapper)
+              _jpWriteFirestoreDoc(photo);
+              // Refresh widget if visible
+              var hv2 = document.getElementById('homeView');
+              if (hv2 && hv2.style.display !== 'none') renderHomeView(hv2);
+            }).catch(function() {
+              _jpSetThumbOpacity(photoId, '1');
+              _jpWriteFirestoreDoc(photo);
+            });
+          }
+        );
       } else {
+        _jpSetThumbOpacity(photoId, '1');
         _jpPushToCloud(photo);
       }
     });
@@ -28629,6 +28718,48 @@ function _fleetDetailHTML(eq) {
         '</div>'+
       '</div>'+
 
+      // ── Job Photos section — shows dmc_job_photos linked to jobs on this equipment ──
+      (function() {
+        var eqJobId   = eq.assignedJobId   || null;
+        var eqJobName = eq.assignedJobName || null;
+        // Also look up any backlog jobs that reference this equipment by name or id
+        var linkedJobIds = new Set();
+        if (eqJobId)   linkedJobIds.add(eqJobId);
+        if (eqJobName) {
+          (typeof backlogJobs !== 'undefined' ? backlogJobs : []).forEach(function(j) {
+            if (j.id === eqJobId || (j.name && eqJobName && j.name.toLowerCase() === eqJobName.toLowerCase())) {
+              linkedJobIds.add(j.id);
+            }
+          });
+        }
+        var relPhotos = (typeof jobPhotos !== 'undefined' ? jobPhotos : []).filter(function(p) {
+          return p.jobId && linkedJobIds.has(p.jobId);
+        });
+        var thumbsHtml = relPhotos.length
+          ? relPhotos.slice(0, 18).map(function(p) {
+              var safeUrl = (p.url || '').replace(/'/g, '%27');
+              var caption = escHtml(p.jobName || p.folder || '');
+              var dateStr = p.uploadedAt ? new Date(p.uploadedAt).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '';
+              return '<div style="position:relative;border-radius:5px;overflow:hidden;background:var(--asphalt-light);width:60px;height:60px;flex-shrink:0;cursor:'+(p.url?'pointer':'default')+'" '+
+                (p.url ? 'onclick="_openPhotoPreview(\''+safeUrl+'\',\''+caption+'\')"' : '') + '>'+
+                (p.url ? '<img src="'+safeUrl+'" style="width:100%;height:100%;object-fit:cover;pointer-events:none;">' :
+                  '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:20px;">📸</div>')+
+                (dateStr ? '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);padding:1px 3px;font-family:\'DM Mono\',monospace;font-size:6px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+dateStr+'</div>' : '')+
+              '</div>';
+            }).join('')
+          : '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No job photos linked to this equipment\'s assigned job.</span>';
+
+        return '<div style="margin-bottom:24px;">'+
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--stripe);">Job Photos</div>'+
+            '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);">('+relPhotos.length+' linked)</span>'+
+            '<span style="flex:1;"></span>'+
+            '<button onclick="_jpOpenUpload()" style="background:rgba(90,180,245,0.08);border:1px dashed rgba(90,180,245,0.4);border-radius:var(--radius);padding:4px 12px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">📷 Upload Photo</button>'+
+          '</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;">'+thumbsHtml+'</div>'+
+        '</div>';
+      })()+
+
       // Closed issues (collapsible hint)
       (closedIssues.length ? '<div style="margin-bottom:24px;"><div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:1px;">'+closedIssues.length+' resolved issue'+(closedIssues.length>1?'s':'')+' in history</div></div>' : '')+
 
@@ -32849,6 +32980,42 @@ async function initApp(username) {
     if (typeof firebase !== 'undefined') {
       db = firebase.firestore();
       storage = firebase.storage();
+
+      // ── Cross-device job_photos sync: query Firestore on load, merge with local ──
+      (function() {
+        try {
+          db.collection('job_photos').orderBy('uploadedAt', 'desc').limit(200).get().then(function(snap) {
+            if (snap.empty) return;
+            var remote = [];
+            snap.forEach(function(d) {
+              try {
+                var docData = d.data();
+                // Support both flat-field format (new) and legacy {data: JSON.stringify(...)} format
+                if (docData.id) {
+                  remote.push(docData);
+                } else if (docData.data) {
+                  remote.push(JSON.parse(docData.data));
+                }
+              } catch(e) {}
+            });
+            if (!remote.length) return;
+            var byId = {};
+            jobPhotos.forEach(function(p) { byId[p.id] = p; });
+            remote.forEach(function(p) {
+              if (!p || !p.id) return;
+              var existing = byId[p.id];
+              // Prefer Firestore record if it has a real (non-base64) Storage URL
+              if (!existing || (p.url && !p.url.startsWith('data:') && (!existing.url || existing.url.startsWith('data:')))) {
+                byId[p.id] = p;
+              }
+            });
+            jobPhotos = Object.values(byId).sort(function(a, b) { return (b.uploadedAt || 0) - (a.uploadedAt || 0); }).slice(0, 500);
+            localStorage.setItem(JOB_PHOTOS_KEY, JSON.stringify(jobPhotos));
+            var hv = document.getElementById('homeView');
+            if (hv && hv.style.display !== 'none') { try { renderHomeView(hv); } catch(e) {} }
+          }).catch(function(e) { console.warn('job_photos initial sync error:', e.message); });
+        } catch(e) {}
+      })();
 
       // If Firebase Auth is available, keep session in sync and allow cross-device stay-signed-in
       if (firebase.auth) {
