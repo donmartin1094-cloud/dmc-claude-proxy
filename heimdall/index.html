@@ -864,6 +864,189 @@ function App() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [dispatches, setDispatches] = useState(autoDispatches);
 
+  // ── Conflict Resolution ────────────────────────────────────────────────────
+  const [conflictModal, setConflictModal] = useState(null);
+  // conflictModal: { type:'reassignEquip'|'reassignDriver', conflict, options }
+
+  const detectPlanConflicts = (plan) => {
+    const base = [...conflicts];
+    if (!plan || !plan.jobs) return base;
+    const detected = [];
+    const allMoves = [];
+    plan.jobs.forEach((job, ji) => {
+      (job.moves || []).forEach((move, mi) => {
+        if (move.overridden) return;
+        allMoves.push({ jobName: job.jobName, jobNum: job.jobNum, jobIdx: ji, moveIdx: mi, move, date: job.date });
+      });
+    });
+    // Equipment double-booking
+    const eqMap = {};
+    allMoves.forEach(entry => {
+      (entry.move.equipment || []).forEach(eq => {
+        const key = eq.name + '|' + entry.date;
+        if (!eqMap[key]) eqMap[key] = [];
+        eqMap[key].push(entry);
+      });
+    });
+    Object.entries(eqMap).forEach(([key, entries]) => {
+      if (entries.length > 1) {
+        const parts = key.split('|');
+        const eqName = parts[0]; const date = parts[1];
+        detected.push({
+          id: 'EQ-' + eqName.replace(/\s/g,'-') + '-' + date,
+          severity: 'High', type: 'Equipment Double-Booked',
+          desc: eqName + ' is assigned to multiple moves on ' + date + ': ' + entries.map(e => e.jobName + ' (move ' + (e.moveIdx+1) + ')').join(' and ') + '.',
+          affectedJob: entries[0].jobName,
+          resolution: 'Reassign equipment to a different unit for one of the moves.',
+          _planConflict: true,
+          _primaryMove: { jobIdx: entries[0].jobIdx, moveIdx: entries[0].moveIdx, date, eqName },
+        });
+      }
+    });
+    // Driver double-booking
+    const drvMap = {};
+    allMoves.forEach(entry => {
+      if (!entry.move.assignedDriver) return;
+      const key = entry.move.assignedDriver + '|' + entry.date;
+      if (!drvMap[key]) drvMap[key] = [];
+      drvMap[key].push(entry);
+    });
+    Object.entries(drvMap).forEach(([key, entries]) => {
+      if (entries.length > 1) {
+        const parts = key.split('|');
+        const driverName = parts[0]; const date = parts[1];
+        detected.push({
+          id: 'DRV-' + driverName.replace(/\s/g,'-') + '-' + date,
+          severity: 'High', type: 'Driver Double-Booked',
+          desc: driverName + ' is assigned to multiple moves on ' + date + ': ' + entries.map(e => e.jobName + ' (move ' + (e.moveIdx+1) + ')').join(' and ') + '.',
+          affectedJob: entries[0].jobName,
+          resolution: 'Reassign one of the moves to a different driver.',
+          _planConflict: true,
+          _primaryMove: { jobIdx: entries[0].jobIdx, moveIdx: entries[0].moveIdx, date, driverName },
+        });
+      }
+    });
+    return [...detected, ...base];
+  };
+
+  const [planConflicts, setPlanConflicts] = useState(() => {
+    try { return detectPlanConflicts(JSON.parse(localStorage.getItem('dmc_lowbed_plan')||'null')); } catch(e) { return [...conflicts]; }
+  });
+
+  const savePlanAndRefresh = (newPlan) => {
+    localStorage.setItem('dmc_lowbed_plan', JSON.stringify(newPlan));
+    setLowbedPlan(newPlan);
+    setPlanConflicts(detectPlanConflicts(newPlan));
+  };
+
+  const deferMove = (conflict) => {
+    if (!conflict._planConflict || !lowbedPlan) return;
+    const pm = conflict._primaryMove;
+    const plan = JSON.parse(JSON.stringify(lowbedPlan));
+    const job = plan.jobs[pm.jobIdx];
+    if (!job) return;
+    const d = new Date(job.date + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    const nextDate = d.toISOString().split('T')[0];
+    if (!window.confirm('Move "' + job.jobName + '" to ' + nextDate + '?')) return;
+    job.date = nextDate;
+    savePlanAndRefresh(plan);
+  };
+
+  const overrideConflict = (conflict) => {
+    const note = window.prompt('Enter a short override note (required):', '');
+    if (note === null) return;
+    if (conflict._planConflict && conflict._primaryMove && lowbedPlan) {
+      const plan = JSON.parse(JSON.stringify(lowbedPlan));
+      const pm = conflict._primaryMove;
+      const job = plan.jobs[pm.jobIdx];
+      if (job && job.moves[pm.moveIdx]) {
+        job.moves[pm.moveIdx].overridden = true;
+        job.moves[pm.moveIdx].overrideNote = note || '(no note)';
+        savePlanAndRefresh(plan);
+      }
+    } else {
+      localStorage.setItem('conflict_override_' + conflict.id, 'true');
+      localStorage.setItem('conflict_override_note_' + conflict.id, note || '(no note)');
+      setPlanConflicts(detectPlanConflicts(lowbedPlan));
+    }
+  };
+
+  const getAvailableEquipment = (conflict) => {
+    if (!lowbedPlan || !conflict._primaryMove) return [];
+    const pm = conflict._primaryMove;
+    const eqType = (() => {
+      const job = lowbedPlan.jobs[pm.jobIdx];
+      if (!job) return null;
+      const move = job.moves[pm.moveIdx];
+      const eq = (move.equipment || []).find(e => e.name === pm.eqName);
+      return eq ? eq.type : null;
+    })();
+    if (!eqType) return [];
+    const assignedNames = new Set();
+    lowbedPlan.jobs.forEach((job, ji) => {
+      if (job.date !== pm.date) return;
+      (job.moves || []).forEach((move, mi) => {
+        if (ji === pm.jobIdx && mi === pm.moveIdx) return;
+        (move.equipment || []).forEach(e => assignedNames.add(e.name));
+      });
+    });
+    const candidates = [];
+    lowbedPlan.jobs.forEach(job => {
+      (job.allEquipment || []).forEach(eq => {
+        if (eq.type === eqType && !assignedNames.has(eq.name) && !candidates.find(c => c.name === eq.name))
+          candidates.push(eq);
+      });
+    });
+    fleetItems.forEach(item => {
+      const t = (item.type || item.category || '').toLowerCase().replace(/\s/g,'_');
+      if (t === eqType && !assignedNames.has(item.name) && !candidates.find(c => c.name === item.name))
+        candidates.push({ type: eqType, name: item.name });
+    });
+    return candidates;
+  };
+
+  const getAvailableDrivers = (conflict) => {
+    if (!lowbedPlan || !conflict._primaryMove) return [];
+    const pm = conflict._primaryMove;
+    const assignedDrivers = new Set();
+    lowbedPlan.jobs.forEach((job, ji) => {
+      if (job.date !== pm.date) return;
+      (job.moves || []).forEach((move, mi) => {
+        if (ji === pm.jobIdx && mi === pm.moveIdx) return;
+        if (move.assignedDriver) assignedDrivers.add(move.assignedDriver);
+      });
+    });
+    const allDrivers = new Set(['Mike Harrell','Tony Vasquez','Dale Pruitt','Josh Bennett','Eric Sylvia','Bill Lydon','Ingrid Giron']);
+    (lowbedPlan.jobs || []).forEach(job => {
+      (job.moves || []).forEach(move => { if (move.assignedDriver) allDrivers.add(move.assignedDriver); });
+    });
+    return [...allDrivers].filter(d => !assignedDrivers.has(d));
+  };
+
+  const reassignEquipment = (conflict, newEq) => {
+    if (!lowbedPlan || !conflict._primaryMove) return;
+    const pm = conflict._primaryMove;
+    const plan = JSON.parse(JSON.stringify(lowbedPlan));
+    const move = plan.jobs[pm.jobIdx] && plan.jobs[pm.jobIdx].moves[pm.moveIdx];
+    if (!move) return;
+    move.equipment = (move.equipment || []).map(e => e.name === pm.eqName ? { ...e, name: newEq.name, type: newEq.type } : e);
+    setConflictModal(null);
+    savePlanAndRefresh(plan);
+  };
+
+  const reassignDriver = (conflict, newDriver) => {
+    if (!lowbedPlan || !conflict._primaryMove) return;
+    const pm = conflict._primaryMove;
+    const plan = JSON.parse(JSON.stringify(lowbedPlan));
+    const move = plan.jobs[pm.jobIdx] && plan.jobs[pm.jobIdx].moves[pm.moveIdx];
+    if (!move) return;
+    move.assignedDriver = newDriver;
+    setConflictModal(null);
+    savePlanAndRefresh(plan);
+  };
+  // ── End Conflict Resolution ─────────────────────────────────────────────────
+
   // ── Real jobs from main app localStorage ──
   const [realJobs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pavescope_backlog') || '[]'); } catch(e) { return []; }
@@ -1819,12 +2002,28 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
         {/* ── Tab Bar — flush directly below brand row ── */}
         <div className="scrollbar-hide" style={{display:'flex',overflowX:'auto',background:'var(--asphalt-mid)',padding:'0 4px',marginTop:'6px'}}>
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              style={{padding:'8px 12px',fontSize:'11px',fontFamily:"'DM Mono',monospace",fontWeight:700,whiteSpace:'nowrap',background:'transparent',border:'none',borderBottom:tab===t?'2px solid var(--stripe)':'2px solid transparent',color:tab===t?'var(--stripe)':'var(--concrete-dim)',cursor:'pointer',transition:'all 0.15s',letterSpacing:'0.5px',outline:'none'}}>
-              {t}
-            </button>
-          ))}
+          {TABS.map(t => {
+            const _activeCount = t === 'Conflicts' ? planConflicts.filter(c => {
+              if (c._planConflict) {
+                if (!lowbedPlan || !c._primaryMove) return true;
+                const _j = lowbedPlan.jobs[c._primaryMove.jobIdx];
+                const _m = _j && _j.moves[c._primaryMove.moveIdx];
+                return !(_m && _m.overridden);
+              }
+              try { return !JSON.parse(localStorage.getItem('conflict_override_' + c.id) || 'false'); } catch(e) { return true; }
+            }).length : 0;
+            return (
+              <button key={t} onClick={() => setTab(t)}
+                style={{padding:'8px 12px',fontSize:'11px',fontFamily:"'DM Mono',monospace",fontWeight:700,whiteSpace:'nowrap',background:'transparent',border:'none',borderBottom:tab===t?'2px solid var(--stripe)':'2px solid transparent',color:tab===t?'var(--stripe)':'var(--concrete-dim)',cursor:'pointer',transition:'all 0.15s',letterSpacing:'0.5px',outline:'none',position:'relative'}}>
+                {t}
+                {t === 'Conflicts' && _activeCount > 0 && (
+                  <span style={{position:'absolute',top:'3px',right:'1px',background:'var(--red)',color:'#fff',borderRadius:'999px',fontSize:'9px',fontWeight:800,minWidth:'14px',height:'14px',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:'0 3px',lineHeight:1}}>
+                    {_activeCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -3916,22 +4115,129 @@ Be specific, practical, and flag any uncertainties clearly.`;
         })()}
 
         {/* ════ CONFLICTS ════ */}
-        {tab === "Conflicts" && (
-          <div className="space-y-3">
-            <div className="text-sm font-semibold text-gray-600">{conflicts.length} Active Conflict{conflicts.length !== 1 ? "s" : ""} Detected</div>
-            {conflicts.map(c => (
-              <div key={c.id} className={`rounded-lg border p-3 ${severityColor(c.severity)}`}>
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-bold">{c.id} · {c.type}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${severityColor(c.severity)}`}>{c.severity}</span>
+        {tab === "Conflicts" && (() => {
+          const activeConflicts = planConflicts.filter(c => {
+            if (c._planConflict) {
+              if (!lowbedPlan || !c._primaryMove) return true;
+              const _cj = lowbedPlan.jobs[c._primaryMove.jobIdx];
+              if (!_cj) return true;
+              const _cm = _cj.moves[c._primaryMove.moveIdx];
+              return !(_cm && _cm.overridden);
+            }
+            try { return !JSON.parse(localStorage.getItem('conflict_override_' + c.id) || 'false'); } catch(e) { return true; }
+          });
+          const overriddenConflicts = planConflicts.filter(c => !activeConflicts.includes(c));
+          const [showOverridden, setShowOverridden] = React.useState(false);
+          const isEquipConflict = (c) => c.type === 'Equipment Double-Booked' || c.type === 'Equipment Not Returned' || c.type.toLowerCase().includes('equipment');
+          const isDriverConflict = (c) => c.type === 'Driver Double-Booked' || c.type === 'Driver Unavailable' || c.type.toLowerCase().includes('driver');
+          return (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-gray-600">{activeConflicts.length} Active Conflict{activeConflicts.length !== 1 ? "s" : ""} Detected</div>
+              {activeConflicts.length === 0 && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700">
+                  No active conflicts detected.
                 </div>
-                <p className="text-xs text-gray-700 mb-2 leading-relaxed">{c.desc}</p>
-                <div className="bg-white bg-opacity-70 rounded p-2 text-xs">
-                  <span className="font-semibold">Suggested Fix: </span>{c.resolution}
+              )}
+              {activeConflicts.map(c => (
+                <div key={c.id} className={`rounded-lg border p-3 ${severityColor(c.severity)}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold">{c.id} · {c.type}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${severityColor(c.severity)}`}>{c.severity}</span>
+                  </div>
+                  <p className="text-xs text-gray-700 mb-2 leading-relaxed">{c.desc}</p>
+                  <div className="bg-white bg-opacity-70 rounded p-2 text-xs mb-2">
+                    <span className="font-semibold">Suggested Fix: </span>{c.resolution}
+                  </div>
+                  <div className="text-xs text-gray-500 mb-2">Affected Job: {c.affectedJob}</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginTop:'6px'}}>
+                    {isEquipConflict(c) && c._planConflict && (
+                      <button onClick={() => { const opts = getAvailableEquipment(c); setConflictModal({ type:'reassignEquip', conflict: c, options: opts }); }}
+                        style={{background:'#5ab4f5',color:'#000',border:'none',borderRadius:'4px',padding:'5px 10px',fontSize:'11px',fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace"}}>
+                        🔄 Reassign Equipment
+                      </button>
+                    )}
+                    {isDriverConflict(c) && (
+                      <button onClick={() => { if (!c._planConflict) { window.alert('Driver reassignment is only available for plan-detected conflicts.'); return; } const opts = getAvailableDrivers(c); setConflictModal({ type:'reassignDriver', conflict: c, options: opts }); }}
+                        style={{background:'#7ecb8f',color:'#000',border:'none',borderRadius:'4px',padding:'5px 10px',fontSize:'11px',fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace"}}>
+                        👤 Reassign Driver
+                      </button>
+                    )}
+                    {c._planConflict && (
+                      <button onClick={() => deferMove(c)}
+                        style={{background:'var(--stripe)',color:'#000',border:'none',borderRadius:'4px',padding:'5px 10px',fontSize:'11px',fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace"}}>
+                        📅 Defer 1 Day
+                      </button>
+                    )}
+                    <button onClick={() => overrideConflict(c)}
+                      style={{background:'var(--orange)',color:'#fff',border:'none',borderRadius:'4px',padding:'5px 10px',fontSize:'11px',fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace"}}>
+                      ⚠ Override
+                    </button>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500 mt-1.5">Affected Job: {c.affectedJob}</div>
+              ))}
+              {overriddenConflicts.length > 0 && (
+                <div style={{marginTop:'12px'}}>
+                  <button onClick={() => setShowOverridden(s => !s)}
+                    style={{background:'transparent',border:'1px solid var(--asphalt-light)',borderRadius:'4px',padding:'5px 10px',fontSize:'11px',fontWeight:700,color:'var(--concrete-dim)',cursor:'pointer',fontFamily:"'DM Mono',monospace",width:'100%',textAlign:'left'}}>
+                    {showOverridden ? '▾' : '▸'} {overriddenConflicts.length} Overridden Conflict{overriddenConflicts.length !== 1 ? 's' : ''}
+                  </button>
+                  {showOverridden && (
+                    <div className="space-y-2 mt-2">
+                      {overriddenConflicts.map(c => {
+                        let note = '(no note)';
+                        if (c._planConflict && c._primaryMove && lowbedPlan) {
+                          const _oj = lowbedPlan.jobs[c._primaryMove.jobIdx];
+                          const _om = _oj && _oj.moves[c._primaryMove.moveIdx];
+                          if (_om) note = _om.overrideNote || note;
+                        } else {
+                          try { note = localStorage.getItem('conflict_override_note_' + c.id) || note; } catch(e){}
+                        }
+                        return (
+                          <div key={c.id} style={{border:'1px solid var(--asphalt-light)',borderRadius:'6px',padding:'10px',opacity:0.65}}>
+                            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+                              <span style={{fontSize:'11px',fontWeight:700}}>{c.id} · {c.type}</span>
+                              <span style={{fontSize:'10px',background:'var(--asphalt-light)',borderRadius:'3px',padding:'1px 6px',color:'var(--concrete-dim)'}}>Overridden</span>
+                            </div>
+                            <div style={{fontSize:'11px',color:'var(--concrete-dim)',marginBottom:'3px'}}>{c.desc}</div>
+                            <div style={{fontSize:'10px',color:'var(--orange)'}}>Note: {note}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {conflictModal && (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}>
+            <div style={{background:'var(--asphalt-mid)',border:'1px solid var(--stripe)',borderRadius:'10px',padding:'20px',maxWidth:'360px',width:'100%',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+              <div style={{fontWeight:700,fontSize:'14px',marginBottom:'4px',fontFamily:"'DM Mono',monospace",color:'var(--stripe)'}}>
+                {conflictModal.type === 'reassignEquip' ? '🔄 Reassign Equipment' : '👤 Reassign Driver'}
               </div>
-            ))}
+              <div style={{fontSize:'11px',color:'var(--concrete-dim)',marginBottom:'12px'}}>
+                {conflictModal.type === 'reassignEquip' ? 'Select a replacement not assigned during this window:' : 'Select an available driver not assigned during this window:'}
+              </div>
+              <div style={{overflowY:'auto',flex:1,marginBottom:'12px'}}>
+                {conflictModal.options.length === 0 && (
+                  <div style={{fontSize:'12px',color:'var(--concrete-dim)',textAlign:'center',padding:'12px'}}>
+                    No available {conflictModal.type === 'reassignEquip' ? 'equipment' : 'drivers'} found for this window.
+                  </div>
+                )}
+                {conflictModal.options.map((opt, i) => (
+                  <button key={i}
+                    onClick={() => { if (conflictModal.type === 'reassignEquip') { reassignEquipment(conflictModal.conflict, opt); } else { reassignDriver(conflictModal.conflict, opt); } }}
+                    style={{display:'block',width:'100%',textAlign:'left',background:'var(--asphalt-light)',border:'1px solid var(--asphalt-light)',borderRadius:'5px',padding:'8px 10px',marginBottom:'6px',color:'var(--white)',fontSize:'12px',cursor:'pointer',fontFamily:"'DM Mono',monospace"}}>
+                    {conflictModal.type === 'reassignEquip' ? opt.name + ' (' + opt.type + ')' : opt}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setConflictModal(null)}
+                style={{background:'transparent',border:'1px solid var(--asphalt-light)',borderRadius:'4px',padding:'7px',fontSize:'12px',color:'var(--concrete-dim)',cursor:'pointer',fontFamily:"'DM Mono',monospace"}}>
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
