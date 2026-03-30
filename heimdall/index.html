@@ -1719,6 +1719,7 @@ function App() {
   const [pickerDeviceId, setPickerDeviceId] = useState(null);
   const [pickerSearch,   setPickerSearch]   = useState('');
   const [showManualMove, setShowManualMove] = useState(false);
+  const [manualMoveMode, setManualMoveMode] = useState(null);
   const [eqPhotos, setEqPhotos] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hd_eq_photos') || '{}'); } catch(e) { return {}; }
   });
@@ -3271,7 +3272,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                     ✏️ Name Equipment
                   </button>}
                   <button
-                    onClick={() => setShowManualMove(true)}
+                    onClick={() => { if (isAdminUser) { setManualMoveMode(null); setShowManualMove('pick'); } else { setManualMoveMode('single'); setShowManualMove(true); } }}
                     style={{background:'rgba(126,203,143,0.1)',border:'1px solid rgba(126,203,143,0.35)',borderRadius:'var(--radius)',color:'#7ecb8f',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
                     🚛 Manual Move
                   </button>
@@ -5466,7 +5467,42 @@ Be specific, practical, and flag any uncertainties clearly.`;
       })()}
 
       {/* ── Manual Lowbed Move Builder ── */}
-      {showManualMove && (() => {
+      {/* ── Manual Move Mode Picker (admin only) ── */}
+      {showManualMove === 'pick' && (
+        <div onClick={() => setShowManualMove(false)}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:9600,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+          <div onClick={e => e.stopPropagation()}
+            style={{background:'var(--asphalt-mid)',border:'1px solid rgba(245,197,24,0.3)',borderRadius:'10px',width:'100%',maxWidth:'380px',boxShadow:'0 20px 60px rgba(0,0,0,0.8)',overflow:'hidden'}}>
+            <div style={{padding:'18px 20px',borderBottom:'1px solid var(--asphalt-light)'}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'var(--stripe)'}}>🚛 Manual Lowbed Move</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)',marginTop:'4px'}}>What are you setting up?</div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'8px',padding:'16px 20px'}}>
+              <button onClick={() => { setManualMoveMode('single'); setShowManualMove(true); }}
+                style={{display:'flex',alignItems:'center',gap:'12px',padding:'14px 16px',background:'rgba(126,203,143,0.06)',border:'1px solid rgba(126,203,143,0.25)',borderRadius:'8px',cursor:'pointer',textAlign:'left'}}>
+                <span style={{fontSize:'22px'}}>🚚</span>
+                <div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'15px',letterSpacing:'1px',color:'#7ecb8f'}}>Single Move</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>One lowbed trip — equipment compatibility rules apply</div>
+                </div>
+              </button>
+              <button onClick={() => { setManualMoveMode('job'); setShowManualMove(true); }}
+                style={{display:'flex',alignItems:'center',gap:'12px',padding:'14px 16px',background:'rgba(245,197,24,0.06)',border:'1px solid rgba(245,197,24,0.25)',borderRadius:'8px',cursor:'pointer',textAlign:'left'}}>
+                <span style={{fontSize:'22px'}}>🏗️</span>
+                <div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'15px',letterSpacing:'1px',color:'var(--stripe)'}}>Job Setup</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>Group all equipment for a job — no pairing restrictions</div>
+                </div>
+              </button>
+            </div>
+            <div style={{padding:'10px 20px 16px',borderTop:'1px solid var(--asphalt-light)'}}>
+              <button onClick={() => setShowManualMove(false)} style={{width:'100%',background:'none',border:'1px solid var(--asphalt-light)',borderRadius:'5px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'7px 16px',cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showManualMove === true && (() => {
         // Build location options: Garage + all backlog jobs
         const locationOpts = [
           { value: '__garage__', label: '🏠 Garage' },
@@ -5499,7 +5535,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
               {/* Header */}
               <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'14px 18px',borderBottom:'1px solid var(--asphalt-light)',flexShrink:0}}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'var(--stripe)',flex:1}}>🚛 Manual Lowbed Move</div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'var(--stripe)',flex:1}}>🚛 {manualMoveMode === 'job' ? 'Job Setup — All Equipment' : 'Manual Lowbed Move'}</div>
                 <button onClick={() => setShowManualMove(false)} style={{background:'none',border:'none',color:'var(--concrete-dim)',fontSize:'16px',cursor:'pointer'}}>✕</button>
               </div>
 
@@ -5586,7 +5622,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                           {isOpen && (
                             <div style={{display:'flex',flexDirection:'column',gap:'2px',padding:'4px 6px 6px'}}>
                               {items.map(eq => {
-                                const compat = checkCompat(eq.type, manualItems);
+                                const compat = manualMoveMode === 'job' ? { ok: true } : checkCompat(eq.type, manualItems);
                                 return (
                                   <div key={eq.id}
                                     onClick={() => { if (!compat.ok) { alert('⚠️ '+compat.reason); return; } setManualItems([...manualItems, {id:eq.id,name:eq.name,type:eq.type}]); }}
