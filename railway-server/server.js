@@ -5,6 +5,8 @@ const PORT       = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY  = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_API_URL  = 'https://api.anthropic.com/v1/messages';
 const ONESTEPGPS_API_KEY = process.env.ONESTEPGPS_API_KEY;
+const FIREBASE_API_KEY   = process.env.FIREBASE_API_KEY;
+const FIRESTORE_BASE     = 'https://firestore.googleapis.com/v1/projects/dmc-estimate-assistant-bffd6/databases/(default)/documents';
 
 const { ImapFlow }     = require('imapflow');
 const nodemailer       = require('nodemailer');
@@ -79,7 +81,196 @@ app.post('/claude', async (req, res) => {
       res.status(response.status).json(data);
     }
   } catch (err) {
-    if (!res.headersSent) res.status(500).json({ error: 'proxy_error', message: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'proxy_error', message: err.message });
+    } else if (!res.writableEnded) {
+      // Headers already sent (streaming) — must still close the connection
+      res.end();
+    }
+  }
+});
+
+// ── Plans scan: AI summary generation with SSE streaming ────────────────────
+function buildSummaryPrompt(pageExtracts, fileList) {
+  return `You are an expert HMA pavement estimator. The following are per-sheet extractions from civil plan PDFs (${fileList}). Consolidate them into one complete final analysis — deduplicate items that appear on multiple sheets, resolve any conflicts, and produce the full structured result.
+
+${pageExtracts}
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "projectMeta": { "projectName": "...", "contractNumber": "...", "projectAddress": "...", "awardingAuthority": "..." },
+  "summary": "Detailed 3-5 paragraph scope summary covering all HMA items, lift sequence, mix types, depths, and special items.",
+  "quantities": [{ "group": "...", "item": "...", "spec": "...", "depth": "...", "statedQty": "...", "calcQty": "...", "unverified": false }],
+  "issues": [{ "type": "UNVERIFIED | MISSING | CONFLICT | ASSUMED", "item": "...", "detail": "..." }],
+  "relevantSheets": ["sheet numbers/names with HMA content"],
+  "materials": "Full pavement section bottom to top with each lift, mix, and depth.",
+  "fieldSummary": "3-5 sentences for the foreman covering lifts, special items, and field notes."
+}
+
+RULES: Never invent quantities. Use null if unreadable. Report mix designations exactly as written.`;
+}
+
+app.post('/api/plans/scan', async (req, res) => {
+  const { planText, jobId, fileList } = req.body || {};
+  if (!planText || !jobId) {
+    return res.status(400).json({ error: 'Missing required fields: planText, jobId' });
+  }
+  if (!ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  }
+
+  // Truncate to ~4,000 tokens (approx 16,000 characters)
+  const MAX_CHARS = 16000;
+  const truncated = planText.length > MAX_CHARS;
+  const inputText = truncated ? planText.slice(0, MAX_CHARS) : planText;
+  console.log(`[Plans] jobId=${jobId} input=${planText.length} chars${truncated ? ' → truncated to ' + MAX_CHARS : ''}`);
+
+  const prompt = buildSummaryPrompt(inputText, fileList || 'plans.pdf');
+
+  // SSE response headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Keep-alive ping every 10 seconds
+  const pingIv = setInterval(() => {
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
+  }, 10000);
+
+  let fullText = '';
+  let attempts = 0;
+  const MAX_ATTEMPTS = 2; // 1 try + 1 automatic retry on timeout
+
+  try {
+    while (attempts < MAX_ATTEMPTS) {
+      attempts++;
+      const ac = new AbortController();
+      // 15-second timeout for initial response headers from Claude
+      const timeout = setTimeout(() => ac.abort(), 15000);
+
+      try {
+        const response = await fetch(ANTHROPIC_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 8000,
+            stream: true,
+            messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
+          }),
+          signal: ac.signal
+        });
+
+        clearTimeout(timeout); // headers arrived, clear the 15s timeout
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          if (response.status >= 500 && attempts < MAX_ATTEMPTS) {
+            console.warn(`[Plans] Attempt ${attempts} got ${response.status}, retrying…`);
+            res.write(`data: ${JSON.stringify({ type: 'retry', attempt: attempts + 1 })}\n\n`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          throw new Error(`Claude API ${response.status}: ${errText.slice(0, 200)}`);
+        }
+
+        // Parse Claude SSE stream and re-emit as simplified SSE events
+        fullText = '';
+        let sseBuf = '';
+        for await (const chunk of response.body) {
+          const str = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : new TextDecoder().decode(chunk);
+          sseBuf += str;
+          const lines = sseBuf.split('\n');
+          sseBuf = lines.pop(); // keep incomplete line in buffer
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const pl = line.slice(6).trim();
+            if (pl === '[DONE]') break;
+            try {
+              const ev = JSON.parse(pl);
+              if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+                fullText += ev.delta.text;
+                if (!res.writableEnded) {
+                  res.write(`data: ${JSON.stringify({ type: 'token', text: ev.delta.text })}\n\n`);
+                }
+              }
+            } catch (e) { /* skip malformed SSE lines */ }
+          }
+        }
+        // Flush remaining SSE buffer
+        if (sseBuf.trim()) {
+          for (const line of sseBuf.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const pl = line.slice(6).trim();
+            if (pl === '[DONE]') break;
+            try {
+              const ev = JSON.parse(pl);
+              if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+                fullText += ev.delta.text;
+                if (!res.writableEnded) {
+                  res.write(`data: ${JSON.stringify({ type: 'token', text: ev.delta.text })}\n\n`);
+                }
+              }
+            } catch (e) { /* skip */ }
+          }
+        }
+
+        console.log(`[Plans] Stream complete: ${fullText.length} chars for job ${jobId}`);
+        break; // success — exit retry loop
+
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err.name === 'AbortError' && attempts < MAX_ATTEMPTS) {
+          console.warn(`[Plans] Attempt ${attempts} timed out after 15s, retrying…`);
+          res.write(`data: ${JSON.stringify({ type: 'retry', attempt: attempts + 1 })}\n\n`);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    // ── Save to Firestore AFTER stream completes ──
+    if (fullText && FIREBASE_API_KEY) {
+      try {
+        const fsUrl = `${FIRESTORE_BASE}/plans/${jobId}?key=${FIREBASE_API_KEY}`;
+        await fetch(fsUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              summary: { stringValue: fullText },
+              generatedAt: { integerValue: String(Date.now()) },
+              jobId: { stringValue: jobId }
+            }
+          })
+        });
+        console.log(`[Plans] Saved summary to Firestore for job ${jobId}`);
+      } catch (fsErr) {
+        console.error('[Plans] Firestore save failed:', fsErr.message);
+      }
+    }
+
+    // Send completion event
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'complete', charCount: fullText.length })}\n\n`);
+      res.write('data: [DONE]\n\n');
+    }
+
+  } catch (err) {
+    console.error('[Plans] Scan error:', err.message);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+    }
+  } finally {
+    clearInterval(pingIv);
+    if (!res.writableEnded) res.end();
   }
 });
 
@@ -291,7 +482,7 @@ app.post('/mail/action', async (req, res) => {
 app.post('/tts', async (req, res) => {
   const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
   if (!ELEVEN_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured in Railway environment' });
-  const { text, voice_id = 'cgSgspJ2msm6clMCkdW9' } = req.body; // default: "Jessica" (warm, clear)
+  const { text, voice_id = 'BpjGufoPiobT79j2vtj4' } = req.body; // custom DMC voice
   if (!text) return res.status(400).json({ error: 'Missing text' });
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}/stream`, {
