@@ -1346,6 +1346,14 @@ function App() {
       return ['nightmare57','ericsylvia57@gmail.com'].includes(u);
     } catch(e) { return false; }
   })();
+  const [n57Mobile, setN57Mobile] = useState(() => isNightmare57 && window.innerWidth < 768);
+  useEffect(() => {
+    if (!isNightmare57) return;
+    const h = () => setN57Mobile(window.innerWidth < 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, [isNightmare57]);
+  const [n57DevicesOpen, setN57DevicesOpen] = useState(false);
   const [gpsDevices, setGpsDevices]   = useState([]);
   const [gpsLoading, setGpsLoading]   = useState(true);
   const [gpsHibernated, setGpsHibernated] = useState(false);
@@ -3244,10 +3252,10 @@ Be specific, practical, and flag any uncertainties clearly.`;
               </div>
 
               {/* Map + Fleet/Lowbed Moves — 50/50 split */}
-              <div style={{display:'flex',alignItems:'stretch'}}>
+              <div style={{display:'flex',flexDirection:n57Mobile?'column':'row',alignItems:'stretch'}}>
 
                 {/* Map — 50% */}
-                <div style={{flex:'0 0 50%',width:'50%',minWidth:0}}>
+                <div style={n57Mobile?{width:'100%',minWidth:0}:{flex:'0 0 50%',width:'50%',minWidth:0}}>
                   {gpsLoading && (
                     <div style={{height:'400px',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)'}}>
                       📡 Fetching live GPS positions…
@@ -3293,7 +3301,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </div>
 
                 {/* Right panel — Fleet Status for admin, Lowbed Moves for others */}
-                <div style={{flex:'0 0 50%',width:'50%',minWidth:0,borderLeft:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}}>
+                <div style={n57Mobile?{width:'100%',minWidth:0,borderTop:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}:{flex:'0 0 50%',width:'50%',minWidth:0,borderLeft:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}}>
                   {isAdminUser ? (
                     <FleetWidget defaultOpen={true} onFleetChange={(active) => setFleetItems(active)} />
                   ) : (<>
@@ -3418,8 +3426,18 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </div>
               )}
 
+              {/* Unassigned Devices toggle for nightmare57 mobile */}
+              {n57Mobile && gpsDevices.length > 0 && (
+                <div
+                  onClick={() => setN57DevicesOpen(v => !v)}
+                  style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid var(--asphalt-light)',cursor:'pointer',userSelect:'none',background:'var(--asphalt)'}}>
+                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'var(--stripe)'}}>📡 Unassigned Devices</span>
+                  <span style={{color:'var(--concrete-dim)',fontSize:'10px'}}>{n57DevicesOpen ? '▼' : '▶'}</span>
+                </div>
+              )}
+
               {/* Legend */}
-              {!gpsLoading && gpsDevices.length > 0 && (
+              {!gpsLoading && gpsDevices.length > 0 && (!n57Mobile || n57DevicesOpen) && (
                 <div style={{display:'flex',gap:'14px',padding:'7px 14px',borderBottom:'1px solid var(--asphalt-light)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'5px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>
                     <div style={{width:'8px',height:'8px',borderRadius:'50%',background:'#7ecb8f',border:'2px solid #f5c518',flexShrink:0}}></div> Stopped / Idle
@@ -3440,7 +3458,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
               )}
 
               {/* Device list — grouped by OneStepGPS group */}
-              {(() => {
+              {(!n57Mobile || n57DevicesOpen) && (() => {
                 const visibleDevices = gpsDevices.filter(d => !hiddenDeviceIds.has(d.device_id));
                 const groupMap = {};
                 visibleDevices.forEach(dev => {
