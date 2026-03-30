@@ -276,7 +276,7 @@
   .job-card-meta { font-size: 12px; color: var(--concrete-dim); display: flex; gap: 8px; align-items: center; }
   .job-status { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; }
   .status-pending { background: #3a3020; color: var(--stripe); }
-  .status-analyzed { background: #1a3326; color: var(--green); }
+  .status-analyzed { background: #0d2a1a; color: #7ecb8f; font-weight: 700; }
   .status-analyzing { background: #1a2a3a; color: var(--blue); }
   .no-jobs-hint { padding: 24px 20px; text-align: center; font-size: 13px; color: var(--concrete-dim); line-height: 1.7; }
   /* Checkbox-style action buttons on job cards */
@@ -362,8 +362,11 @@
   .qty-table tr:last-child td { border-bottom: none; }
   .col-stated { font-family: 'DM Mono', monospace; color: var(--stripe); font-weight: 500; }
   .col-calc { font-family: 'DM Mono', monospace; color: var(--blue); font-weight: 500; }
+  .col-sf { font-family: 'DM Mono', monospace; color: var(--concrete); font-weight: 500; }
+  .col-tons { font-family: 'DM Mono', monospace; color: var(--green); font-weight: 700; }
+  .col-dims { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--concrete-dim); line-height: 1.4; }
   .row-unverified td { background: rgba(217,79,61,0.05); }
-  .row-unverified .col-stated, .row-unverified .col-calc { color: #f07060; }
+  .row-unverified .col-stated, .row-unverified .col-calc, .row-unverified .col-tons { color: #f07060; }
   .unverified-badge { font-family: 'DM Mono', monospace; font-size: 9px; background: rgba(217,79,61,0.2); color: #f07060; padding: 1px 5px; border-radius: 2px; margin-left: 5px; }
   .group-header { background: var(--asphalt-light); }
   .group-header td { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--concrete-dim); padding: 6px 10px; }
@@ -3278,10 +3281,11 @@ function _renderBidsPricingPopup(container) {
   if (isAnalyzed) {
     scanFooter = `<div style="display:flex;align-items:center;gap:12px;padding:10px 20px;">
       <span style="font-size:13px;">✅</span>
-      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;font-weight:700;">Analysis complete — results in bid detail</span>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;font-weight:700;">Analysis complete — ready to review</span>
       <span style="flex:1;"></span>
       <button onclick="_bidPageScanPlans(true)" style="${scanBtnStyle}">↺ Re-analyze</button>
-    </div>`;
+    </div>
+    ${scanJob.results ? renderResults(scanJob.results) : ''}`;
   } else if (isAnalyzing) {
     scanFooter = `<div style="display:flex;flex-direction:column;gap:0;">
       <div style="display:flex;align-items:center;gap:12px;padding:10px 20px;">
@@ -3450,9 +3454,9 @@ function _renderBidsPricingPopup(container) {
         </div>
         <div style="flex-shrink:0;font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);border:1px dashed var(--asphalt-light);border-radius:var(--radius);padding:6px 14px;white-space:nowrap;">Click to browse</div>
       </div>
-      ${scanFooter}
+      <div id="scanFooterWrap">${scanFooter}</div>
     </div>
-    ${scanJob && scanJob.results ? `<div style="margin:10px 20px 0;max-height:50vh;overflow-y:auto;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:16px 18px;">${renderResults(scanJob.results)}</div>` : ''}
+    <div id="scanResultsWrap">${scanJob && scanJob.results ? `<div style="margin:10px 20px 0;max-height:50vh;overflow-y:auto;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:16px 18px;">${renderResults(scanJob.results)}</div>` : ''}</div>
 
     <!-- ── Bid with ACE ── -->
     <div style="margin:12px 20px 0;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">
@@ -4470,7 +4474,7 @@ function _toToggleFolderStatus(folderId) {
   document.getElementById('toFolderDlg')?.remove(); _toOpenFolder(folderId); _toRefreshCardStacks();
 }
 
-let jobs = JSON.parse(localStorage.getItem('pavescope_v2') || '[]');
+let jobs = JSON.parse(localStorage.getItem('pavescope_v3') || localStorage.getItem('pavescope_v2') || '[]');
 
 // ── Notification system ──
 let notifications = JSON.parse(localStorage.getItem('pavescope_notifs') || '[]');
@@ -4615,7 +4619,7 @@ function editJobNumber(jobId) {
 }
 
 function saveJobs() {
-  localStorage.setItem('pavescope_v2', JSON.stringify(
+  localStorage.setItem('pavescope_v3', JSON.stringify(
     jobs.map(j => ({ ...j, files: j.files.map(f => ({ name: f.name, size: f.size })), fileObjects: undefined }))
   ));
   // Also push to Firebase if connected
@@ -8266,10 +8270,11 @@ function renderBidMain(el) {
   if (isAnalyzed) {
     scanFooterHTML = `<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;">
       <span style="font-size:14px;">✅</span>
-      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;font-weight:700;">Analysis complete — results in the bid detail</span>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;font-weight:700;">Analysis complete — ready to review</span>
       <span style="flex:1;"></span>
       <button onclick="_bidPageScanPlans(true)" style="${scanBtnStyle.replace('rgba(245,197,24,0.12)','none').replace('rgba(245,197,24,0.5)','var(--asphalt-light)').replace('var(--stripe)','var(--concrete-dim)')}">↺ Re-analyze</button>
-    </div>`;
+    </div>
+    ${scanJob.results ? renderResults(scanJob.results) : ''}`;
   } else if (isAnalyzing) {
     scanFooterHTML = `<div style="display:flex;flex-direction:column;gap:0;">
       <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;">
@@ -8461,7 +8466,7 @@ function renderAwardedMain(el) {
           ${j.number?`<div class="bid-card-num">#${j.number}</div>`:''}
         </div>
         <div class="bid-card-meta">
-          <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status.toUpperCase()}</span>
+          <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status==='analyzed'?'✅ ANALYZED':j.status.toUpperCase()}</span>
           <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);">${j.awardedDate||j.created}</span>
         </div>
         <div class="bid-card-btns" onclick="event.stopPropagation()">
@@ -9920,7 +9925,7 @@ function renderBidTab(el) {
         </div>
       </div>
       <div class="job-card-meta" onclick="selectJob('${j.id}')">
-        <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status.toUpperCase()}</span>
+        <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status==='analyzed'?'✅ ANALYZED':j.status.toUpperCase()}</span>
         <span>${j.created}</span>
       </div>
       <div class="jc-btns">
@@ -9951,7 +9956,7 @@ function renderBidTab(el) {
         <span style="font-family:'DM Mono',monospace;font-size:9px;background:#2a0a0a;color:var(--red);border:1px solid rgba(213,64,61,0.3);padding:2px 6px;border-radius:2px;white-space:nowrap;flex-shrink:0;">👎 OUTBID</span>
       </div>
       <div class="job-card-meta" style="margin-top:3px;">
-        <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status.toUpperCase()}</span>
+        <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status==='analyzed'?'✅ ANALYZED':j.status.toUpperCase()}</span>
         <span>${j.created}</span>
       </div>
     </div>`;
@@ -10029,7 +10034,7 @@ function renderAwardedTab(el) {
       return `<div class="job-card ${j.id===activeJobId?'active':''} ${isComplete?'awarded-card-dim':''}" style="margin:0;border-radius:0;border:none;border-bottom:1px solid var(--asphalt-light);" onclick="selectJob('${j.id}')">
         <div class="job-card-name" style="font-size:13px;">${j.name}</div>
         <div class="job-card-meta">
-          <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status.toUpperCase()}</span>
+          <span class="job-status status-${j.status}">${j.status==='analyzing'?'⟳ ANALYZING':j.status==='analyzed'?'✅ ANALYZED':j.status.toUpperCase()}</span>
           ${j.number?`<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--stripe);">#${j.number}</span>`:''}
           <span>${j.awardedDate||j.created}</span>
         </div>
@@ -10689,26 +10694,61 @@ function renderResults(r) {
         </div>`).join('')}
     </div>`;
 
-  // Group quantities
+  // Group quantities — detect new schema (calcSY/calcTons) vs legacy (calcQty)
   const groups = {};
   (r.quantities||[]).forEach(q => { const g = q.group||'Other'; if (!groups[g]) groups[g]=[]; groups[g].push(q); });
+  const hasNewSchema = (r.quantities||[]).some(q => q.calcSY !== undefined || q.calcTons !== undefined || q.sf !== undefined);
+  const colCount = hasNewSchema ? 8 : 5;
   let qtyRows = '';
+  const fmtNum = v => v == null ? '—' : typeof v === 'number' ? v.toLocaleString('en-US', {maximumFractionDigits:1}) : v;
   Object.entries(groups).forEach(([g, items]) => {
-    qtyRows += `<tr class="group-header"><td colspan="5">${g}</td></tr>`;
+    qtyRows += `<tr class="group-header"><td colspan="${colCount}">${g}</td></tr>`;
     items.forEach(q => {
       const uv = q.unverified ? 'row-unverified' : '';
       const badge = q.unverified ? '<span class="unverified-badge">UNVERIFIED</span>' : '';
-      qtyRows += `<tr class="${uv}">
-        <td>${q.item}${badge}</td>
-        <td>${q.spec||'—'}</td>
-        <td>${q.depth||'—'}</td>
-        <td class="col-stated">${q.statedQty||'—'}</td>
-        <td class="col-calc">${q.calcQty||'—'}</td>
-      </tr>`;
+      if (hasNewSchema) {
+        qtyRows += `<tr class="${uv}">
+          <td>${q.item}${badge}</td>
+          <td>${q.spec||'—'}</td>
+          <td>${q.depth||'—'}</td>
+          <td class="col-sf">${fmtNum(q.sf)}</td>
+          <td class="col-stated">${q.statedQty||'—'}</td>
+          <td class="col-calc">${fmtNum(q.calcSY)}</td>
+          <td class="col-tons">${fmtNum(q.calcTons)}</td>
+          <td class="col-dims">${q.dimensions||'—'}</td>
+        </tr>`;
+      } else {
+        qtyRows += `<tr class="${uv}">
+          <td>${q.item}${badge}</td>
+          <td>${q.spec||'—'}</td>
+          <td>${q.depth||'—'}</td>
+          <td class="col-stated">${q.statedQty||'—'}</td>
+          <td class="col-calc">${q.calcQty||'—'}</td>
+        </tr>`;
+      }
     });
   });
 
-  const sheetTags = (r.relevantSheets||[]).map(s=>`<span class="sheet-tag" onclick="openSheetPanel('${s.replace(/'/g,"\\'")}')" title="Click to view sheet ${s}">🔍 ${s}</span>`).join('');
+  // relevantSheets: support both old array format and new categorized object format
+  const _sheetCategories = {
+    hmaSheets: '🔶 HMA / Paving', millingSheets: '⚙️ Milling', gradingSheets: '📐 Grading',
+    profileSheets: '📏 Profile', trafficMarkingSheets: '🚦 Traffic/Markings', bermSheets: '🧱 Berm', bridgeSheets: '🌉 Bridge'
+  };
+  let sheetTagsHtml = '';
+  if (r.relevantSheets && !Array.isArray(r.relevantSheets)) {
+    // New categorized object format
+    Object.entries(_sheetCategories).forEach(([key, label]) => {
+      const arr = r.relevantSheets[key];
+      if (!arr || !arr.length) return;
+      sheetTagsHtml += `<div style="margin-bottom:8px;"><div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">${label}</div>`;
+      sheetTagsHtml += arr.map(s => `<span class="sheet-tag" onclick="openSheetPanel('${String(s).replace(/'/g,"\\'")}')" title="Click to view sheet ${s}">🔍 ${s}</span>`).join('');
+      sheetTagsHtml += `</div>`;
+    });
+  } else {
+    // Legacy flat array
+    sheetTagsHtml = (r.relevantSheets||[]).map(s=>`<span class="sheet-tag" onclick="openSheetPanel('${String(s).replace(/'/g,"\\'")}')" title="Click to view sheet ${s}">🔍 ${s}</span>`).join('');
+  }
+  const sheetTags = sheetTagsHtml;
 
   return `
     <div style="margin-bottom:28px">
@@ -10723,22 +10763,28 @@ function renderResults(r) {
           <div class="result-card-label">📐 HMA Quantity Takeoff — Lift by Lift</div>
           <div class="qty-legend">
             <span><span style="color:var(--stripe)">■</span> STATED = as written in plans</span>
-            <span><span style="color:var(--blue)">■</span> CALCULATED = derived from plan dimensions</span>
+            <span><span style="color:var(--blue)">■</span> CALC SY = derived from plan dimensions</span>
+            <span><span style="color:var(--green)">■</span> CALC TONS = SY × 0.056 × depth″</span>
             <span><span style="color:#f07060">■</span> UNVERIFIED = needs manual check</span>
           </div>
+          <div style="overflow-x:auto;">
           <table class="qty-table">
-            <thead><tr>
+            ${hasNewSchema ? `<thead><tr>
+              <th>Item</th><th>Mix / Spec</th>
+              <th>Depth</th><th>SF</th><th>Stated SY</th><th>Calc SY</th><th>Calc Tons</th><th>Dimensions</th>
+            </tr></thead>` : `<thead><tr>
               <th style="width:22%">Item</th><th style="width:26%">Mix / Spec</th>
               <th style="width:12%">Depth</th><th style="width:20%">Stated Qty</th><th style="width:20%">Calculated Qty</th>
-            </tr></thead>
-            <tbody>${qtyRows||'<tr><td colspan="5" style="color:var(--concrete-dim);text-align:center;padding:16px">No quantities extracted</td></tr>'}</tbody>
+            </tr></thead>`}
+            <tbody>${qtyRows||`<tr><td colspan="${colCount}" style="color:var(--concrete-dim);text-align:center;padding:16px">No quantities extracted</td></tr>`}</tbody>
           </table>
+          </div>
         </div>
-        <div class="result-card">
+        <div class="result-card full-width">
           <div class="result-card-label">📄 Relevant Plan Sheets</div>
           <div style="margin-top:4px">${sheetTags||'<span style="color:var(--concrete-dim);font-size:13px">None identified</span>'}</div>
         </div>
-        <div class="result-card">
+        <div class="result-card full-width">
           <div class="result-card-label">🧱 Full Pavement Section & Specs</div>
           <div class="result-card-content">${r.materials||'No specs extracted.'}</div>
         </div>
@@ -11083,7 +11129,6 @@ async function analyzeJob(jobId) {
 
       // ── Call Railway /api/plans/scan endpoint (handles streaming + retry + Firestore save) ──
       const scanBaseUrl = claudeProxyUrl.replace(/\/claude$/, '');
-      console.log('[Scan] hitting:', scanBaseUrl + '/api/plans/scan');
       const scanRes = await fetch(scanBaseUrl + '/api/plans/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -11128,7 +11173,6 @@ async function analyzeJob(jobId) {
             } else if (ev.type === 'error') {
               throw new Error(ev.message || 'Server error during summary generation');
             } else if (ev.type === 'complete') {
-              console.log('[Scan] Summary complete:', ev.charCount, 'chars saved to Firestore');
               streamDone = true; break;
             }
           } catch (e) {
@@ -11155,8 +11199,6 @@ async function analyzeJob(jobId) {
         }
       }
 
-      console.log('[Scan] Summary received:', raw.length, 'chars,', tokenCount, 'tokens');
-
       // Parse JSON result and finish
       sumLine.className='log-line done'; if(sumLine.children[0])sumLine.children[0].textContent='✓';
       if(sumLine.children[1])sumLine.children[1].textContent=`Summary complete — ${pageExtracts.length} HMA sheets (${tokenCount} tokens)`;
@@ -11165,8 +11207,6 @@ async function analyzeJob(jobId) {
       if(timedOut||signal.aborted)return;
       clearInterval(iv); _analyzeAbortCtrl=null;
       if(!raw)throw new Error('Empty summary response — try again.');
-      console.log('[Scan] raw preview:', raw.slice(0, 500));
-      console.log('[Scan] raw length:', raw.length);
       let cleanRaw = raw.trim();
       // Strip wrapping quotes if Claude returned a JSON string
       if (cleanRaw.startsWith('"') && cleanRaw.endsWith('"')) {
@@ -11179,10 +11219,20 @@ async function analyzeJob(jobId) {
       try{job.results=JSON.parse(m0[0]);}catch(parseErr){console.error('[Scan] Summary JSON parse failed. Raw:',raw.length,'Match:',m0[0].length);throw new Error('AI summary JSON was truncated ('+raw.length+' chars). Try re-analyzing.');}
 
       try{const meta=job.results.projectMeta;if(meta){if(meta.projectName)job.name=meta.projectName;if(meta.projectAddress)job.location=meta.projectAddress;if(meta.contractNumber)job.number=meta.contractNumber;const sf=(id,v)=>{if(!v)return;const el=document.getElementById(id);if(el)el.value=v;};sf('bidQName',meta.projectName);sf('bidQLocation',meta.projectAddress);sf('bidQNumber',meta.contractNumber);if(meta.awardingAuthority){job.awardingAuthority=meta.awardingAuthority;const qa=document.getElementById('bidQAuthority');if(qa){const nd=meta.awardingAuthority.toLowerCase();const mt=Array.from(qa.options).find(o=>o.text&&(nd.includes(o.text.toLowerCase())||o.text.toLowerCase().includes(nd)));if(mt)qa.value=mt.value;}}}}catch(e){}
-      job.status='analyzed'; saveJobs(); renderSidebar(); renderJobDetail(job);
+      job.status='analyzed'; activeJobId=job.id; saveJobs(); renderSidebar();
+      // Inject results directly into the popup without re-rendering the whole thing
+      const _rw = document.getElementById('scanResultsWrap');
+      if (_rw) {
+        _rw.innerHTML = `<div style="margin:10px 20px 0;max-height:50vh;overflow-y:auto;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:16px 18px;">${renderResults(job.results)}</div>`;
+      }
+      // Update scan footer to show "complete" state without full re-render
+      const _sfw = document.getElementById('scanFooterWrap');
+      if (_sfw) {
+        const _scanBtnS = `background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.5);border-radius:var(--radius);padding:8px 22px;color:var(--stripe);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;`;
+        _sfw.innerHTML = `<div style="display:flex;align-items:center;gap:12px;padding:10px 20px;"><span style="font-size:13px;">✅</span><span style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;font-weight:700;">Analysis complete — ${numPages} sheets scanned</span><span style="flex:1;"></span><button onclick="_bidPageScanPlans(true)" style="${_scanBtnS}">↺ Re-analyze</button></div>`;
+      }
+      renderJobDetail(job);
       pushNotif('success','Analysis Complete',`"${job.name}" — ${numPages} sheets scanned.`,job.id);
-      try{const _bv=document.getElementById('bidView');if(_bv)renderBidMain(_bv);}catch(e){}
-      try{const _pb=document.getElementById('secPopupBody');if(_pb&&_secPopupCurrent==='bids')_renderBidsPricingPopup(_pb);}catch(e){}
       return; // ── page-by-page complete ──
     }
 
@@ -11313,11 +11363,20 @@ async function analyzeJob(jobId) {
       }
     } catch(e) {}
 
-    job.status='analyzed'; saveJobs(); renderSidebar(); renderJobDetail(job);
+    job.status='analyzed'; activeJobId=job.id; saveJobs(); renderSidebar();
+    // Inject results directly into the popup without re-rendering the whole thing
+    const _rw2 = document.getElementById('scanResultsWrap');
+    if (_rw2) {
+      _rw2.innerHTML = `<div style="margin:10px 20px 0;max-height:50vh;overflow-y:auto;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:16px 18px;">${renderResults(job.results)}</div>`;
+    }
+    // Update scan footer to show "complete" state without full re-render
+    const _sfw2 = document.getElementById('scanFooterWrap');
+    if (_sfw2) {
+      const _scanBtnS2 = `background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.5);border-radius:var(--radius);padding:8px 22px;color:var(--stripe);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;`;
+      _sfw2.innerHTML = `<div style="display:flex;align-items:center;gap:12px;padding:10px 20px;"><span style="font-size:13px;">✅</span><span style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;font-weight:700;">Analysis complete — ready to review</span><span style="flex:1;"></span><button onclick="_bidPageScanPlans(true)" style="${_scanBtnS2}">↺ Re-analyze</button></div>`;
+    }
+    renderJobDetail(job);
     pushNotif('success', 'Analysis Complete', `"${job.name}" has been analyzed and is ready to review.`, job.id);
-    // Refresh bids page list so bid rows show scope summary
-    try { const _bv = document.getElementById('bidView'); if (_bv) renderBidMain(_bv); } catch(e) {}
-    try { const _pb = document.getElementById('secPopupBody'); if (_pb && _secPopupCurrent === 'bids') _renderBidsPricingPopup(_pb); } catch(e) {}
 
   } catch(err) {
     clearTimeout(clientTimeout);
@@ -11416,7 +11475,69 @@ RULES:
 }
 
 function buildSummaryPrompt(pageExtracts, fileList) {
-  return `You are an expert HMA pavement estimator. The following are per-sheet extractions from civil plan PDFs (${fileList}). Consolidate them into one complete final analysis — deduplicate items that appear on multiple sheets, resolve any conflicts, and produce the full structured result.
+  return `You are an expert HMA pavement estimator for a paving contractor. Files: ${fileList}
+
+Analyze these civil plan extractions and produce a complete quantity takeoff. 
+
+HMA IDENTIFICATION — extract ALL items matching these criteria:
+
+INCLUDE these materials:
+- HMA, Hot Mix Asphalt, Bituminous Concrete, BC
+- Superpave, dense graded, open graded
+- Friction course, leveling course, binder course
+- Base course, intermediate course, surface course
+- Type I, Type II, Type III asphalt mixes
+- 19mm, 12.5mm, 9.5mm SP or SM mixes
+- SBC37.5 — this is a base layer asphalt mix, always include and flag as BASE COURSE
+- Bridge mix, bridge deck asphalt, waterproofing membrane asphalt
+- Asphalt sidewalks and shared use paths (include but label group as "Asphalt Sidewalk" or "Shared Use Path" separately from roadway)
+- Bituminous berm, bituminous concrete berm, BC berm — calculate linear feet AND tonnage (use 0.1 SY per LF as standard conversion, then apply tons formula)
+- Tack coat, prime coat between asphalt lifts
+- Milling of existing asphalt — identify ALL areas requiring milling, note depth of mill, calculate SF/SY of milling area separately
+- Reclaiming, pulverizing existing pavement
+- Any overlay, infrared repair, or wedge/leveling course
+
+MILLING IDENTIFICATION:
+- Look for notes like "mill X inches", "cold plane X inches", "remove existing pavement"
+- Calculate milling quantities in SY same as paving quantities
+- Flag milling depth separately — milling depth is NOT the same as paving depth
+- If milling depth matches a lift thickness, note it as a possible remove and replace
+
+BITUMINOUS BERM:
+- Look for BC berm, bituminous berm, asphalt berm on plan sheets and details
+- Quantity in linear feet (LF) as stated or calculated from plan dimensions
+- Convert to tons using: LF × 0.1 SY/LF × 0.056 × depth_inches
+- Standard berm depth is 4 inches unless otherwise noted
+
+DO NOT extract:
+- Portland cement concrete, PCC, reinforced concrete
+- Brick, pavers, cobblestone, unit masonry of any kind
+- Gravel, crushed stone base (unless directly labeled as part of HMA pavement section)
+- Subbase, subgrade, fill, earthwork
+- Landscaping, loam, seed, topsoil
+- Drainage structures, catch basins, utilities
+- Signage, pavement markings (extract separately only if tied to milling/paving scope)
+- Concrete sidewalks, concrete curb, concrete gutter
+
+PAVEMENT SECTION IDENTIFICATION:
+- Look specifically for TYPICAL PAVEMENT SECTION sheets or details
+- Correct section = roadway/travel lane/parking — NOT concrete sidewalk, NOT brick paver detail
+- If multiple typical sections exist, extract roadway section first, then asphalt sidewalk/path separately
+- If you see SBC37.5 in a section, that is the base course — flag it clearly and include full depth
+- Depths from roadway typical section are correct — never use sidewalk or pedestrian detail depths for roadway quantities
+- Flag any conflict between typical section depths and quantity table depths in issues[]
+
+QUANTITY CALCULATION RULES:
+- Extract all dimensions from roadway plans (lengths, widths, areas)
+- Extract all HMA lift depths from typical sections and cross sections
+- Calculate SF = length (ft) × width (ft) for each zone/segment
+- Calculate SY = SF ÷ 9
+- Calculate Tons = SY × 0.056 × depth_inches for each lift
+- If stated quantities exist on the plans, record them as statedQty
+- Always show your calculated quantities as calcQty
+- If dimensions are partially readable, flag as UNVERIFIED but still calculate
+- Break quantities out by lift/layer (e.g. base course, intermediate course, surface course)
+- If multiple segments or zones exist, calculate each separately then sum
 
 ${pageExtracts}
 
@@ -11424,28 +11545,56 @@ Return ONLY valid JSON (no markdown, no backticks):
 {
   "projectMeta": { "projectName": "...", "contractNumber": "...", "projectAddress": "...", "awardingAuthority": "..." },
   "summary": "Detailed 3-5 paragraph scope summary covering all HMA items, lift sequence, mix types, depths, and special items.",
-  "quantities": [{ "group": "...", "item": "...", "spec": "...", "depth": "...", "statedQty": "...", "calcQty": "...", "unverified": false }],
+  "quantities": [
+    {
+      "group": "HMA Surface Course | HMA Intermediate | HMA Base | Other",
+      "item": "item description",
+      "spec": "mix designation exactly as written",
+      "depth": "depth in inches as written on plans",
+      "depthInches": 0.0,
+      "sf": 0.0,
+      "statedQty": "SY as stated on plans or null",
+      "calcSY": 0.0,
+      "calcTons": 0.0,
+      "dimensions": "length x width or area description used to calculate",
+      "unverified": false
+    }
+  ],
   "issues": [{ "type": "UNVERIFIED | MISSING | CONFLICT | ASSUMED", "item": "...", "detail": "..." }],
-  "relevantSheets": ["sheet numbers/names with HMA content"],
+  "relevantSheets": {
+    "hmaSheets": ["sheet numbers containing HMA paving scope, typical sections, pavement details"],
+    "millingSheets": ["sheet numbers showing milling limits or notes"],
+    "gradingSheets": ["sheet numbers for grading plans — used to confirm elevations and depths"],
+    "profileSheets": ["sheet numbers for plan and profile — used to confirm lengths and grades"],
+    "trafficMarkingSheets": ["sheet numbers for traffic control, pavement markings, and striping plans"],
+    "bermSheets": ["sheet numbers showing bituminous berm details or locations"],
+    "bridgeSheets": ["sheet numbers for bridge deck or structure paving if applicable"]
+  },
   "materials": "Full pavement section bottom to top with each lift, mix, and depth.",
   "fieldSummary": "3-5 sentences for the foreman covering lifts, special items, and field notes."
 }
-
-RULES: Never invent quantities. Use null if unreadable. Report mix designations exactly as written.`;
+RULES:
+- Never invent dimensions. Use null if unreadable but flag it
+- Show all math — include dimensions field so calculations can be verified
+- Report mix designations exactly as written on plans
+- Tons formula: SY × 0.056 × depth_inches
+- If a quantity table exists on the plans, extract stated quantities AND independently calculate
+- When in doubt whether an item is HMA — include it but mark unverified: true
+- relevantSheets: include sheet number AND title where readable. If a sheet covers multiple categories, list it in all. Grading, profile, traffic/marking sheets are always relevant. If a sheet number is partially readable, note (unverified) in parentheses`;
 }
 
 function demoResults() {
   return {
     summary: "This commercial site development plan set shows a full-depth, three-lift HMA pavement system across the main parking lot, perimeter access drives, and a shared-use path along the site's eastern frontage. The pavement design calls for a 5.5\" SIC 19mm binder course (placed in two lifts) below a 2\" 12.5mm Superpave surface course.\n\nThe parking lot is the primary scope area at approximately 16,800 SY. Access drives along the north and west perimeters add approximately 2,340 SY. Bituminous Concrete Berm is specified around the full perimeter of paved areas per plan Detail D-101.\n\nNote: This is a demonstration result. Upload real civil plan PDFs to generate a live analysis from your actual plan set.",
     quantities: [
-      { group:"Parking Lot", item:"HMA Binder Course — Lift 1", spec:"SIC 19mm Type I", depth:"3\" compacted", statedQty:"16,800 SY", calcQty:"17,040 SY (per C-201)", unverified:false },
-      { group:"Parking Lot", item:"HMA Binder Course — Lift 2", spec:"SIC 19mm Type II", depth:"2.5\" compacted", statedQty:"16,800 SY", calcQty:"17,040 SY (per C-201)", unverified:false },
-      { group:"Parking Lot", item:"HMA Surface Course", spec:"12.5mm Superpave PG 64-28", depth:"2\" compacted", statedQty:"16,800 SY", calcQty:"17,040 SY (per C-201)", unverified:false },
-      { group:"Access Drive", item:"HMA Binder Course", spec:"SIC 19mm Type I", depth:"3\" compacted", statedQty:null, calcQty:"2,340 SY (per C-202)", unverified:true },
-      { group:"Access Drive", item:"HMA Surface Course", spec:"12.5mm Superpave PG 64-28", depth:"2\" compacted", statedQty:null, calcQty:"2,340 SY (per C-202)", unverified:true },
-      { group:"Sidewalk & Paths", item:"Shared-Use Path — HMA Surface", spec:"12.5mm Superpave PG 64-28", depth:"2\" compacted", statedQty:"1,850 SY", calcQty:"1,900 SY (per C-300)", unverified:false },
-      { group:"BC Berm", item:"Bituminous Concrete Berm", spec:"BC Berm per Detail D-101", depth:"N/A", statedQty:"1,840 LF", calcQty:"1,855 LF (per C-201, C-202)", unverified:false },
-      { group:"Milling", item:"Mill Existing Pavement at Street Tie-In", spec:"Mill 2\" depth", depth:"2\"", statedQty:null, calcQty:null, unverified:true }
+      { group:"HMA Base", item:"HMA Binder Course — Lift 1 (Parking Lot)", spec:"SIC 19mm Type I", depth:"3\" compacted", depthInches:3.0, sf:153360, statedQty:"16,800 SY", calcSY:17040, calcTons:2862.7, dimensions:"420 ft × 365 ft = 153,360 SF (per C-201)", unverified:false },
+      { group:"HMA Intermediate", item:"HMA Binder Course — Lift 2 (Parking Lot)", spec:"SIC 19mm Type II", depth:"2.5\" compacted", depthInches:2.5, sf:153360, statedQty:"16,800 SY", calcSY:17040, calcTons:2385.6, dimensions:"420 ft × 365 ft = 153,360 SF (per C-201)", unverified:false },
+      { group:"HMA Surface Course", item:"HMA Surface Course (Parking Lot)", spec:"12.5mm Superpave PG 64-28", depth:"2\" compacted", depthInches:2.0, sf:153360, statedQty:"16,800 SY", calcSY:17040, calcTons:1908.5, dimensions:"420 ft × 365 ft = 153,360 SF (per C-201)", unverified:false },
+      { group:"HMA Base", item:"HMA Binder Course (Access Drive)", spec:"SIC 19mm Type I", depth:"3\" compacted", depthInches:3.0, sf:21060, statedQty:null, calcSY:2340, calcTons:393.1, dimensions:"780 ft × 27 ft = 21,060 SF (per C-202)", unverified:true },
+      { group:"HMA Surface Course", item:"HMA Surface Course (Access Drive)", spec:"12.5mm Superpave PG 64-28", depth:"2\" compacted", depthInches:2.0, sf:21060, statedQty:null, calcSY:2340, calcTons:262.1, dimensions:"780 ft × 27 ft = 21,060 SF (per C-202)", unverified:true },
+      { group:"HMA Surface Course", item:"Shared-Use Path — HMA Surface", spec:"12.5mm Superpave PG 64-28", depth:"2\" compacted", depthInches:2.0, sf:17100, statedQty:"1,850 SY", calcSY:1900, calcTons:212.8, dimensions:"1,900 ft × 9 ft = 17,100 SF (per C-300)", unverified:false },
+      { group:"Other", item:"Bituminous Concrete Berm", spec:"BC Berm per Detail D-101", depth:"N/A", depthInches:null, sf:null, statedQty:"1,840 LF", calcSY:null, calcTons:null, dimensions:"Perimeter: 1,855 LF (per C-201, C-202)", unverified:false },
+      { group:"Other", item:"Mill Existing Pavement at Street Tie-In", spec:"Mill 2\" depth", depth:"2\"", depthInches:2.0, sf:null, statedQty:null, calcSY:null, calcTons:null, dimensions:"No dimensions on plans", unverified:true }
     ],
     issues: [
       { type:"CONFLICT", item:"Parking Lot — All Lifts", detail:"Stated qty (16,800 SY) vs. calculated from plan dimensions (17,040 SY) differ by 240 SY. Verify whether stated qty uses back-of-curb or face-of-curb measurement." },
@@ -11453,7 +11602,15 @@ function demoResults() {
       { type:"MISSING", item:"Access Drive — Intermediate Binder", detail:"Parking lot shows 2 binder lifts (Lift 1 + Lift 2) but access drive detail on D-100 only references one binder lift. Confirm with engineer whether second binder lift applies to access drives." },
       { type:"UNVERIFIED", item:"Mill Existing Pavement at Street Tie-In", detail:"Milling noted on C-202 at street connection but no area, length, or width dimension is called out. Quantity cannot be determined from available plan information — verify on site or with engineer." }
     ],
-    relevantSheets: ["C-100","C-200","C-201","C-202","C-300","C-400","D-100","D-101"],
+    relevantSheets: {
+      hmaSheets: ["C-200 — Paving Plan","C-201 — Parking Lot Layout","D-100 — Typical Pavement Section","D-101 — Berm Detail"],
+      millingSheets: ["C-202 — Street Tie-In Detail"],
+      gradingSheets: ["C-100 — Grading Plan","C-400 — Grading Details"],
+      profileSheets: ["C-300 — Shared-Use Path Profile"],
+      trafficMarkingSheets: [],
+      bermSheets: ["D-101 — Berm Detail","C-201 — Parking Lot Layout","C-202 — Access Drive"],
+      bridgeSheets: []
+    },
     materials: "Full Pavement Section (Bottom to Top):\n• Lift 1: SIC 19mm Type I Binder Course — 3\" compacted\n• Lift 2: SIC 19mm Type II Binder Course — 2.5\" compacted\n• Lift 3: 12.5mm Superpave Surface Course, PG 64-28 — 2\" compacted\nTotal HMA Depth: 7.5\"\n\nShared-Use Path: 12.5mm Superpave PG 64-28, 2\" compacted\n\nBC Berm: Bituminous Concrete Berm per Detail D-101 — confirm profile height and toe detail at curb transitions",
     fieldSummary: "This is a three-lift HMA job — 3\" base binder, 2.5\" intermediate binder, and 2\" surface across the parking lot and access drives. You're also placing a 2\" surface coat on the shared-use path at the front of the site and setting BC Berm around the full lot perimeter. There's milling at the street tie-in but no quantity is confirmed yet — do not commit your milling sub until office verifies the area. Check with the PM on whether the second binder lift runs through the access drives before scheduling that pour."
   };
@@ -36126,7 +36283,11 @@ async function initApp(username) {
           awarded:false, ...JSON.parse(d.data().data)
         }); } catch(e){} });
         if (updated.length > 0) {
-          updated.forEach(u => { const ex = jobs.find(j=>j.id===u.id); if(ex?.fileObjects) u.fileObjects=ex.fileObjects; });
+          updated.forEach(u => {
+            const ex = jobs.find(j=>j.id===u.id);
+            if(ex?.fileObjects) u.fileObjects=ex.fileObjects;
+            if(ex && ex.status==='analyzed' && ex.results && (!u.results || u.status!=='analyzed')) { u.status=ex.status; u.results=ex.results; }
+          });
           jobs = updated;
           localStorage.setItem('pavescope_v3', JSON.stringify(jobs.map(j=>({...j,files:j.files.map(f=>({name:f.name,size:f.size})),fileObjects:undefined}))));
           renderSidebar();
