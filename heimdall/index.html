@@ -2553,12 +2553,12 @@ Be specific, practical, and flag any uncertainties clearly.`;
           </div>
 
           {/* Center: live status badge */}
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',flexShrink:0}}>
+          {!n57Mobile && <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',flexShrink:0}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'11px',letterSpacing:'3px',color:'var(--concrete-dim)'}}>LIVE STATUS</div>
             <span style={{background:gpsConnected?'rgba(61,158,106,0.15)':'rgba(155,148,136,0.1)',color:gpsConnected?'#7ecb8f':'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 8px',borderRadius:'10px',border:`1px solid ${gpsConnected?'rgba(61,158,106,0.3)':'rgba(155,148,136,0.2)'}`,whiteSpace:'nowrap'}}>
               ● {gpsConnected ? (gpsHibernated ? 'Fleet Hibernated' : `GPS Live · ${gpsLoading ? '…' : gpsDevices.length} units`) : 'GPS Offline'}
             </span>
-          </div>
+          </div>}
 
           {/* Right: KPI chips (desktop/driver users) or connect buttons (admins) */}
           <div style={{flex:'1 1 0',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
