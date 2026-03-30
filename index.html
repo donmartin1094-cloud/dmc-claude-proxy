@@ -11099,10 +11099,10 @@ async function analyzeJob(jobId) {
         try {
           const pr = await fetch(claudeProxyUrl, {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:1500,
+            body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:800,
               messages:[{role:'user',content:[
                 {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-                {type:'text',text:`Sheet ${pageNum} of ${numPages}. Extract ALL of the following from this plan sheet:\n\nHMA PAVEMENT ITEMS:\n- Mix type and designation (exactly as written)\n- Compacted depth per lift (inches)\n- Any stated quantities (SF, SY, LF, tons)\n- Pavement section callouts and notes\n\nDIMENSIONS — this is critical:\n- Road/lane widths (feet)\n- Segment lengths or station ranges (e.g. STA 10+00 to STA 15+50)\n- Area dimensions for parking lots, intersections, driveways\n- Milling limits and depths\n- Berm lengths (LF)\n- Any dimension annotations on the plan sheet\n\nSHEET CONTEXT:\n- Sheet title and number\n- Type of sheet (roadway plan, typical section, profile, grading, traffic/marking)\n- Scale if shown\n\nIf this is a TYPICAL SECTION sheet: extract every lift, its mix, and its exact depth in inches.\nIf this is a PLAN sheet: extract all widths, lengths, and station ranges.\nIf this is a PROFILE sheet: extract segment lengths and grade breaks.\nIf no HMA content at all respond with exactly: NO_HMA`}
+                {type:'text',text:`Sheet ${pageNum} of ${numPages}. You are reading a civil plan sheet for an HMA paving contractor.\n\nEXTRACT in this order:\n1. Sheet title and type (roadway plan, typical section, profile, grading, traffic/marking)\n2. ALL HMA/Bituminous Concrete/asphalt items — mix type, depth in inches, any stated quantities\n3. If this sheet has a TYPICAL PAVEMENT SECTION — extract every lift with mix name and depth\n4. If this sheet has dimension callouts, station ranges, or road widths — extract them exactly as written (e.g. 'STA 10+00 to 15+50', '24ft width', '1240 SY')\n5. If this sheet has a quantity table — extract every HMA line item with its stated quantity and unit\n\nBe concise. Only include what is explicitly shown on this sheet.\nIf no HMA content exists on this sheet respond with exactly: NO_HMA`}
               ]}]}),
             signal
           });
