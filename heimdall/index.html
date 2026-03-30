@@ -26,6 +26,12 @@
     border-color: #5ab4f5;
     box-shadow: 0 0 0 3px rgba(90,180,245,0.3), 0 0 8px rgba(90,180,245,0.5);
   }
+  .job-site-pin {
+    width: 14px; height: 14px; border-radius: 3px;
+    background: #a78bfa; border: 2px solid #c4b5fd;
+    box-shadow: 0 0 0 3px rgba(167,139,250,0.3), 0 0 10px rgba(167,139,250,0.6);
+    transform: rotate(45deg);
+  }
   .eq-popup {
     background: #252525 !important;
     border: 1px solid #f5c518 !important;
@@ -172,27 +178,8 @@ async function hdFsSet(docName, value) {
   } catch(e) { console.warn('hdFsSet failed:', e.message); }
 }
 
-const TABS = ["Dashboard", "Equipment", "Dispatch Sheets", "Daily Schedule", "Field Intel", "Conflicts", "Export"];
+const TABS = ["Dashboard", "Master Schedule", "Equipment", "Dispatch Sheets", "Daily Schedule", "Field Intel", "Conflicts", "Export"];
 
-// ─── HOVER API ────────────────────────────────────────────────────────────────
-
-async function fetchHoverJobs(token) {
-  const r = await fetch('https://api.hover.to/projects', {
-    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
-  });
-  if (!r.ok) throw new Error('Hover API error ' + r.status);
-  const data = await r.json();
-  return data.projects || data || [];
-}
-
-async function fetchHoverJobMedia(token, projectId) {
-  const r = await fetch(`https://api.hover.to/projects/${projectId}/deliverables`, {
-    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
-  });
-  if (!r.ok) throw new Error('Hover media error ' + r.status);
-  const data = await r.json();
-  return (data.deliverables || []).filter(d => d.type === 'image').map(d => d.url);
-}
 
 // ─── ONESTEPGPS — proxied through Railway backend (key stays server-side) ────
 const RAILWAY_BASE = (() => {
@@ -203,21 +190,72 @@ const RAILWAY_BASE = (() => {
 async function fetchGPSDevices() {
   const gpsKey = localStorage.getItem('HEIMDALL_API_KEY') || '';
 
-  // 1st choice: Netlify function (server-side, no CORS issues, always works)
+  // 1st choice: direct OneStepGPS (API key in URL = simple GET = no CORS preflight)
+  if (gpsKey) {
+    try {
+      const [devRes, grpRes] = await Promise.all([
+        fetch(`https://track.onestepgps.com/v3/api/public/device?latest_point=true&api-key=${gpsKey}`),
+        fetch(`https://track.onestepgps.com/v3/api/public/group?api-key=${gpsKey}`).catch(() => null)
+      ]);
+      if (devRes.ok) {
+        const devData = await devRes.json();
+        let groupNameMap = {};
+        if (grpRes && grpRes.ok) {
+          try {
+            const grpData = await grpRes.json();
+            const groups = grpData.result_list || grpData.groups || (Array.isArray(grpData) ? grpData : []);
+            groups.forEach(g => {
+              if (g.group_id != null) groupNameMap[String(g.group_id)] = g.group_name || g.name || String(g.group_id);
+            });
+          } catch(e) {}
+        }
+        const devices = (devData.result_list || []).map(dev => {
+          let names = [];
+          const g = dev.groups || dev.group_ids || dev.group_id;
+          if (Array.isArray(g)) {
+            names = g.map(x => {
+              if (typeof x === 'string' || typeof x === 'number') return groupNameMap[String(x)] || String(x);
+              return x.group_name || x.name || groupNameMap[String(x.group_id)] || null;
+            }).filter(Boolean);
+          } else if (g != null) {
+            names = [groupNameMap[String(g)] || String(g)];
+          }
+          return Object.assign({}, dev, { _groupNames: names.length ? names : ['Ungrouped Devices'] });
+        });
+        return Object.assign({}, devData, { result_list: devices, _groupMap: groupNameMap });
+      } else {
+        console.warn('[GPS] Direct API returned', devRes.status);
+      }
+    } catch(e) { console.warn('[GPS] Direct API error:', e.message); }
+  }
+
+  // 2nd choice: Netlify function (server-side proxy)
   try {
     const r = await fetch('/.netlify/functions/gps-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey: gpsKey })
     });
-    if (r.ok) return r.json();
-  } catch(e) {}
+    if (r.ok) {
+      const d = await r.json();
+      if (d && Array.isArray(d.result_list)) return d;
+    } else {
+      console.warn('[GPS] Netlify proxy returned', r.status);
+    }
+  } catch(e) { console.warn('[GPS] Netlify proxy error:', e.message); }
 
-  // 2nd choice: Railway proxy (requires ONESTEPGPS_API_KEY env var deployed on Railway)
+  // 3rd choice: Railway proxy
   try {
-    const r2 = await fetch(`${RAILWAY_BASE}/gps/devices`);
-    if (r2.ok) return r2.json();
-  } catch(e) {}
+    const r2 = await fetch(`${RAILWAY_BASE}/gps/devices`, {
+      headers: gpsKey ? { 'x-gps-key': gpsKey } : {}
+    });
+    if (r2.ok) {
+      const d2 = await r2.json();
+      if (d2 && Array.isArray(d2.result_list)) return d2;
+    } else {
+      console.warn('[GPS] Railway proxy returned', r2.status);
+    }
+  } catch(e) { console.warn('[GPS] Railway proxy error:', e.message); }
 
   throw new Error('GPS fetch failed — all endpoints unavailable');
 }
@@ -403,10 +441,12 @@ function AnalysisCard({ result, headerColor = "bg-gray-800", onPushToPricing, on
 
 // ─── EQUIPMENT MAP ────────────────────────────────────────────────────────────
 
-function EquipmentMap({ devices, getDeviceName, getDeviceEquipNum, getDeviceStatus, getDeviceAddress, getDeviceUpdated }) {
+function EquipmentMap({ devices, getDeviceName, getDeviceEquipNum, getDeviceStatus, getDeviceAddress, getDeviceUpdated, jobSites = [] }) {
   const mapRef = React.useRef(null);
   const leafletRef = React.useRef(null);
   const markersRef = React.useRef([]);
+  const jobMarkersRef = React.useRef([]);
+  const geocacheRef = React.useRef({});
 
   React.useEffect(() => {
     if (!mapRef.current || leafletRef.current) return;
@@ -483,14 +523,589 @@ function EquipmentMap({ devices, getDeviceName, getDeviceEquipNum, getDeviceStat
     }
   }, [devices]);
 
+  // Job site markers — geocode location strings and place purple diamond pins
+  React.useEffect(() => {
+    const map = leafletRef.current;
+    if (!map) return;
+    // Clear old job markers
+    jobMarkersRef.current.forEach(m => m.remove());
+    jobMarkersRef.current = [];
+    if (!jobSites || jobSites.length === 0) return;
+
+    jobSites.forEach(async (site) => {
+      const loc = (site.location || '').trim();
+      if (!loc) return;
+      // Geocode (with cache)
+      let coords = geocacheRef.current[loc];
+      if (!coords) {
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(loc)}&format=json&limit=1`);
+          const data = await r.json();
+          if (data && data[0]) {
+            coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+            geocacheRef.current[loc] = coords;
+          }
+        } catch(e) { return; }
+      }
+      if (!coords) return;
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="job-site-pin"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+        popupAnchor: [0, -12]
+      });
+      const eqList = (site.onSiteEquipment || []).map(e => e.name || e.type).filter(Boolean);
+      const popupHtml = `<div class="eq-popup" style="padding:10px 12px;min-width:190px;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;color:#a78bfa;margin-bottom:4px;">
+          📍 ${site.jobName || site.jobNum || 'Job Site'}
+        </div>
+        ${site.jobNum && site.jobName ? `<div style="font-size:9px;color:#9b9488;margin-bottom:4px;">${site.jobNum}</div>` : ''}
+        <div style="font-size:9px;color:#c4b5fd;margin-bottom:5px;">${loc}</div>
+        ${eqList.length ? `<div style="font-size:8px;color:#9b9488;margin-bottom:3px;letter-spacing:0.5px;text-transform:uppercase;">Equipment on site:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;">
+          ${eqList.map(e => `<span style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);border-radius:3px;padding:1px 5px;font-size:8px;color:#c4b5fd;">${e}</span>`).join('')}
+        </div>` : ''}
+      </div>`;
+      const marker = L.marker([coords.lat, coords.lng], { icon })
+        .addTo(map)
+        .bindPopup(popupHtml, { className: 'eq-popup-wrap', maxWidth: 240 });
+      jobMarkersRef.current.push(marker);
+    });
+  }, [jobSites]);
+
   return (
     <div ref={mapRef} style={{
-      width: '100%', height: '680px',
+      width: '100%', height: '578px',
       borderRadius: 'var(--radius-lg)',
       border: '1px solid var(--asphalt-light)',
       overflow: 'hidden',
       position: 'relative'
     }} />
+  );
+}
+
+// ─── DAILY HAUL WIDGET ────────────────────────────────────────────────────────
+
+function DailyHaulWidget({ driverKey }) {
+  const STORAGE_KEY   = 'dmc_haul_assignment';
+  const TICKETS_KEY   = 'dmc_haul_tickets';
+  const TONS_PER_LOAD = 22.5;
+
+  const readAssign  = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; } };
+  const writeAssign = (obj) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch(e) {} };
+  const readTickets = () => { try { return JSON.parse(localStorage.getItem(TICKETS_KEY) || '[]'); } catch(e) { return []; } };
+  const writeTickets = (arr) => { try { localStorage.setItem(TICKETS_KEY, JSON.stringify(arr)); } catch(e) {} };
+
+  const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  const nowTime  = () => { const d = new Date(); let h=d.getHours(), m=d.getMinutes(), ampm=h>=12?'PM':'AM'; h=h%12||12; return h+':'+(m<10?'0':'')+m+' '+ampm; };
+
+  const BLANK  = { foreman:'', jobNum:'', gcName:'', projectName:'', plantName:'', plantLocation:'', loadTime:'', projectedTonnage:'' };
+  const SAMPLE = { foreman:'Mike Carreiro', jobNum:'DMC-2026-047', gcName:'Gilbane Building Company', projectName:'Route 9 Corridor Repaving — Phase 2', plantName:'P.J. Keating Asphalt Plant', plantLocation:'174 Peckham St, Raynham, MA 02767', loadTime:'6:30 AM', projectedTonnage:'247.5' };
+  const TICKET_BLANK = { ticketNum:'', timeLoaded:'', mixType:'', actualTonnage:'', truckNum:'', mixTemp:'', notes:'', slipPhoto:null };
+
+  const [open,         setOpen]         = React.useState(false);
+  const [editing,      setEditing]      = React.useState(false);
+  const [draft,        setDraft]        = React.useState(BLANK);
+  const [saved,        setSaved]        = React.useState(() => { const r = readAssign()[driverKey]; return (r && Object.values(r).some(v=>v)) ? r : SAMPLE; });
+  const [tickets,      setTickets]      = React.useState(() => readTickets().filter(t => t.driverKey === driverKey && t.date === todayStr()));
+  const [showForm,     setShowForm]     = React.useState(false);
+  const [ticketDraft,  setTicketDraft]  = React.useState(TICKET_BLANK);
+  const [viewSlip,     setViewSlip]     = React.useState(null); // base64 photo to preview
+  const slipPhotoRef = React.useRef(null);
+
+  const projLoads   = saved.projectedTonnage ? Math.round(parseFloat(saved.projectedTonnage) / TONS_PER_LOAD) : null;
+  const loadsLogged = tickets.length;
+
+  const startEdit  = () => { setDraft({ ...BLANK, ...saved }); setEditing(true); };
+  const cancelEdit = () => setEditing(false);
+  const saveEdit   = () => {
+    const all = readAssign(); all[driverKey] = { ...draft }; writeAssign(all);
+    setSaved({ ...draft }); setEditing(false);
+  };
+
+  const openTicketForm = () => {
+    setTicketDraft({ ...TICKET_BLANK, timeLoaded: nowTime(), loadNum: tickets.length + 1 });
+    setShowForm(true);
+  };
+
+  const submitTicket = () => {
+    const newTicket = {
+      id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      driverKey,
+      date:     todayStr(),
+      loadNum:  tickets.length + 1,
+      jobNum:   saved.jobNum || '',
+      jobName:  saved.projectName || '',
+      ...ticketDraft,
+      timestamp: Date.now(),
+    };
+    // Persist to all-tickets list
+    const all = readTickets();
+    all.push(newTicket);
+    writeTickets(all);
+    // Append slip photo to job records if jobNum exists
+    if (newTicket.jobNum && newTicket.slipPhoto) {
+      try {
+        const jobSlips = JSON.parse(localStorage.getItem('dmc_mix_slips') || '{}');
+        if (!jobSlips[newTicket.jobNum]) jobSlips[newTicket.jobNum] = [];
+        jobSlips[newTicket.jobNum].push({ ticketId: newTicket.id, loadNum: newTicket.loadNum, photo: newTicket.slipPhoto, timestamp: newTicket.timestamp, driver: driverKey });
+        localStorage.setItem('dmc_mix_slips', JSON.stringify(jobSlips));
+      } catch(e) {}
+    }
+    const todayTickets = all.filter(t => t.driverKey === driverKey && t.date === todayStr());
+    setTickets(todayTickets);
+    setShowForm(false);
+    setTicketDraft(TICKET_BLANK);
+  };
+
+  const FIELDS = [
+    { key:'foreman',          label:'Foreman'          },
+    { key:'jobNum',           label:'Job #'             },
+    { key:'gcName',           label:'GC Name'           },
+    { key:'projectName',      label:'Project Name'      },
+    { key:'plantName',        label:'Plant Name'        },
+    { key:'plantLocation',    label:'Plant Location'    },
+    { key:'loadTime',         label:'Load Time'         },
+    { key:'projectedTonnage', label:'Projected Tonnage' },
+  ];
+  const hasData = FIELDS.some(f => saved[f.key]);
+
+  const INPUT_STYLE = { width:'100%', boxSizing:'border-box', background:'var(--asphalt)', border:'1px solid var(--asphalt-light)', borderRadius:'5px', color:'var(--white)', fontFamily:"'DM Mono',monospace", fontSize:'10px', padding:'5px 8px', outline:'none' };
+
+  return (
+    <>
+    {/* ── Mix Slip photo preview overlay ── */}
+    {viewSlip && (
+      <div onClick={() => setViewSlip(null)} style={{position:'fixed',inset:0,zIndex:9900,background:'rgba(0,0,0,0.88)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <img src={viewSlip} style={{maxWidth:'92vw',maxHeight:'88vh',borderRadius:'8px',boxShadow:'0 0 40px rgba(0,0,0,0.8)'}} />
+        <button onClick={() => setViewSlip(null)} style={{position:'absolute',top:'16px',right:'16px',background:'rgba(0,0,0,0.6)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:'6px',color:'#fff',fontSize:'16px',padding:'6px 12px',cursor:'pointer'}}>✕</button>
+      </div>
+    )}
+
+    {/* ── Load Ticket form modal ── */}
+    {showForm && (
+      <div style={{position:'fixed',inset:0,zIndex:9800,background:'rgba(0,0,0,0.78)',display:'flex',alignItems:'center',justifyContent:'center',padding:'12px'}}>
+        <div style={{width:'min(480px,100%)',background:'#1e1e1e',borderRadius:'12px',border:'1px solid rgba(126,203,143,0.3)',boxShadow:'0 20px 60px rgba(0,0,0,0.8)',display:'flex',flexDirection:'column',maxHeight:'92vh',overflow:'hidden'}}>
+          {/* Modal header */}
+          <div style={{padding:'14px 18px',borderBottom:'1px solid rgba(126,203,143,0.15)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'#7ecb8f'}}>🧾 Load Ticket — Load {tickets.length + 1}</div>
+              {saved.jobNum && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.6)',marginTop:'2px'}}>{saved.projectName || saved.jobNum}</div>}
+            </div>
+            <button onClick={() => setShowForm(false)} style={{background:'none',border:'1px solid rgba(155,148,136,0.3)',borderRadius:'5px',color:'var(--concrete-dim)',fontSize:'14px',padding:'4px 8px',cursor:'pointer'}}>✕</button>
+          </div>
+
+          {/* Form body */}
+          <div style={{overflowY:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:'10px'}}>
+            {[
+              { key:'ticketNum',     label:'Ticket #',        type:'text',   ph:'Plant ticket number' },
+              { key:'timeLoaded',    label:'Time Loaded',     type:'text',   ph:'e.g. 7:15 AM' },
+              { key:'mixType',       label:'Mix Type / Design', type:'text', ph:'e.g. 9.5mm Superpave' },
+              { key:'actualTonnage', label:'Actual Tonnage',  type:'number', ph:'tons' },
+              { key:'truckNum',      label:'Truck #',         type:'text',   ph:'e.g. T-14' },
+              { key:'mixTemp',       label:'Mix Temp (°F)',   type:'number', ph:'°F' },
+            ].map(f => (
+              <div key={f.key}>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.6)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'3px'}}>{f.label}</div>
+                <input type={f.type} value={ticketDraft[f.key]||''} placeholder={f.ph}
+                  onChange={e => setTicketDraft(d => ({...d, [f.key]: e.target.value}))}
+                  style={INPUT_STYLE} />
+              </div>
+            ))}
+
+            <div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.6)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'3px'}}>Notes</div>
+              <textarea value={ticketDraft.notes||''} onChange={e => setTicketDraft(d => ({...d, notes: e.target.value}))}
+                placeholder="Any notes about this load…" rows={2}
+                style={{...INPUT_STYLE, resize:'vertical', lineHeight:'1.4'}} />
+            </div>
+
+            {/* Mix slip photo */}
+            <div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.6)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'6px'}}>Mix Slip Photo</div>
+              {ticketDraft.slipPhoto ? (
+                <div style={{position:'relative',display:'inline-block'}}>
+                  <img src={ticketDraft.slipPhoto} onClick={() => setViewSlip(ticketDraft.slipPhoto)}
+                    style={{width:'100%',maxHeight:'160px',objectFit:'cover',borderRadius:'6px',border:'1px solid rgba(126,203,143,0.3)',cursor:'zoom-in',display:'block'}} />
+                  <button onClick={() => setTicketDraft(d => ({...d, slipPhoto:null}))}
+                    style={{position:'absolute',top:'6px',right:'6px',background:'rgba(0,0,0,0.65)',border:'1px solid rgba(217,79,61,0.5)',borderRadius:'4px',color:'var(--red)',fontSize:'11px',padding:'3px 7px',cursor:'pointer'}}>✕</button>
+                  <button onClick={() => slipPhotoRef.current?.click()}
+                    style={{position:'absolute',bottom:'6px',right:'6px',background:'rgba(0,0,0,0.65)',border:'1px solid rgba(90,180,245,0.5)',borderRadius:'4px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'3px 8px',cursor:'pointer'}}>Replace</button>
+                </div>
+              ) : (
+                <button onClick={() => slipPhotoRef.current?.click()}
+                  style={{width:'100%',padding:'20px',background:'rgba(126,203,143,0.05)',border:'2px dashed rgba(126,203,143,0.3)',borderRadius:'8px',color:'#7ecb8f',fontFamily:"'DM Mono',monospace",fontSize:'10px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+                  <span style={{fontSize:'24px'}}>📸</span>
+                  <span>Tap to capture or upload mix slip</span>
+                  <span style={{fontSize:'8px',opacity:0.5}}>camera · gallery · files</span>
+                </button>
+              )}
+              <input ref={slipPhotoRef} type="file" accept="image/*" capture="environment" style={{display:'none'}}
+                onChange={e => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setTicketDraft(d => ({...d, slipPhoto: ev.target.result}));
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
+                }} />
+            </div>
+          </div>
+
+          {/* Footer buttons */}
+          <div style={{padding:'12px 18px',borderTop:'1px solid rgba(126,203,143,0.15)',display:'flex',gap:'8px',flexShrink:0}}>
+            <button onClick={() => setShowForm(false)}
+              style={{flex:1,padding:'9px',background:'none',border:'1px solid var(--asphalt-light)',borderRadius:'6px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'10px',cursor:'pointer'}}>
+              Cancel
+            </button>
+            <button onClick={submitTicket}
+              style={{flex:2,padding:'9px',background:'rgba(126,203,143,0.15)',border:'1px solid rgba(126,203,143,0.45)',borderRadius:'6px',color:'#7ecb8f',fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,cursor:'pointer'}}>
+              ✓ Submit Load Ticket
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Widget card ── */}
+    <div style={{background:'var(--asphalt-mid)',borderRadius:'8px',border:'1px solid rgba(90,180,245,0.25)',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      {/* Header — toggle */}
+      <div onClick={() => setOpen(v => !v)} style={{padding:'10px 12px',borderBottom: open ? '1px solid rgba(90,180,245,0.2)' : 'none',flexShrink:0,cursor:'pointer',userSelect:'none',display:'flex',alignItems:'center',gap:'7px'}}>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#5ab4f5'}}>🚛 Daily Haul Assignment</span>
+        {loadsLogged > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f',background:'rgba(126,203,143,0.1)',border:'1px solid rgba(126,203,143,0.25)',borderRadius:'8px',padding:'1px 6px'}}>{loadsLogged} logged</span>}
+        {!hasData && loadsLogged === 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)',background:'rgba(155,148,136,0.08)',border:'1px solid rgba(155,148,136,0.15)',borderRadius:'8px',padding:'1px 6px'}}>Not set</span>}
+        <span style={{marginLeft:'auto',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)'}}>{open ? '▲' : '▾'}</span>
+      </div>
+
+      {open && (
+        <div style={{padding:'10px 12px'}}>
+          {editing ? (
+            /* ── Edit assignment form ── */
+            <div>
+              {FIELDS.map(f => (
+                <div key={f.key} style={{marginBottom:'7px'}}>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.6)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'3px'}}>{f.label}</div>
+                  <input type={f.key === 'projectedTonnage' ? 'number' : 'text'} value={draft[f.key]}
+                    onChange={e => setDraft(d => ({...d, [f.key]: e.target.value}))}
+                    onClick={e => e.stopPropagation()}
+                    placeholder={f.key === 'loadTime' ? 'e.g. 7:00 AM' : f.key === 'projectedTonnage' ? 'tons' : ''}
+                    style={INPUT_STYLE} />
+                </div>
+              ))}
+              {draft.projectedTonnage && (
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.6)',marginBottom:'10px',background:'rgba(90,180,245,0.05)',border:'1px solid rgba(90,180,245,0.15)',borderRadius:'5px',padding:'5px 8px'}}>
+                  Projected loads: <strong style={{color:'#5ab4f5'}}>{Math.round(parseFloat(draft.projectedTonnage) / TONS_PER_LOAD)}</strong> <span style={{opacity:0.5}}>@ {TONS_PER_LOAD}t avg</span>
+                </div>
+              )}
+              <div style={{display:'flex',gap:'6px'}}>
+                <button onClick={e => { e.stopPropagation(); cancelEdit(); }}
+                  style={{flex:1,padding:'5px',background:'none',border:'1px solid var(--asphalt-light)',borderRadius:'5px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'9px',cursor:'pointer'}}>Cancel</button>
+                <button onClick={e => { e.stopPropagation(); saveEdit(); }}
+                  style={{flex:2,padding:'5px',background:'rgba(90,180,245,0.12)',border:'1px solid rgba(90,180,245,0.4)',borderRadius:'5px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,cursor:'pointer'}}>💾 Save Assignment</button>
+              </div>
+            </div>
+          ) : (
+            /* ── View ── */
+            <div>
+              {hasData && (
+                <div style={{display:'flex',flexDirection:'column',gap:'5px',marginBottom:'10px'}}>
+                  {FIELDS.map(f => saved[f.key] ? (
+                    <div key={f.key} style={{display:'flex',alignItems:'baseline',gap:'6px'}}>
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',letterSpacing:'1px',textTransform:'uppercase',minWidth:'90px',flexShrink:0}}>{f.label}</span>
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'var(--white)',flex:1}}>{saved[f.key]}{f.key==='projectedTonnage'?' t':''}</span>
+                    </div>
+                  ) : null)}
+
+                  {/* Projected loads + add button */}
+                  {projLoads !== null && (
+                    <div style={{marginTop:'6px',background:'rgba(90,180,245,0.08)',border:'1px solid rgba(90,180,245,0.22)',borderRadius:'6px',padding:'7px 10px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px'}}>
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.6)',textTransform:'uppercase',letterSpacing:'1px'}}>Projected Loads</span>
+                      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)'}}>{loadsLogged}/{projLoads}</span>
+                        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'22px',letterSpacing:'2px',color:'#5ab4f5'}}>{projLoads}</span>
+                      </div>
+                      <button onClick={e => { e.stopPropagation(); openTicketForm(); }}
+                        title="Log a load ticket"
+                        style={{width:'30px',height:'30px',borderRadius:'50%',background:'rgba(126,203,143,0.18)',border:'2px solid rgba(126,203,143,0.55)',color:'#7ecb8f',fontSize:'18px',lineHeight:1,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontWeight:700}}>
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Logged tickets */}
+              {tickets.length > 0 && (
+                <div style={{marginBottom:'10px'}}>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'5px'}}>Today's Load Log</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                    {tickets.map((t, i) => (
+                      <div key={t.id} style={{background:'rgba(126,203,143,0.05)',border:'1px solid rgba(126,203,143,0.18)',borderRadius:'6px',padding:'7px 9px',display:'flex',alignItems:'center',gap:'8px'}}>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'16px',color:'#7ecb8f',lineHeight:1,flexShrink:0}}>#{t.loadNum}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--white)',display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                            {t.timeLoaded && <span>⏱ {t.timeLoaded}</span>}
+                            {t.actualTonnage && <span>⚖ {t.actualTonnage}t</span>}
+                            {t.mixType && <span style={{color:'rgba(155,148,136,0.7)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'120px'}}>{t.mixType}</span>}
+                          </div>
+                          {t.ticketNum && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)',marginTop:'2px'}}>Ticket #{t.ticketNum}{t.truckNum ? ' · Truck '+t.truckNum : ''}</div>}
+                        </div>
+                        {t.slipPhoto && (
+                          <img src={t.slipPhoto} onClick={() => setViewSlip(t.slipPhoto)}
+                            style={{width:'38px',height:'38px',objectFit:'cover',borderRadius:'4px',border:'1px solid rgba(126,203,143,0.25)',cursor:'zoom-in',flexShrink:0}} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!hasData && (
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.4)',textAlign:'center',padding:'12px 0'}}>No haul assignment set for today.</div>
+              )}
+
+              <button onClick={e => { e.stopPropagation(); startEdit(); }}
+                style={{width:'100%',padding:'5px 0',background:'rgba(245,197,24,0.08)',border:'1px solid rgba(245,197,24,0.3)',borderRadius:'5px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,cursor:'pointer'}}>
+                ✏️ {hasData ? 'Edit Assignment' : 'Set Assignment'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+    </>
+  );
+}
+
+// ─── FLEET WIDGET (dashboard sidebar — status + notes editing) ───────────────
+
+function FleetWidget({ onFleetChange, defaultOpen = false }) {
+  const [items,        setItems]        = React.useState(() => { try { return JSON.parse(localStorage.getItem('dmc_fleet')||'[]').filter(e=>e.active!==false); } catch(e){return [];} });
+  const [search,       setSearch]       = React.useState('');
+  const [expanded,     setExpanded]     = React.useState(null);
+  const [noteVal,      setNoteVal]      = React.useState('');
+  const [saving,       setSaving]       = React.useState(null);
+  const [open,         setOpen]         = React.useState(defaultOpen);
+  const [statusFilter, setStatusFilter] = React.useState('all');  // all | operational | limping | maintenance | down
+  const [groupBy,      setGroupBy]      = React.useState('none'); // none | location | category | status
+  const [sortBy,       setSortBy]       = React.useState('name'); // name | status | location
+
+  const TYPE_ICONS = { paver:'🛣️', roller:'🛞', milling:'⛏️', excavator:'🦾', loader:'🔄',
+    skid_steer:'🟡', compactor:'⚙️', dump_truck:'🚚', lowbed:'🚛', tack_truck:'🛢️', tack_wagon:'🛢️',
+    rubber_machine:'🟠', water_truck:'💧', mtv:'🔁', grader:'🏗️', generator:'⚡', trailer:'🔗', other:'📦' };
+
+  const statusInfo = (s) => {
+    if (s === 'down')        return { label:'DOWN',        color:'#d94f3d', bg:'rgba(217,79,61,0.14)'   };
+    if (s === 'limping')     return { label:'LIMPING',     color:'#e8813a', bg:'rgba(232,129,58,0.14)'  };
+    if (s === 'maintenance') return { label:'MAINT.',      color:'#a05af0', bg:'rgba(160,90,240,0.14)'  };
+    return                          { label:'OPERATIONAL', color:'#7ecb8f', bg:'rgba(61,158,106,0.12)'  };
+  };
+
+  const saveItem = (id, patch) => {
+    setSaving(id);
+    try {
+      const all = JSON.parse(localStorage.getItem('dmc_fleet')||'[]');
+      const idx = all.findIndex(e => e.id === id);
+      if (idx !== -1) {
+        all[idx] = { ...all[idx], ...patch };
+        localStorage.setItem('dmc_fleet', JSON.stringify(all));
+        const active = all.filter(e => e.active !== false);
+        setItems(active);
+        if (onFleetChange) onFleetChange(active);
+      }
+    } catch(e) {}
+    setTimeout(() => setSaving(null), 600);
+  };
+
+  const STATUS_OPTS = [
+    { value: 'operational', label: 'Operational', color: '#7ecb8f' },
+    { value: 'limping',     label: 'Limping',     color: '#e8813a' },
+    { value: 'maintenance', label: 'Maintenance', color: '#a05af0' },
+    { value: 'down',        label: 'Down',        color: '#d94f3d' },
+  ];
+
+  const downCount  = items.filter(e => e.status === 'down').length;
+  const limpCount  = items.filter(e => e.status === 'limping').length;
+  const maintCount = items.filter(e => e.status === 'maintenance').length;
+
+  const STATUS_ORDER = { down:0, limping:1, maintenance:2, operational:3 };
+  const q = search.trim().toLowerCase();
+  let filtered = items;
+  if (statusFilter !== 'all') {
+    filtered = statusFilter === 'operational'
+      ? filtered.filter(e => !['down','limping','maintenance'].includes(e.status))
+      : filtered.filter(e => e.status === statusFilter);
+  }
+  if (q) filtered = filtered.filter(e =>
+    (e.name||'').toLowerCase().includes(q) ||
+    (e.id||'').toLowerCase().includes(q) ||
+    (e.assignedJobName||'').toLowerCase().includes(q) ||
+    (e.category||'').toLowerCase().includes(q)
+  );
+  filtered = [...filtered].sort((a,b) => {
+    if (sortBy === 'status')   return (STATUS_ORDER[a.status||'operational']||3) - (STATUS_ORDER[b.status||'operational']||3);
+    if (sortBy === 'location') return (a.assignedJobName||'zzz').localeCompare(b.assignedJobName||'zzz');
+    return (a.name||a.id||'').localeCompare(b.name||b.id||'');
+  });
+
+  // Group the sorted list
+  let groupedEntries = null;
+  if (groupBy !== 'none') {
+    const map = {};
+    filtered.forEach(eq => {
+      let g;
+      if (groupBy === 'location') g = eq.assignedJobName ? '📍 '+eq.assignedJobName : '🏭 At Shop / Yard';
+      else if (groupBy === 'category') g = eq.category ? eq.category.toUpperCase() : 'UNCATEGORIZED';
+      else g = statusInfo(eq.status).label;
+      if (!map[g]) map[g] = [];
+      map[g].push(eq);
+    });
+    groupedEntries = Object.entries(map);
+  }
+
+  return (
+    <div style={{background:'var(--asphalt-mid)',borderRadius:'8px',border:'1px solid var(--asphalt-light)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight: open ? 'calc(100vh - 180px)' : 'auto'}}>
+      {/* Header — always visible, click to toggle */}
+      <div onClick={() => setOpen(v => !v)} style={{padding:'10px 12px',borderBottom: open ? '1px solid var(--asphalt-light)' : 'none',flexShrink:0,cursor:'pointer',userSelect:'none'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'7px',flexWrap:'wrap'}}>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'var(--stripe)'}}>🔧 Fleet Status</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f',background:'rgba(126,203,143,0.1)',border:'1px solid rgba(126,203,143,0.25)',borderRadius:'8px',padding:'1px 6px'}}>{items.length} units</span>
+          {downCount > 0  && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#d94f3d',background:'rgba(217,79,61,0.1)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'8px',padding:'1px 6px'}}>{downCount} DOWN</span>}
+          {limpCount > 0  && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#e8813a',background:'rgba(232,129,58,0.1)',border:'1px solid rgba(232,129,58,0.25)',borderRadius:'8px',padding:'1px 6px'}}>{limpCount} LIMPING</span>}
+          {maintCount > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#a05af0',background:'rgba(160,90,240,0.1)',border:'1px solid rgba(160,90,240,0.25)',borderRadius:'8px',padding:'1px 6px'}}>{maintCount} MAINT.</span>}
+          <span style={{marginLeft:'auto',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)'}}>{open ? '▲' : '▾'}</span>
+        </div>
+      </div>
+
+      {open && <>
+        {/* Toolbar */}
+        <div style={{padding:'7px 12px',borderBottom:'1px solid var(--asphalt-light)',flexShrink:0,display:'flex',flexDirection:'column',gap:'6px'}} onClick={e=>e.stopPropagation()}>
+          {/* Search */}
+          <input type="text" placeholder="Search equipment…"
+            value={search} onChange={e => setSearch(e.target.value)}
+            style={{width:'100%',boxSizing:'border-box',background:'var(--asphalt)',border:'1px solid var(--asphalt-light)',borderRadius:'5px',
+              color:'var(--white)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'5px 8px',outline:'none'}} />
+
+          {/* Status filter pills */}
+          <div style={{display:'flex',gap:'3px',flexWrap:'wrap'}}>
+            {[
+              { k:'all',          label:'All',     color:'var(--concrete-dim)', active:'var(--stripe)',    bg:'rgba(245,197,24,0.1)',    border:'rgba(245,197,24,0.4)'    },
+              { k:'operational',  label:'OK',      color:'var(--concrete-dim)', active:'#7ecb8f',          bg:'rgba(126,203,143,0.1)',   border:'rgba(126,203,143,0.4)'   },
+              { k:'limping',      label:'Limping', color:'var(--concrete-dim)', active:'#e8813a',          bg:'rgba(232,129,58,0.1)',    border:'rgba(232,129,58,0.4)'    },
+              { k:'maintenance',  label:'Maint.',  color:'var(--concrete-dim)', active:'#a05af0',          bg:'rgba(160,90,240,0.1)',    border:'rgba(160,90,240,0.4)'    },
+              { k:'down',         label:'Down',    color:'var(--concrete-dim)', active:'#d94f3d',          bg:'rgba(217,79,61,0.1)',     border:'rgba(217,79,61,0.4)'     },
+            ].map(p => (
+              <button key={p.k} onClick={() => setStatusFilter(p.k)}
+                style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,padding:'2px 8px',borderRadius:'10px',cursor:'pointer',whiteSpace:'nowrap',
+                  background: statusFilter===p.k ? p.bg : 'var(--asphalt)',
+                  border: '1px solid '+(statusFilter===p.k ? p.border : 'var(--asphalt-light)'),
+                  color: statusFilter===p.k ? p.active : p.color}}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort + Group row */}
+          <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',letterSpacing:'1px',textTransform:'uppercase',flexShrink:0}}>Sort</span>
+            {[{k:'name',label:'Name'},{k:'status',label:'Status'},{k:'location',label:'Location'}].map(s => (
+              <button key={s.k} onClick={() => setSortBy(s.k)}
+                style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'4px',cursor:'pointer',
+                  background: sortBy===s.k ? 'var(--asphalt-light)' : 'var(--asphalt)',
+                  border: '1px solid '+(sortBy===s.k ? 'var(--stripe)' : 'var(--asphalt-light)'),
+                  color: sortBy===s.k ? 'var(--stripe)' : 'var(--concrete-dim)',fontWeight: sortBy===s.k ? 700 : 400}}>
+                {s.label}
+              </button>
+            ))}
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',letterSpacing:'1px',textTransform:'uppercase',flexShrink:0,marginLeft:'4px'}}>Group</span>
+            {[{k:'none',label:'None'},{k:'location',label:'Job'},{k:'category',label:'Type'},{k:'status',label:'Status'}].map(g => (
+              <button key={g.k} onClick={() => setGroupBy(g.k)}
+                style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'4px',cursor:'pointer',
+                  background: groupBy===g.k ? 'var(--asphalt-light)' : 'var(--asphalt)',
+                  border: '1px solid '+(groupBy===g.k ? 'rgba(90,180,245,0.5)' : 'var(--asphalt-light)'),
+                  color: groupBy===g.k ? '#5ab4f5' : 'var(--concrete-dim)',fontWeight: groupBy===g.k ? 700 : 400}}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* List */}
+        {(() => {
+          const EqRow = ({ eq }) => {
+            const st = statusInfo(eq.status);
+            const isOpen = expanded === eq.id;
+            return (
+              <div style={{borderBottom:'1px solid var(--asphalt-light)'}}>
+                <div onClick={() => { if (isOpen) setExpanded(null); else { setExpanded(eq.id); setNoteVal(eq.notes||''); } }}
+                  style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 12px',cursor:'pointer',
+                    background: isOpen ? 'rgba(245,197,24,0.04)' : 'transparent',transition:'background 0.12s'}}>
+                  <span style={{fontSize:'14px',flexShrink:0}}>{TYPE_ICONS[eq.type]||'📦'}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,color:'var(--white)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{eq.name||eq.id}</div>
+                    {eq.assignedJobName && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>📍 {eq.assignedJobName}</div>}
+                    {eq.notes && !isOpen && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{eq.notes}</div>}
+                  </div>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,padding:'2px 6px',borderRadius:'8px',
+                    background:st.bg,color:st.color,border:'1px solid '+st.color+'44',flexShrink:0,whiteSpace:'nowrap'}}>{st.label}</span>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)',flexShrink:0}}>{isOpen?'▲':'▾'}</span>
+                </div>
+                {isOpen && (
+                  <div style={{padding:'8px 12px 12px',background:'rgba(245,197,24,0.03)',borderTop:'1px solid rgba(245,197,24,0.08)'}}>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'5px'}}>Status</div>
+                    <div style={{display:'flex',gap:'4px',flexWrap:'wrap',marginBottom:'10px'}}>
+                      {STATUS_OPTS.map(opt => {
+                        const active = (eq.status||'operational') === opt.value;
+                        return (
+                          <button key={opt.value} onClick={e => { e.stopPropagation(); saveItem(eq.id, {status:opt.value}); }}
+                            style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,padding:'3px 9px',borderRadius:'10px',cursor:'pointer',
+                              background:active?opt.color+'22':'var(--asphalt)',border:'1px solid '+(active?opt.color:'var(--asphalt-light)'),
+                              color:active?opt.color:'var(--concrete-dim)',transition:'all 0.12s'}}>
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'5px'}}>Notes</div>
+                    <textarea value={noteVal} onChange={e => setNoteVal(e.target.value)} onClick={e=>e.stopPropagation()}
+                      placeholder="Add a note about this unit…" rows={2}
+                      style={{width:'100%',boxSizing:'border-box',background:'var(--asphalt)',border:'1px solid var(--asphalt-light)',borderRadius:'5px',
+                        color:'var(--white)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'6px 8px',resize:'vertical',outline:'none',lineHeight:'1.4'}} />
+                    <button onClick={e => { e.stopPropagation(); saveItem(eq.id, {notes:noteVal}); }}
+                      style={{marginTop:'6px',width:'100%',padding:'5px 0',background:'rgba(245,197,24,0.1)',border:'1px solid rgba(245,197,24,0.35)',
+                        borderRadius:'5px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,cursor:'pointer',opacity:saving===eq.id?0.6:1}}>
+                      {saving===eq.id ? '✓ Saved' : '💾 Save Note'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          };
+
+          if (filtered.length === 0) return (
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.4)',textAlign:'center',padding:'24px 0'}}>
+              {items.length === 0 ? 'No fleet data — add equipment in the main app.' : 'No matches.'}
+            </div>
+          );
+
+          if (groupedEntries) return (
+            <div style={{overflowY:'auto',flex:1}}>
+              {groupedEntries.map(([label, eqs]) => (
+                <div key={label}>
+                  <div style={{padding:'5px 12px 3px',background:'rgba(255,255,255,0.03)',borderBottom:'1px solid var(--asphalt-light)',
+                    fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)',letterSpacing:'1px',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
+                    <span>{label}</span><span style={{color:'rgba(155,148,136,0.3)'}}>{eqs.length}</span>
+                  </div>
+                  {eqs.map(eq => <EqRow key={eq.id} eq={eq} />)}
+                </div>
+              ))}
+            </div>
+          );
+
+          return <div style={{overflowY:'auto',flex:1}}>{filtered.map(eq => <EqRow key={eq.id} eq={eq} />)}</div>;
+        })()}
+      </>}
+    </div>
   );
 }
 
@@ -507,8 +1122,8 @@ function FleetTab({ gpsDevices, getDeviceName, getDeviceAddress, getDeviceStatus
   }, []);
 
   const TYPE_ICONS = { paver:'🛣️', roller:'🛞', milling:'⛏️', excavator:'🦾', loader:'🔄',
-    skid_steer:'🟡', compactor:'⚙️', dump_truck:'🚚', lowbed:'🚛', tack_truck:'🛢️',
-    water_truck:'💧', generator:'⚡', trailer:'🔗', other:'📦' };
+    skid_steer:'🟡', compactor:'⚙️', dump_truck:'🚚', lowbed:'🚛', tack_truck:'🛢️', tack_wagon:'🛢️', rubber_machine:'🟠',
+    water_truck:'💧', mtv:'🔁', grader:'🏗️', generator:'⚡', trailer:'🔗', other:'📦' };
 
   const statusInfo = (s) => {
     if (s === 'down')        return { label:'DOWN',        color:'#d94f3d', bg:'rgba(217,79,61,0.12)'   };
@@ -577,9 +1192,26 @@ function FleetTab({ gpsDevices, getDeviceName, getDeviceAddress, getDeviceStatus
     const gps = getGpsMatch(eq);
     const addr = gps ? getDeviceAddress(gps) : null;
     const gpsSt = gps ? getDeviceStatus(gps) : null;
+    const [hovered, setHovered] = React.useState(false);
+
+    const handleClick = () => {
+      try {
+        if (window.parent && window.parent.openEquipmentDetail) {
+          window.parent.openEquipmentDetail(eq.id);
+        }
+      } catch(e) {}
+    };
+
     return (
-      <div style={{background:'var(--asphalt)',border:'1px solid var(--asphalt-light)',borderRadius:'var(--radius)',
-        padding:'10px 12px',display:'flex',alignItems:'flex-start',gap:'10px'}}>
+      <div
+        onClick={handleClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{background: hovered ? 'var(--asphalt-light)' : 'var(--asphalt)',
+          border:'1px solid '+(hovered ? 'var(--stripe)' : 'var(--asphalt-light)'),
+          borderRadius:'var(--radius)',padding:'10px 12px',display:'flex',alignItems:'flex-start',gap:'10px',
+          cursor:'pointer',transition:'background 0.15s,border-color 0.15s',
+          boxShadow: hovered ? '0 0 0 1px rgba(245,197,24,0.25)' : 'none'}}>
         <div style={{fontSize:'20px',flexShrink:0,marginTop:'2px'}}>{TYPE_ICONS[eq.type] || '📦'}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'4px',flexWrap:'wrap'}}>
@@ -592,6 +1224,9 @@ function FleetTab({ gpsDevices, getDeviceName, getDeviceAddress, getDeviceStatus
             {gpsSt && gpsSt.label.startsWith('Moving') ? '🔵' : '🅿️'} {addr}
           </div>}
           {eq.notes && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{eq.notes}</div>}
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'var(--stripe)',marginTop:'4px',opacity: hovered ? 1 : 0,transition:'opacity 0.15s'}}>
+            TAP TO OPEN DETAIL →
+          </div>
         </div>
       </div>
     );
@@ -649,58 +1284,66 @@ function App() {
   const [tab, setTab] = useState("Dashboard");
 
   // ── Connections ──
-  const [apiKey, setApiKey] = useState("");
-  const [hoverToken, setHoverToken] = useState("");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('HEIMDALL_API_KEY') || "");
   const [gpsConnected, setGpsConnected] = useState(true);
-  const [hoverConnected, setHoverConnected] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [hoverSyncing, setHoverSyncing] = useState(false);
-  const [hoverJobs, setHoverJobs] = useState(() => {
-    try {
-      const cached = JSON.parse(localStorage.getItem('hd_hover_jobs') || 'null');
-      if (cached && cached.ts && (Date.now() - cached.ts) < 12 * 60 * 60 * 1000) return cached.jobs || [];
-    } catch(e) {}
-    return [];
-  });
-  const hoverTokenRef = useRef(null);
-  // ── Hover aerial lightbox state ──
-  const [hoverLightbox, setHoverLightbox] = useState(null); // { jobName, urls } | null
-  const [hoverLightboxLoading, setHoverLightboxLoading] = useState(false);
   // Drivers cannot use AI features
   const isDriverUser = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+      // Hardcoded list is authoritative — checked first so account data can't override
+      const driverList = ['nightmare57','ericsylvia57@gmail.com','blydon','billydon@donmartincorp.com','igiron','igiron@donmartincorp.com','atowing','atowing@andystowing.com','yonton','hyonton@donmartincorp.com','ttengburg','ttengburg@donmartincorp.com','field2','field3','field4','field5'];
+      if (driverList.includes(u)) return true;
+      // For custom accounts not in the hardcoded list, fall back to account role
       const accounts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
       const acct = accounts.find(a => (a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u);
-      if (acct) return acct.role === 'driver';
-      const driverList = ['nightmare57','ericsylvia57@gmail.com','blydon','billydon@donmartincorp.com','igiron','igiron@donmartincorp.com','atowing','atowing@andystowing.com','yonton','hyonton@donmartincorp.com','ttengburg','ttengburg@donmartincorp.com','field2','field3','field4','field5'];
-      return driverList.includes(u);
+      return acct ? acct.role === 'driver' : false;
     } catch(e) { return false; }
   })();
   // Detect driver type: lowbed vs mix truck
   const _driverTypeInfo = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
-      const accounts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
-      const acct = accounts.find(a => (a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u);
-      if (acct && Array.isArray(acct.driverTypes)) return acct.driverTypes;
-      // Hardcoded fallback
+      // Hardcoded values are authoritative for known usernames — always applied first
       if (['nightmare57','ericsylvia57@gmail.com'].includes(u)) return ['lowbed','mixtruck'];
       if (['blydon','billydon@donmartincorp.com'].includes(u)) return ['lowbed'];
       if (['igiron','igiron@donmartincorp.com'].includes(u)) return ['lowbed','mixtruck'];
       if (['atowing','atowing@andystowing.com'].includes(u)) return ['lowbed','towing'];
       if (['yonton','hyonton@donmartincorp.com','ttengburg','ttengburg@donmartincorp.com','field2','field3','field4','field5'].includes(u)) return ['mixtruck'];
+      // For custom/unknown accounts, use account driverTypes if set
+      const accounts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
+      const acct = accounts.find(a => (a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u);
+      if (acct && Array.isArray(acct.driverTypes) && acct.driverTypes.length > 0) return acct.driverTypes;
       return [];
     } catch(e) { return []; }
   })();
   const isLowbedDriver   = _driverTypeInfo.includes('lowbed');
   const isMixTruckDriver = _driverTypeInfo.includes('mixtruck');
   const isTowingDriver   = _driverTypeInfo.includes('towing');
+  // Desktop users: drivers who get the full admin dashboard view instead of the simplified driver view
+  const isDesktopUser = (() => {
+    try {
+      const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+      return ['nightmare57','ericsylvia57@gmail.com','igiron','igiron@donmartincorp.com','dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
+    } catch(e) { return false; }
+  })();
+  const isIgiron = (() => {
+    try {
+      const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+      return ['igiron','igiron@donmartincorp.com'].includes(u);
+    } catch(e) { return false; }
+  })();
   // Only dj and don can delete GPS units or take destructive actions
   const isAdminUser = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
       return ['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
+    } catch(e) { return false; }
+  })();
+  const isNightmare57 = (() => {
+    try {
+      const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+      return ['nightmare57','ericsylvia57@gmail.com'].includes(u);
     } catch(e) { return false; }
   })();
   const [gpsDevices, setGpsDevices]   = useState([]);
@@ -775,6 +1418,7 @@ function App() {
 
   // ── Conflict Resolution ────────────────────────────────────────────────────
   const [conflictModal, setConflictModal] = useState(null);
+  const [showOverridden, setShowOverridden] = useState(false);
   // conflictModal: { type:'reassignEquip'|'reassignDriver', conflict, options }
 
   const detectPlanConflicts = (plan) => {
@@ -966,6 +1610,18 @@ function App() {
   const [schedData] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pavescope_sched_v2') || '{}'); } catch(e) { return {}; }
   });
+  const [schedMonthOffset, setSchedMonthOffset] = useState(0);
+  const [cleanoutSet, setCleanoutSet] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('dmc_cleanout_sent') || '[]')); } catch(e) { return new Set(); }
+  });
+  const sendCleanOut = (jobKey, jobLabel) => {
+    const newSet = new Set([...cleanoutSet, jobKey]);
+    setCleanoutSet(newSet);
+    localStorage.setItem('dmc_cleanout_sent', JSON.stringify([...newSet]));
+    const existing = (() => { try { return JSON.parse(localStorage.getItem('dmc_cleanout_jobs')||'[]'); } catch(e){ return []; } })();
+    existing.push({ jobKey, jobLabel, timestamp: Date.now(), dismissed: false });
+    localStorage.setItem('dmc_cleanout_jobs', JSON.stringify(existing));
+  };
   const foremanRoster = (() => {
     try {
       const s = JSON.parse(localStorage.getItem('pavescope_settings') || '{}');
@@ -1293,26 +1949,6 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Hover token persistence: restore from localStorage on mount ──
-  useEffect(() => {
-    const saved = localStorage.getItem('hd_hover_token');
-    if (saved) {
-      setHoverToken(saved);
-      setHoverConnected(true);
-      // Refresh cache if stale (> 12 hours)
-      try {
-        const cached = JSON.parse(localStorage.getItem('hd_hover_jobs') || 'null');
-        const stale = !cached || !cached.ts || (Date.now() - cached.ts) >= 12 * 60 * 60 * 1000;
-        if (stale) {
-          fetchHoverJobs(saved).then(jobs => {
-            localStorage.setItem('hd_hover_jobs', JSON.stringify({ ts: Date.now(), jobs }));
-            setHoverJobs(jobs);
-          }).catch(() => {});
-        }
-      } catch(e) {}
-    }
-  }, []);
-
   // ── Stale detection: true if unit hasn't reported in 24+ hours ──
   const isDeviceStale = (device) => {
     const pt = device.latest_device_point;
@@ -1477,27 +2113,23 @@ function App() {
   // ── Handlers ──
 
   const handleGPSConnect = () => {
-    if (apiKey.trim()) {
-      setSyncing(true);
-      setTimeout(() => { setSyncing(false); setGpsConnected(true); }, 1800);
-    }
-  };
-
-  const handleHoverConnect = async () => {
-    const tok = hoverToken.trim();
-    if (!tok) return;
-    setHoverSyncing(true);
-    try {
-      const jobs = await fetchHoverJobs(tok);
-      localStorage.setItem('hd_hover_token', tok);
-      localStorage.setItem('hd_hover_jobs', JSON.stringify({ ts: Date.now(), jobs }));
-      setHoverJobs(jobs);
-      setHoverConnected(true);
-    } catch(e) {
-      alert('Hover connection failed: ' + e.message);
-    } finally {
-      setHoverSyncing(false);
-    }
+    const key = apiKey.trim();
+    if (!key) return;
+    localStorage.setItem('HEIMDALL_API_KEY', key);
+    setSyncing(true);
+    setGpsLoading(true);
+    fetchGPSDevices()
+      .then(data => {
+        const list = data.result_list || [];
+        setGpsDevices(list);
+        setGpsConnected(true);
+        setGpsHibernated(list.length === 0);
+        setLastRefresh(new Date());
+        matchDevicesToJobs(list);
+        try { localStorage.setItem('dmc_gps_cache', JSON.stringify({ ts: Date.now(), devices: list })); } catch(e) {}
+      })
+      .catch(() => { setGpsConnected(false); setGpsHibernated(false); })
+      .finally(() => { setSyncing(false); setGpsLoading(false); });
   };
 
   const approveDispatch = (id) =>
@@ -1779,8 +2411,8 @@ Be specific, practical, and flag any uncertainties clearly.`;
   };
 
   const exportDispatches = () => exportCSV(
-    [["Dispatch ID","Job","Equipment","Driver","Truck","From","To","Address","Date","Time","Miles","Permit","Hover Photos","Status"],
-     ...dispatches.map(d => [d.id,d.jobName,d.eqName,d.driverName,d.truck,d.from,d.to,d.address,d.date,d.time,d.miles,d.permit,d.hoverId ? "Yes" : "No",d.status])],
+    [["Dispatch ID","Job","Equipment","Driver","Truck","From","To","Address","Date","Time","Miles","Permit","Status"],
+     ...dispatches.map(d => [d.id,d.jobName,d.eqName,d.driverName,d.truck,d.from,d.to,d.address,d.date,d.time,d.miles,d.permit,d.status])],
     "dispatch_schedule.csv"
   );
 
@@ -1894,38 +2526,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
     <div className="min-h-screen bg-gray-50 font-sans">
       <NameEditorModal />
 
-      {/* ── Hover Aerial Lightbox ── */}
-      {hoverLightbox && (
-        <div style={{position:'fixed',inset:0,zIndex:9800,background:'rgba(0,0,0,0.88)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'16px'}}
-          onClick={e => { if (e.target === e.currentTarget) setHoverLightbox(null); }}>
-          <div style={{background:'#1a1a1a',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'12px',padding:'16px',maxWidth:'min(720px,95vw)',width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
-              <div>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'#5ab4f5'}}>📷 Hover Aerial</div>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.7)',marginTop:'2px'}}>{hoverLightbox.jobName}</div>
-              </div>
-              <button onClick={() => setHoverLightbox(null)}
-                style={{background:'rgba(255,100,100,0.15)',border:'1px solid rgba(255,100,100,0.4)',borderRadius:'6px',color:'#ff6464',fontFamily:"'DM Mono',monospace",fontSize:'13px',fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
-                ×
-              </button>
-            </div>
-            {hoverLightboxLoading ? (
-              <div style={{textAlign:'center',padding:'32px',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'rgba(155,148,136,0.6)'}}>Loading aerial photos…</div>
-            ) : hoverLightbox.urls && hoverLightbox.urls.length > 0 ? (
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px'}}>
-                {hoverLightbox.urls.slice(0,6).map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                    style={{display:'block',borderRadius:'6px',overflow:'hidden',border:'1px solid rgba(90,180,245,0.2)',cursor:'zoom-in'}}>
-                    <img src={url} alt={`Aerial ${i+1}`} style={{width:'100%',aspectRatio:'4/3',objectFit:'cover',display:'block'}} />
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <div style={{textAlign:'center',padding:'24px',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'rgba(155,148,136,0.6)'}}>No aerial images found for this project.</div>
-            )}
-          </div>
-        </div>
-      )}
+
 
       {/* ── Header — DMC branded, dark theme ── */}
       <div style={{background:'var(--asphalt-mid)',borderBottom:'2px solid var(--stripe)',position:'sticky',top:0,zIndex:1500,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}>
@@ -1951,7 +2552,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
             </span>
           </div>
 
-          {/* Right: connect buttons (admins only) */}
+          {/* Right: KPI chips (desktop/driver users) or connect buttons (admins) */}
           <div style={{flex:'1 1 0',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
             {!gpsConnected && !isDriverUser && (
               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
@@ -1968,22 +2569,29 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </button>
               </div>
             )}
-            {!isDriverUser && (
-              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-                <input
-                  ref={hoverTokenRef}
-                  style={{background:'var(--asphalt)',border:`1px solid ${hoverConnected?'rgba(61,158,106,0.5)':'rgba(90,180,245,0.4)'}`,borderRadius:'var(--radius)',color:'var(--white)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'5px 10px',width:'150px'}}
-                  placeholder="Hover bearer token…"
-                  value={hoverToken}
-                  onChange={e => setHoverToken(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleHoverConnect()}
-                />
-                <button onClick={handleHoverConnect} disabled={hoverSyncing}
-                  style={{background: hoverConnected?'rgba(61,158,106,0.15)':'rgba(90,180,245,0.12)',border:`1px solid ${hoverConnected?'rgba(61,158,106,0.4)':'rgba(90,180,245,0.4)'}`,borderRadius:'var(--radius)',color:hoverConnected?'#7ecb8f':'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,padding:'5px 12px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,opacity:hoverSyncing?0.6:1}}>
-                  {hoverSyncing ? "⏳" : hoverConnected ? "📷 Hover ✓" : "📷 Connect Hover"}
-                </button>
-              </div>
-            )}
+            {isDesktopUser && (() => {
+              const _fleet = (() => { try { return JSON.parse(localStorage.getItem('dmc_fleet')||'[]').filter(e=>e.active!==false); } catch(e){return [];} })();
+              const assignedGpsCount = gpsDevices.filter(dev => {
+                const dn = getDeviceName(dev).toLowerCase();
+                return _fleet.some(eq => { const n=(eq.name||'').toLowerCase(); if(!n) return false; return dn===n||dn.includes(n)||n.includes(dn.split(' ')[0]); });
+              }).length;
+              const kpis = [
+                { label:'Equipment',  val: assignedGpsCount,     color:'#5ab4f5', bg:'rgba(90,180,245,0.10)',  border:'rgba(90,180,245,0.28)'  },
+                { label:'Jobs',       val: mockJobs.length,      color:'#f5c518', bg:'rgba(245,197,24,0.08)',  border:'rgba(245,197,24,0.28)'  },
+                { label:'Dispatches', val: dispatches.length,    color:'#7ecb8f', bg:'rgba(126,203,143,0.10)', border:'rgba(126,203,143,0.28)' },
+                { label:'Conflicts',  val: planConflicts.length, color:'#d94f3d', bg:'rgba(217,79,61,0.10)',   border:'rgba(217,79,61,0.28)'   },
+              ];
+              return (
+                <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                  {kpis.map(k => (
+                    <div key={k.label} style={{background:k.bg,border:'1px solid '+k.border,borderRadius:'6px',padding:'3px 10px',display:'inline-flex',alignItems:'center',gap:'7px',flexShrink:0}}>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'20px',color:k.color,lineHeight:1}}>{k.val}</div>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'var(--concrete-dim)',letterSpacing:'0.5px',textTransform:'uppercase',whiteSpace:'nowrap'}}>{k.label}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
         </div>
@@ -2018,11 +2626,23 @@ Be specific, practical, and flag any uncertainties clearly.`;
       <div className={tab === "Dashboard" ? "" : "p-4 space-y-4 max-w-2xl mx-auto"}>
 
         {/* ════ LOWBED DRIVER DASHBOARD ════ */}
-        {tab === "Dashboard" && isDriverUser && isLowbedDriver && (() => {
+        {tab === "Dashboard" && isDriverUser && !isDesktopUser && isLowbedDriver && (() => {
           const driverUsername = (localStorage.getItem('dmc_u') || '').toLowerCase();
           // Map username → display name for matching against assignedDriver
           const DRIVER_NAMES = { 'nightmare57': 'Eric', 'eric': 'Eric', 'blydon': 'Bill Lydon', 'bill lydon': 'Bill Lydon', 'igiron': 'Ingrid', 'ingrid': 'Ingrid', 'atowing': "Andy's Towing", "andy's towing": "Andy's Towing", 'yonton': 'Henry', 'henry': 'Henry', 'ttengburg': 'Tommy', 'tommy': 'Tommy', 'field2': 'Field 2', 'field3': 'Field 3', 'field4': 'Field 4', 'field5': 'Field 5' };
           const driverDisplay = DRIVER_NAMES[driverUsername] || driverUsername;
+
+          // ── Clean Out alerts ───────────────────────────────────────────
+          const cleanoutAlerts = (() => {
+            try { return JSON.parse(localStorage.getItem('dmc_cleanout_jobs')||'[]').filter(a => !a.dismissed); } catch(e) { return []; }
+          })();
+          const dismissCleanout = (idx) => {
+            try {
+              const all = JSON.parse(localStorage.getItem('dmc_cleanout_jobs')||'[]');
+              all[idx] = { ...all[idx], dismissed: true };
+              localStorage.setItem('dmc_cleanout_jobs', JSON.stringify(all));
+            } catch(e) {}
+          };
 
           // Collect all moves from lowbedPlan, tagged with job context
           const allMoves = [];
@@ -2267,6 +2887,26 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 );
               })()}
 
+              {/* ── Clean Out Alerts ── */}
+              {cleanoutAlerts.length > 0 && (
+                <div style={{marginBottom:'16px',display:'flex',flexDirection:'column',gap:'8px'}}>
+                  {cleanoutAlerts.map((alert, ai) => (
+                    <div key={ai} style={{background:'rgba(245,197,24,0.12)',border:'2px solid rgba(245,197,24,0.5)',borderRadius:'10px',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px'}}>
+                      <div>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'var(--stripe)',marginBottom:'3px'}}>🔔 CLEAN OUT AUTHORIZED</div>
+                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(245,197,24,0.8)'}}>
+                          <strong>{alert.jobLabel}</strong> — equipment can be pulled from this job to other sites or back to shop.
+                        </div>
+                      </div>
+                      <button onClick={() => { dismissCleanout(ai); setCleanoutSet(new Set(cleanoutSet)); }}
+                        style={{flexShrink:0,background:'rgba(245,197,24,0.15)',border:'1px solid rgba(245,197,24,0.4)',borderRadius:'5px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
+                        ✓ Got It
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {!lowbedPlan || !lowbedPlan.jobs || lowbedPlan.jobs.length === 0 ? (
                 <div style={{textAlign:'center',padding:'40px 20px',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'rgba(155,148,136,0.5)'}}>
                   No active lowbed plan. Check back after dispatch generates the weekly moves.
@@ -2310,90 +2950,246 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </>
               )}
 
-              {/* ── Lowbed Moves Overview Card ── */}
+              {/* ── Lowbed Moves — stubby square grid ── */}
               {lowbedPlan && lowbedPlan.jobs && lowbedPlan.jobs.length > 0 && (() => {
-                const inProgress = [];
-                lowbedPlan.jobs.forEach((job, ji) => {
-                  (job.moves || []).forEach((mv, mi) => {
-                    if (mv.status !== 'complete') inProgress.push({ job, moveIdx: mi + 1, move: mv });
-                  });
-                });
-                const jobStatuses = lowbedPlan.jobs.map(job => {
-                  const onSiteNames = new Set();
-                  (job.moves || []).forEach(mv => { if (mv.status === 'complete') (mv.equipment || []).forEach(eq => eq.name && onSiteNames.add(eq.name)); });
-                  const byType = {};
-                  (job.allEquipment || []).forEach(eq => {
-                    const t = eq.type || 'other';
-                    if (!byType[t]) byType[t] = [];
-                    byType[t].push({ ...eq, onSite: onSiteNames.has(eq.name) });
-                  });
-                  return { job, byType };
-                });
                 return (
-                  <div style={{marginTop:'14px',background:'#1a1a2e',borderRadius:'10px',border:'1px solid rgba(90,180,245,0.25)',padding:'12px'}}>
-                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'15px',letterSpacing:'2px',color:'#5ab4f5',marginBottom:'10px'}}>🚚 LOWBED MOVES OVERVIEW</div>
-                    <div style={{display:'flex',gap:'10px'}}>
-                      <div style={{flex:'0 0 48%',minWidth:0}}>
-                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f',letterSpacing:'1px',marginBottom:'7px',textTransform:'uppercase'}}>Moves In Progress</div>
-                        {inProgress.length === 0 ? (
-                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.6)',textAlign:'center',padding:'16px 0'}}>All moves complete ✓</div>
-                        ) : (
-                          <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                            {inProgress.map((item, idx) => (
-                              <div key={idx} style={{background:'rgba(90,180,245,0.06)',borderRadius:'6px',border:'1px solid rgba(90,180,245,0.15)',padding:'7px 9px'}}>
-                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
-                                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#5ab4f5',fontWeight:'bold'}}>{item.job.jobName || item.job.jobNum || 'Job'} · Move {item.moveIdx}</div>
-                                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color: item.move.assignedDriver ? '#7ecb8f' : 'rgba(155,148,136,0.7)',whiteSpace:'nowrap',marginLeft:'6px'}}>{item.move.assignedDriver || '⚠ Unassigned'}</div>
-                                </div>
-                                <div style={{display:'flex',flexWrap:'wrap',gap:'3px',marginBottom: item.move.deadline ? '5px' : '0'}}>
-                                  {(item.move.equipment || []).map((eq, ei) => (
-                                    <span key={ei} style={{background:'rgba(90,180,245,0.12)',border:'1px solid rgba(90,180,245,0.2)',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0'}}>{EQ_ICONS[eq.type] || '📦'} {eq.name || eq.type}</span>
-                                  ))}
-                                </div>
-                                {item.move.deadline && (
-                                  <span style={{display:'inline-flex',alignItems:'center',gap:'4px',background:'#fff',border:'2px solid #c0392b',borderRadius:'5px',padding:'2px 7px',fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color:'#c0392b'}}>
-                                    ⚠ By {new Date(item.move.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} {new Date(item.move.deadline).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{width:'1px',background:'rgba(90,180,245,0.18)',flexShrink:0,margin:'0 2px'}}></div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#e8a94c',letterSpacing:'1px',marginBottom:'7px',textTransform:'uppercase'}}>Jobs — Equipment Status</div>
-                        <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-                          {jobStatuses.map(({ job, byType }, ji) => (
-                            <div key={ji} style={{background:'rgba(232,169,76,0.05)',borderRadius:'6px',border:'1px solid rgba(232,169,76,0.15)',padding:'7px 9px'}}>
-                              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#e8a94c',fontWeight:'bold',marginBottom:'5px'}}>{job.jobName || job.jobNum || ('Job ' + (ji + 1))}</div>
-                              {Object.keys(byType).length === 0 ? (
-                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.5)'}}>No equipment assigned</div>
-                              ) : (
-                                <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
-                                  {Object.entries(byType).map(([type, items]) => (
-                                    <div key={type}>
-                                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',marginBottom:'2px',textTransform:'capitalize'}}>{EQ_ICONS[type] || '📦'} {type.replace(/_/g,' ')}</div>
-                                      <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
-                                        {items.map((eq, ei) => (
-                                          <span key={ei} style={{background: eq.onSite ? 'rgba(126,203,143,0.12)' : 'rgba(90,180,245,0.1)',border: eq.onSite ? '1px solid rgba(126,203,143,0.3)' : '1px solid rgba(90,180,245,0.2)',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'8px',color: eq.onSite ? '#7ecb8f' : '#5ab4f5'}}>
-                                            {eq.onSite ? '✓' : '⏳'} {eq.name || eq.type}
+                  <div style={{marginTop:'14px'}}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',marginBottom:'10px'}}>🚚 LOWBED MOVES</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+                      {lowbedPlan.jobs.map((job, ji) => {
+                        const moves = job.moves || [];
+                        const onSiteNames = new Set();
+                        moves.forEach(mv => { if (mv.status==='complete') (mv.equipment||[]).forEach(eq => eq.name && onSiteNames.add(eq.name)); });
+                        const allEq = job.allEquipment || [];
+                        const jobKey = String(job.jobNum || job.jobName || ji);
+                        const cleanoutSent = cleanoutSet.has(jobKey);
+                        return (
+                          <div key={ji} style={{display:'flex',alignItems:'stretch',gap:'6px'}}>
+                            {/* LEFT: Job card — purple */}
+                            <div style={{flex:'0 0 34%',minWidth:0,background:'rgba(167,139,250,0.07)',border:'1px solid rgba(167,139,250,0.28)',borderRadius:'8px',padding:'8px 10px',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
+                              <div>
+                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,color:'#a78bfa',marginBottom:'5px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{job.jobName||job.jobNum||('Job '+(ji+1))}</div>
+                                {allEq.length === 0
+                                  ? <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)'}}>No equipment assigned</div>
+                                  : <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                                      {allEq.map((eq,ei) => {
+                                        const arrived = onSiteNames.has(eq.name);
+                                        return (
+                                          <span key={ei} style={{background: arrived?'rgba(126,203,143,0.13)':'rgba(167,139,250,0.09)',border: arrived?'1px solid rgba(126,203,143,0.35)':'1px solid rgba(167,139,250,0.22)',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'7px',color: arrived?'#7ecb8f':'rgba(167,139,250,0.8)'}}>
+                                            {arrived ? '✓' : '⏳'} {eq.name||eq.type}
                                           </span>
-                                        ))}
-                                      </div>
+                                        );
+                                      })}
                                     </div>
-                                  ))}
-                                </div>
+                                }
+                              </div>
+                              {cleanoutSent && (
+                                <div style={{marginTop:'7px',padding:'4px 6px',background:'rgba(126,203,143,0.12)',border:'1px solid rgba(126,203,143,0.3)',borderRadius:'5px',fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f',textAlign:'center'}}>✅ Clean Out Authorized</div>
                               )}
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            {/* CONNECTOR: simple dashed line */}
+                            <div style={{flexShrink:0,width:'12px',display:'flex',alignItems:'center'}}>
+                              <div style={{width:'12px',borderTop:'1.5px dashed rgba(167,139,250,0.4)'}}/>
+                            </div>
+                            {/* RIGHT: Moves — wrapping square grid */}
+                            <div style={{flex:1,minWidth:0,display:'flex',flexWrap:'wrap',gap:'5px',alignContent:'flex-start'}}>
+                              {moves.length === 0
+                                ? <div style={{padding:'12px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)'}}>No moves planned</div>
+                                : moves.map((mv, mi) => {
+                                    const done = mv.status === 'complete';
+                                    return (
+                                      <div key={mi} style={{flex:'1 1 95px',maxWidth:'140px',boxSizing:'border-box',background: done?'rgba(126,203,143,0.05)':'rgba(90,180,245,0.06)',border:'1px solid '+(done?'rgba(126,203,143,0.2)':'rgba(90,180,245,0.16)'),borderRadius:'6px',padding:'6px 7px',opacity: done ? 0.7 : 1}}>
+                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color: done?'rgba(126,203,143,0.8)':'#5ab4f5',textDecoration: done?'line-through':'none',marginBottom:'2px'}}>Move {mi+1}</div>
+                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color: mv.assignedDriver?(done?'rgba(126,203,143,0.7)':'#7ecb8f'):'rgba(155,148,136,0.5)',textDecoration: done?'line-through':'none',marginBottom:'4px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
+                                        <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                                          {(mv.equipment||[]).map((eq,ei) => (
+                                            <span key={ei} style={{display:'block',background: done?'rgba(126,203,143,0.1)':'rgba(90,180,245,0.11)',border:'1px solid '+(done?'rgba(126,203,143,0.25)':'rgba(90,180,245,0.2)'),borderRadius:'3px',padding:'1px 4px',fontFamily:"'DM Mono',monospace",fontSize:'7px',color: done?'rgba(126,203,143,0.8)':'#c0d8f0',textDecoration: done?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                                              {EQ_ICONS[eq.type]||'📦'} {eq.name||eq.type}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        {mv.deadline && !done && (
+                                          <div style={{marginTop:'4px'}}><span style={{background:'#fff',border:'2px solid #c0392b',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:'#c0392b'}}>⚠ {new Date(mv.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                              }
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })()}
 
+            </div>
+          );
+        })()}
+
+        {/* Fallback: driver user with no recognized type — show GPS + schedule */}
+        {tab === "Dashboard" && isDriverUser && !isDesktopUser && !isLowbedDriver && !isMixTruckDriver && (
+          <div style={{padding:'16px',maxWidth:'680px',margin:'0 auto'}}>
+            <div style={{background:'rgba(90,180,245,0.06)',border:'1px solid rgba(90,180,245,0.2)',borderRadius:'10px',padding:'14px 18px',marginBottom:'16px'}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'20px',letterSpacing:'2px',color:'#5ab4f5'}}>🚛 DRIVER DASHBOARD</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.7)',marginTop:'2px'}}>
+                Logged in as <span style={{color:'var(--white)'}}>{(localStorage.getItem('dmc_u')||'').toLowerCase()}</span>
+              </div>
+            </div>
+            {gpsDevices.length > 0 && (
+              <div style={{marginBottom:'16px'}}>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'#5ab4f5',letterSpacing:'1px',textTransform:'uppercase',marginBottom:'10px'}}>
+                  📡 Live Equipment GPS <span style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'10px',padding:'1px 7px',fontSize:'9px'}}>{gpsDevices.length} units</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                  {gpsDevices.slice(0,15).map(dev => {
+                    const nm = getDeviceName(dev);
+                    const addr = getDeviceAddress(dev);
+                    const st = getDeviceStatus(dev);
+                    const isMoving = st && st.label && st.label.startsWith('Moving');
+                    return (
+                      <div key={dev.device_id} style={{background:'rgba(90,180,245,0.04)',border:'1px solid rgba(90,180,245,0.14)',borderRadius:'6px',padding:'7px 12px',display:'flex',alignItems:'center',gap:'10px'}}>
+                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,color:'#5ab4f5',minWidth:'130px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nm}</span>
+                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)',flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{addr || 'Location unknown'}</span>
+                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 8px',borderRadius:'10px',whiteSpace:'nowrap',flexShrink:0,
+                          background: isMoving ? 'rgba(90,180,245,0.15)' : 'rgba(126,203,143,0.12)',
+                          color: isMoving ? '#5ab4f5' : '#7ecb8f',
+                          border: '1px solid '+(isMoving ? 'rgba(90,180,245,0.3)' : 'rgba(126,203,143,0.3)')}}>
+                          {st && st.label ? (isMoving ? '● ' : '◎ ')+st.label : '— Unknown'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {gpsDevices.length === 0 && (
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',marginBottom:'16px'}}>
+                {gpsLoading ? '📡 Loading live GPS…' : '📡 GPS unavailable'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ════ MASTER SCHEDULE (view-only) ════ */}
+        {tab === "Master Schedule" && (() => {
+          const _defaultBT2 = [
+            { id:'day',     color:'#0d4f7c', fontColor:'#000000' },
+            { id:'night',   color:'#1a0a4a', fontColor:'#c8b8ff' },
+            { id:'pending', color:'#5c4000', fontColor:'#f5c518' },
+            { id:'blank',   color:'#1e1e1e', fontColor:'rgba(155,148,136,0.3)' },
+          ];
+          const _bt2 = (() => { try { return JSON.parse(localStorage.getItem('pavescope_blocktypes')||'null') || _defaultBT2; } catch(e) { return _defaultBT2; } })();
+          const _btC2 = (type) => { const b = _bt2.find(x => x.id === type); return b ? { bg: b.color, font: b.fontColor } : { bg:'#1e1e1e', font:'rgba(155,148,136,0.3)' }; };
+
+          // Build month dates
+          const now = new Date();
+          const baseYear  = now.getFullYear();
+          const baseMonth = now.getMonth();
+          const dispDate  = new Date(baseYear, baseMonth + schedMonthOffset, 1);
+          const dYear  = dispDate.getFullYear();
+          const dMonth = dispDate.getMonth();
+          const monthLabel = dispDate.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+          const firstDow = dispDate.getDay(); // 0=Sun
+          const daysInMonth = new Date(dYear, dMonth + 1, 0).getDate();
+          const today2 = new Date(); today2.setHours(0,0,0,0);
+
+          // Build week rows
+          const cells = [];
+          for (let i = 0; i < firstDow; i++) cells.push(null);
+          for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(dYear, dMonth, d));
+          while (cells.length % 7 !== 0) cells.push(null);
+          const weeks = [];
+          for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i+7));
+
+          const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+          return (
+            <div style={{background:'var(--asphalt)',minHeight:'calc(100vh - 120px)',padding:'14px'}}>
+              {/* Read-only banner */}
+              <div style={{background:'rgba(90,180,245,0.10)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'8px',padding:'6px 14px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'8px'}}>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,color:'#5ab4f5',letterSpacing:'0.5px'}}>👁 VIEW ONLY</span>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.6)'}}>Schedule editing is managed by office staff</span>
+              </div>
+
+              {/* Month nav */}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+                <button onClick={() => setSchedMonthOffset(o => o-1)}
+                  style={{background:'rgba(255,255,255,0.05)',border:'1px solid var(--asphalt-light)',borderRadius:'6px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'12px',padding:'5px 14px',cursor:'pointer'}}>←</button>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'20px',letterSpacing:'3px',color:'var(--white)'}}>{monthLabel.toUpperCase()}</div>
+                <button onClick={() => setSchedMonthOffset(o => o+1)}
+                  style={{background:'rgba(255,255,255,0.05)',border:'1px solid var(--asphalt-light)',borderRadius:'6px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'12px',padding:'5px 14px',cursor:'pointer'}}>→</button>
+              </div>
+
+              {/* Calendar grid */}
+              <div style={{border:'1px solid var(--asphalt-light)',borderRadius:'10px',overflow:'hidden'}}>
+                {/* Day headers */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',background:'var(--asphalt-mid)',borderBottom:'1px solid var(--asphalt-light)'}}>
+                  {DAY_ABBR.map(d => (
+                    <div key={d} style={{padding:'6px 4px',textAlign:'center',fontFamily:"'Bebas Neue',sans-serif",fontSize:'11px',letterSpacing:'2px',color:'var(--concrete-dim)'}}>{d}</div>
+                  ))}
+                </div>
+                {/* Weeks */}
+                {weeks.map((week, wi) => (
+                  <div key={wi} style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',borderBottom: wi < weeks.length-1 ? '1px solid var(--asphalt-light)' : 'none'}}>
+                    {week.map((date, di) => {
+                      if (!date) return <div key={di} style={{background:'rgba(0,0,0,0.15)',borderRight: di < 6 ? '1px solid var(--asphalt-light)' : 'none'}} />;
+                      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                      const isToday3 = date.getTime() === today2.getTime();
+                      const key = date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+                      const sd = schedData[key] || {};
+                      const topB = sd.top || { type: isWeekend ? 'blank' : 'blank', fields:{} };
+                      const botB = sd.bot || { type: 'blank', fields:{} };
+                      const extras = (sd.extras||[]).map(e => e.data).filter(Boolean);
+                      const allBlocks = [topB, botB, ...extras].filter(b => b.type !== 'blank' || (b.fields && (b.fields.jobName||b.fields.jobNum)));
+                      const topC = _btC2(topB.type);
+                      const botC = _btC2(botB.type);
+                      return (
+                        <div key={di} style={{borderRight: di < 6 ? '1px solid var(--asphalt-light)' : 'none',background: isToday3 ? 'rgba(245,197,24,0.05)' : isWeekend ? 'rgba(0,0,0,0.1)' : 'transparent',minHeight:'90px',display:'flex',flexDirection:'column'}}>
+                          {/* Date number */}
+                          <div style={{padding:'4px 6px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                            <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,color: isToday3 ? 'var(--stripe)' : isWeekend ? 'rgba(155,148,136,0.4)' : 'var(--concrete-dim)',background: isToday3 ? 'rgba(245,197,24,0.15)' : 'transparent',borderRadius:'3px',padding: isToday3 ? '0 4px' : '0'}}>{date.getDate()}</span>
+                          </div>
+                          {/* Blocks */}
+                          <div style={{flex:1,padding:'3px 4px',display:'flex',flexDirection:'column',gap:'2px'}}>
+                            {topB.type !== 'blank' && (
+                              <div style={{background:topC.bg,borderRadius:'3px',padding:'2px 5px',border:'1px solid rgba(255,255,255,0.08)'}}>
+                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color:topC.font,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{topB.fields?.jobName||topB.fields?.jobNum||'—'}</div>
+                                {topB.fields?.location && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color: topC.font==='#000000'?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>📍{topB.fields.location}</div>}
+                              </div>
+                            )}
+                            {botB.type !== 'blank' && (
+                              <div style={{background:botC.bg,borderRadius:'3px',padding:'2px 5px',border:'1px solid rgba(255,255,255,0.08)',opacity:0.9}}>
+                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color:botC.font,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{botB.fields?.jobName||botB.fields?.jobNum||'—'}</div>
+                                {botB.fields?.location && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color: botC.font==='#000000'?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>📍{botB.fields.location}</div>}
+                              </div>
+                            )}
+                            {extras.map((ex,ei) => {
+                              const ec = _btC2(ex.type);
+                              return ex.type !== 'blank' ? (
+                                <div key={ei} style={{background:ec.bg,borderRadius:'3px',padding:'2px 5px',border:'1px solid rgba(255,255,255,0.08)',opacity:0.85}}>
+                                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color:ec.font,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ex.fields?.jobName||ex.fields?.jobNum||'—'}</div>
+                                </div>
+                              ) : null;
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+
+              {/* Block type legend */}
+              <div style={{display:'flex',gap:'12px',marginTop:'10px',flexWrap:'wrap'}}>
+                {_bt2.filter(b => b.id !== 'blank').map(b => (
+                  <div key={b.id} style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                    <div style={{width:'10px',height:'10px',borderRadius:'2px',background:b.color,border:'1px solid rgba(255,255,255,0.15)',flexShrink:0}}></div>
+                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)',textTransform:'capitalize'}}>{b.id === 'day' ? 'Day Work' : b.id === 'night' ? 'Night Work' : 'Pending'}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           );
         })()}
@@ -2409,11 +3205,11 @@ Be specific, practical, and flag any uncertainties clearly.`;
         )}
 
         {/* ════ DASHBOARD ════ */}
-        {tab === "Dashboard" && !isDriverUser && !isMixTruckDriver && (
+        {tab === "Dashboard" && (isDesktopUser || (!isDriverUser && !isMixTruckDriver)) && (
           <div style={{display:'flex',flexWrap:'wrap',minHeight:'calc(100vh - 120px)',background:'var(--asphalt)'}}>
 
             {/* ── LEFT COLUMN: GPS Map + Device List ── */}
-            <div style={{flex:'1 1 54%',minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
+            <div style={{flex: (isAdminUser || isNightmare57) ? '1 1 100%' : isDesktopUser ? '1 1 65%' : '1 1 54%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
 
               {/* ── Equipment GPS Map + List ── */}
               <div style={{background:'var(--asphalt-mid)',height:'100%'}}>
@@ -2447,38 +3243,146 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </div>
               </div>
 
-              {/* Map */}
-              {gpsLoading && (
-                <div style={{height:'260px',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)'}}>
-                  📡 Fetching live GPS positions…
+              {/* Map + Fleet/Lowbed Moves — 50/50 split */}
+              <div style={{display:'flex',alignItems:'stretch'}}>
+
+                {/* Map — 50% */}
+                <div style={{flex:'0 0 50%',width:'50%',minWidth:0}}>
+                  {gpsLoading && (
+                    <div style={{height:'400px',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)'}}>
+                      📡 Fetching live GPS positions…
+                    </div>
+                  )}
+                  {!gpsLoading && gpsDevices.length === 0 && (
+                    <div style={{height:'400px',padding:'28px 20px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                      <div style={{fontSize:'36px',marginBottom:'10px'}}>❄️</div>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'22px',letterSpacing:'3px',color:'var(--concrete-dim)',marginBottom:'6px'}}>Fleet Hibernated</div>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.7)',maxWidth:'260px',lineHeight:'1.6'}}>
+                        OneStepGPS returned no active devices. Equipment may be powered down or off-season.
+                      </div>
+                      <div style={{marginTop:'14px'}}>
+                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'3px 10px',borderRadius:'10px',background:'rgba(155,148,136,0.08)',border:'1px solid rgba(155,148,136,0.2)',color:'var(--concrete-dim)'}}>● 0 devices active</span>
+                      </div>
+                    </div>
+                  )}
+                  {!gpsLoading && gpsDevices.length > 0 && (
+                    <div style={{padding:'10px 10px 0'}}>
+                      <EquipmentMap
+                        devices={gpsDevices}
+                        getDeviceName={getDeviceName}
+                        getDeviceEquipNum={getDeviceEquipNum}
+                        getDeviceStatus={getDeviceStatus}
+                        getDeviceAddress={getDeviceAddress}
+                        getDeviceUpdated={getDeviceUpdated}
+                        jobSites={(() => {
+                          if (!lowbedPlan || !lowbedPlan.jobs) return [];
+                          return lowbedPlan.jobs.filter(job => {
+                            return (job.moves||[]).some(mv => mv.status === 'complete');
+                          }).map(job => {
+                            const onSiteNames = new Set();
+                            (job.moves||[]).forEach(mv => {
+                              if (mv.status === 'complete') (mv.equipment||[]).forEach(eq => eq.name && onSiteNames.add(eq.name));
+                            });
+                            const onSiteEquipment = (job.allEquipment||[]).filter(eq => onSiteNames.has(eq.name));
+                            return { jobName: job.jobName, jobNum: job.jobNum, location: job.location || '', onSiteEquipment };
+                          });
+                        })()}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-              {!gpsLoading && gpsDevices.length === 0 && (
-                <div style={{padding:'28px 20px',textAlign:'center'}}>
-                  <div style={{fontSize:'36px',marginBottom:'10px'}}>❄️</div>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'22px',letterSpacing:'3px',color:'var(--concrete-dim)',marginBottom:'6px'}}>Fleet Hibernated</div>
-                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.7)',maxWidth:'260px',margin:'0 auto',lineHeight:'1.6'}}>
-                    OneStepGPS returned no active devices. Equipment may be powered down or off-season. GPS tracking will resume automatically when units come back online.
-                  </div>
-                  <div style={{marginTop:'14px',display:'flex',gap:'8px',justifyContent:'center'}}>
-                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'3px 10px',borderRadius:'10px',background:'rgba(155,148,136,0.08)',border:'1px solid rgba(155,148,136,0.2)',color:'var(--concrete-dim)'}}>
-                      ● 0 devices active
-                    </span>
-                  </div>
+
+                {/* Right panel — Fleet Status for admin, Lowbed Moves for others */}
+                <div style={{flex:'0 0 50%',width:'50%',minWidth:0,borderLeft:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}}>
+                  {isAdminUser ? (
+                    <FleetWidget defaultOpen={true} onFleetChange={(active) => setFleetItems(active)} />
+                  ) : (<>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',marginBottom:'10px'}}>🚚 LOWBED MOVES</div>
+                  {(!lowbedPlan || !lowbedPlan.jobs || lowbedPlan.jobs.length === 0) ? (
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center',padding:'40px 0'}}>No active lowbed plan</div>
+                  ) : (() => {
+                    return (
+                      <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+                        {lowbedPlan.jobs.map((job, ji) => {
+                          const moves = job.moves || [];
+                          const onSiteNames = new Set();
+                          moves.forEach(mv => { if (mv.status==='complete') (mv.equipment||[]).forEach(eq => eq.name && onSiteNames.add(eq.name)); });
+                          const allEq = job.allEquipment || [];
+                          const allDone = moves.length > 0 && moves.every(mv => mv.status === 'complete');
+                          const jobKey = String(job.jobNum || job.jobName || ji);
+                          const cleanoutSent = cleanoutSet.has(jobKey);
+                          return (
+                            <div key={ji} style={{display:'flex',alignItems:'stretch',gap:'6px'}}>
+                              {/* LEFT: Job card — purple */}
+                              <div style={{flex:'0 0 34%',minWidth:0,background:'rgba(167,139,250,0.07)',border:'1px solid rgba(167,139,250,0.28)',borderRadius:'8px',padding:'8px 10px',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
+                                <div>
+                                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,color:'#a78bfa',marginBottom:'5px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{job.jobName||job.jobNum||('Job '+(ji+1))}</div>
+                                  {allEq.length === 0
+                                    ? <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)'}}>No equipment assigned</div>
+                                    : <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                                        {allEq.map((eq,ei) => {
+                                          const arrived = onSiteNames.has(eq.name);
+                                          return (
+                                            <span key={ei} style={{background: arrived?'rgba(126,203,143,0.13)':'rgba(167,139,250,0.09)',border: arrived?'1px solid rgba(126,203,143,0.35)':'1px solid rgba(167,139,250,0.22)',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'7px',color: arrived?'#7ecb8f':'rgba(167,139,250,0.8)'}}>
+                                              {arrived ? '✓' : '⏳'} {eq.name||eq.type}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                  }
+                                </div>
+                                {/* Clean Out button — desktop users only, when all moves done */}
+                                {allDone && isDesktopUser && !cleanoutSent && (
+                                  <button onClick={() => sendCleanOut(jobKey, job.jobName||job.jobNum||('Job '+(ji+1)))}
+                                    style={{marginTop:'7px',width:'100%',padding:'5px 0',background:'rgba(245,197,24,0.13)',border:'1px solid rgba(245,197,24,0.45)',borderRadius:'5px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,letterSpacing:'0.5px',cursor:'pointer',textTransform:'uppercase'}}>
+                                    🔔 Authorize Clean Out
+                                  </button>
+                                )}
+                                {cleanoutSent && (
+                                  <div style={{marginTop:'7px',padding:'4px 6px',background:'rgba(126,203,143,0.12)',border:'1px solid rgba(126,203,143,0.3)',borderRadius:'5px',fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f',textAlign:'center'}}>✅ Clean Out Authorized</div>
+                                )}
+                              </div>
+
+                              {/* CONNECTOR: simple dashed line */}
+                              <div style={{flexShrink:0,width:'12px',display:'flex',alignItems:'center'}}>
+                                <div style={{width:'12px',borderTop:'1.5px dashed rgba(167,139,250,0.4)'}}/>
+                              </div>
+
+                              {/* RIGHT: Moves — wrapping square grid */}
+                              <div style={{flex:1,minWidth:0,display:'flex',flexWrap:'wrap',gap:'5px',alignContent:'flex-start'}}>
+                                {moves.length === 0
+                                  ? <div style={{padding:'12px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)'}}>No moves planned</div>
+                                  : moves.map((mv, mi) => {
+                                      const done = mv.status === 'complete';
+                                      return (
+                                        <div key={mi} style={{flex:'1 1 95px',maxWidth:'140px',boxSizing:'border-box',background: done?'rgba(126,203,143,0.05)':'rgba(90,180,245,0.06)',border:'1px solid '+(done?'rgba(126,203,143,0.2)':'rgba(90,180,245,0.16)'),borderRadius:'6px',padding:'6px 7px',opacity: done ? 0.7 : 1}}>
+                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color: done?'rgba(126,203,143,0.8)':'#5ab4f5',textDecoration: done?'line-through':'none',marginBottom:'2px'}}>Move {mi+1}</div>
+                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color: mv.assignedDriver?(done?'rgba(126,203,143,0.7)':'#7ecb8f'):'rgba(155,148,136,0.5)',textDecoration: done?'line-through':'none',marginBottom:'4px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
+                                          <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                                            {(mv.equipment||[]).map((eq,ei) => (
+                                              <span key={ei} style={{display:'block',background: done?'rgba(126,203,143,0.1)':'rgba(90,180,245,0.11)',border:'1px solid '+(done?'rgba(126,203,143,0.25)':'rgba(90,180,245,0.2)'),borderRadius:'3px',padding:'1px 4px',fontFamily:"'DM Mono',monospace",fontSize:'7px',color: done?'rgba(126,203,143,0.8)':'#c0d8f0',textDecoration: done?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                                                {EQ_ICONS[eq.type]||'📦'} {eq.name||eq.type}
+                                              </span>
+                                            ))}
+                                          </div>
+                                          {mv.deadline && !done && (
+                                            <div style={{marginTop:'4px'}}><span style={{background:'#fff',border:'2px solid #c0392b',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:'#c0392b'}}>⚠ {new Date(mv.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                }
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  </>)}
                 </div>
-              )}
-              {!gpsLoading && gpsDevices.length > 0 && (
-                <div style={{padding:'10px 10px 0'}}>
-                  <EquipmentMap
-                    devices={gpsDevices}
-                    getDeviceName={getDeviceName}
-                    getDeviceEquipNum={getDeviceEquipNum}
-                    getDeviceStatus={getDeviceStatus}
-                    getDeviceAddress={getDeviceAddress}
-                    getDeviceUpdated={getDeviceUpdated}
-                  />
-                </div>
-              )}
+
+              </div>
 
               {/* Hidden devices manager */}
               {!isDriverUser && hiddenDeviceIds.size > 0 && (
@@ -2525,6 +3429,9 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:'5px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>
                     <div style={{width:'8px',height:'8px',borderRadius:'50%',background:'var(--red)',border:'2px solid var(--red)',flexShrink:0}}></div> Inactive 24h+
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:'5px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>
+                    <div style={{width:'8px',height:'8px',borderRadius:'2px',background:'#a78bfa',border:'2px solid #c4b5fd',flexShrink:0,transform:'rotate(45deg)'}}></div> Job Site
                   </div>
                   <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)',marginLeft:'auto'}}>
                     {lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} · auto-refresh 5m` : 'Tap a pin for details'}
@@ -2606,7 +3513,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                 <div style={{display:'flex',flexWrap:'wrap',gap:'4px',alignItems:'center',flexShrink:0,maxWidth:'40%'}}>
                                   {devChips.map(chip => (
                                     <button key={chip.id}
-                                      onClick={() => setChipModal({ deviceId: dev.device_id, chip, editName: chip.name })}
+                                      onClick={() => { try { window.parent.openEquipmentDetail(chip.id); } catch(e) {} }}
                                       style={{display:'inline-flex',alignItems:'center',gap:'4px',
                                         background:'rgba(245,197,24,0.1)',border:'1px solid rgba(245,197,24,0.35)',
                                         borderRadius:'10px',padding:'2px 7px 2px 4px',cursor:'pointer',
@@ -2661,9 +3568,37 @@ Be specific, practical, and flag any uncertainties clearly.`;
               </div>
             </div>
 
-            {/* ── RIGHT COLUMN: KPIs + Intel + Jobs + History ── */}
-            <div style={{flex:'1 1 42%',minWidth:'260px',overflowY:'auto',padding:'16px',display:'flex',flexDirection:'column',gap:'12px',boxSizing:'border-box',order:2}}>
+            {/* ── RIGHT COLUMN: for isDesktopUser → schedule/hours + KPI strip; for others → standard ── */}
+            {isDesktopUser && !isAdminUser && !isNightmare57 && (() => {
+              return (
+                <div style={{flex:'0 0 35%',maxWidth:'35%',minWidth:'240px',overflowY:'auto',padding:'14px',display:'flex',flexDirection:'column',gap:'14px',boxSizing:'border-box',order:2}}>
 
+                  {/* Intel summary */}
+                  {(planResults.length > 0 || intelResults.length > 0) && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-4">
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-yellow-700">{planResults.length}</div>
+                        <div className="text-xs text-gray-600">Plans analyzed</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-yellow-700">{intelResults.length}</div>
+                        <div className="text-xs text-gray-600">Field intel reports</div>
+                      </div>
+                      <div className="flex-1 flex items-center justify-end gap-2">
+                        <button onClick={() => setTab('Field Intel')} className="text-xs text-yellow-700 font-semibold border border-yellow-300 px-2 py-1 rounded hover:bg-yellow-100">View Field Intel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daily Haul Assignment — Ingrid only */}
+                  {isIgiron && <DailyHaulWidget driverKey="igiron" />}
+
+                </div>
+              );
+            })()}
+
+            {!isDesktopUser && <div style={{flex:'1 1 42%',minWidth:'260px',overflowY:'auto',padding:'16px',display:'flex',flexDirection:'column',gap:'12px',boxSizing:'border-box',order:2}}>
+            {true && (
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "Equipment Units", val: gpsDevices.length, sub: gpsLoading ? 'Loading GPS…' : gpsHibernated ? '❄️ Fleet hibernated' : `${gpsDevices.filter(d=>isDeviceStale(d)).length} inactive 24h+ · ${gpsDevices.filter(d=>{const s=getDeviceStatus(d);return s.label.startsWith('Moving');}).length} moving`, color: "bg-blue-50 border-blue-200" },
@@ -2678,6 +3613,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </div>
               ))}
             </div>
+            )}
 
             {/* Intel summary */}
             {(planResults.length > 0 || intelResults.length > 0) && (
@@ -2852,25 +3788,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
                             return eqId;
                           }).join(", ")}
                         </div>
-                        {(() => {
-                          const jNameL = (job.name||'').toLowerCase();
-                          const hp = hoverConnected && hoverJobs.length > 0
-                            ? hoverJobs.find(p => { const pn=(p.name||p.title||p.job_name||'').toLowerCase(); return pn && jNameL && (pn.includes(jNameL)||jNameL.includes(pn)); })
-                            : null;
-                          if (!hp && !hoverConnected) return <div className="text-xs text-gray-400 text-center border border-dashed border-gray-200 rounded p-2">Connect Hover in the header to view aerial photos</div>;
-                          if (!hp) return null;
-                          return (
-                            <button onClick={async () => {
-                              setHoverLightbox({ jobName: job.name, urls: null });
-                              setHoverLightboxLoading(true);
-                              try { const urls = await fetchHoverJobMedia(hoverToken, hp.id); setHoverLightbox({ jobName: job.name, urls }); }
-                              catch(e) { setHoverLightbox({ jobName: job.name, urls: [] }); }
-                              finally { setHoverLightboxLoading(false); }
-                            }} className="w-full text-xs py-2 rounded border border-blue-200 bg-blue-50 text-blue-700 font-semibold">
-                              📷 View Aerial Photos
-                            </button>
-                          );
-                        })()}
                       </div>
                     )}
                   </div>
@@ -2895,12 +3812,12 @@ Be specific, practical, and flag any uncertainties clearly.`;
               ))}
             </div>
 
-            </div>
+            </div>}
           </div>
         )}
 
         {/* ════ MIX TRUCK DRIVER DASHBOARD ════ */}
-        {tab === "Dashboard" && isDriverUser && isMixTruckDriver && (() => {
+        {tab === "Dashboard" && isDriverUser && !isDesktopUser && isMixTruckDriver && (() => {
           const driverUsername = (localStorage.getItem('dmc_u') || '').toLowerCase();
           const MT_NAMES = { 'field2':'Field 2','field3':'Field 3','field4':'Field 4','field5':'Field 5','igiron':'Ingrid' };
           const driverDisplay = MT_NAMES[driverUsername] || driverUsername;
@@ -3471,15 +4388,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
                 <div style={{fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)',display:'flex',alignItems:'center',gap:'10px'}}>
                   <span>{plan.status === 'verified' ? '✅ Plan Verified' : '⏳ Pending Verification'} · {plan.jobs.length} job{plan.jobs.length!==1?'s':''} · {plan.jobs.reduce((a,j)=>a+(j.moves||[]).length,0)} total moves</span>
-                  {!hoverConnected && !isDriverUser && (
-                    <button onClick={() => { setTimeout(() => hoverTokenRef.current?.focus(), 50); }}
-                      style={{background:'none',border:'none',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'10px',cursor:'pointer',padding:0,textDecoration:'underline',opacity:0.75}}>
-                      📷 Connect Hover →
-                    </button>
-                  )}
-                  {hoverConnected && (
-                    <span style={{color:'rgba(61,158,106,0.9)',fontSize:'9px'}}>📷 Hover connected · {hoverJobs.length} projects</span>
-                  )}
                 </div>
                 <div style={{display:'flex',gap:'6px'}}>
                   <button onClick={() => { const p = JSON.parse(localStorage.getItem('dmc_lowbed_plan')||'null'); setLowbedPlan(p); }}
@@ -3496,27 +4404,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
               {plan.jobs.map((job, ji) => {
                 const totalMoves = (job.moves||[]).length;
                 const doneMoves  = (job.moves||[]).filter(m=>m.status==='complete').length;
-                // Match against Hover projects by case-insensitive partial name
-                const jobNameLower = (job.jobName||'').toLowerCase();
-                const matchedHoverProject = hoverConnected && hoverJobs.length > 0
-                  ? hoverJobs.find(p => {
-                      const pname = (p.name||p.title||p.job_name||'').toLowerCase();
-                      return pname && jobNameLower && (pname.includes(jobNameLower) || jobNameLower.includes(pname));
-                    })
-                  : null;
-                const openAerial = async () => {
-                  if (!matchedHoverProject) return;
-                  setHoverLightbox({ jobName: job.jobName, urls: null });
-                  setHoverLightboxLoading(true);
-                  try {
-                    const urls = await fetchHoverJobMedia(hoverToken, matchedHoverProject.id);
-                    setHoverLightbox({ jobName: job.jobName, urls });
-                  } catch(e) {
-                    setHoverLightbox({ jobName: job.jobName, urls: [] });
-                  } finally {
-                    setHoverLightboxLoading(false);
-                  }
-                };
                 return (
                   <div key={ji} style={{background:'var(--asphalt-mid)',border:'1px solid rgba(245,197,24,0.25)',borderRadius:'10px',overflow:'hidden'}}>
                     {/* Job header */}
@@ -3526,12 +4413,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
                         <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)',marginTop:'1px'}}>{job.date}{job.location&&' · '+job.location}</div>
                       </div>
                       <div style={{display:'flex',alignItems:'center',gap:'6px',flexShrink:0}}>
-                        {matchedHoverProject && (
-                          <button onClick={openAerial}
-                            style={{background:'rgba(90,180,245,0.15)',border:'1px solid rgba(90,180,245,0.45)',borderRadius:'8px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,padding:'3px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>
-                            📷 Aerial
-                          </button>
-                        )}
                       <span style={{background: doneMoves===totalMoves?'rgba(126,203,143,0.15)':'rgba(90,180,245,0.1)',border:'1px solid '+(doneMoves===totalMoves?'rgba(126,203,143,0.4)':'rgba(90,180,245,0.3)'),borderRadius:'20px',padding:'3px 10px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:doneMoves===totalMoves?'#7ecb8f':'#5ab4f5'}}>
                         {doneMoves}/{totalMoves} done
                       </span>
@@ -3632,22 +4513,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
                         <div className={`inline-block mt-0.5 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(d.status)}`}>{d.status}</div>
                       </div>
                     </div>
-                    {hoverConnected && (() => {
-                      const jnl = (d.jobName||'').toLowerCase();
-                      const hp = hoverJobs.find(p => { const pn=(p.name||p.title||p.job_name||'').toLowerCase(); return pn && jnl && (pn.includes(jnl)||jnl.includes(pn)); });
-                      if (!hp) return null;
-                      return (
-                        <button onClick={async () => {
-                          setHoverLightbox({ jobName: d.jobName, urls: null });
-                          setHoverLightboxLoading(true);
-                          try { const urls = await fetchHoverJobMedia(hoverToken, hp.id); setHoverLightbox({ jobName: d.jobName, urls }); }
-                          catch(e) { setHoverLightbox({ jobName: d.jobName, urls: [] }); }
-                          finally { setHoverLightboxLoading(false); }
-                        }} className="w-full text-xs py-1.5 mt-1 rounded border border-blue-200 bg-blue-50 text-blue-700 font-semibold">
-                          📷 Aerial
-                        </button>
-                      );
-                    })()}
                   </div>
                 ))}
                 {dispatches.filter(d => d.date === day).length === 0 && (
@@ -4186,7 +5051,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
             try { return !JSON.parse(localStorage.getItem('conflict_override_' + c.id) || 'false'); } catch(e) { return true; }
           });
           const overriddenConflicts = planConflicts.filter(c => !activeConflicts.includes(c));
-          const [showOverridden, setShowOverridden] = React.useState(false);
           const isEquipConflict = (c) => c.type === 'Equipment Double-Booked' || c.type === 'Equipment Not Returned' || c.type.toLowerCase().includes('equipment');
           const isDriverConflict = (c) => c.type === 'Driver Double-Booked' || c.type === 'Driver Unavailable' || c.type.toLowerCase().includes('driver');
           return (
@@ -4555,7 +5419,8 @@ Be specific, practical, and flag any uncertainties clearly.`;
         const EQ_TYPE_LABELS = {
           paver:'Pavers', roller:'Rollers', milling:'Milling Machines', excavator:'Excavators',
           loader:'Loaders', skid_steer:'Skid Steers', compactor:'Compactors', dump_truck:'Dump Trucks',
-          lowbed:'Lowbeds', tack_truck:'Tack Trucks', water_truck:'Water Trucks',
+          lowbed:'Lowbeds', tack_truck:'Tack Trucks', tack_wagon:'Tack Wagons', rubber_machine:'Rubber Machines', water_truck:'Water Trucks',
+          mtv:'Material Transfer Vehicles', grader:'Graders',
           generator:'Generators', trailer:'Trailers', other:'Other'
         };
         const available = fleetItems.filter(eq => !manualItems.find(i => i.id === eq.id));
