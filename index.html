@@ -11165,7 +11165,16 @@ async function analyzeJob(jobId) {
       if(timedOut||signal.aborted)return;
       clearInterval(iv); _analyzeAbortCtrl=null;
       if(!raw)throw new Error('Empty summary response — try again.');
-      const m0=raw.match(/\{[\s\S]*\}/);
+      console.log('[Scan] raw preview:', raw.slice(0, 500));
+      console.log('[Scan] raw length:', raw.length);
+      let cleanRaw = raw.trim();
+      // Strip wrapping quotes if Claude returned a JSON string
+      if (cleanRaw.startsWith('"') && cleanRaw.endsWith('"')) {
+        try { cleanRaw = JSON.parse(cleanRaw); } catch(e) {}
+      }
+      // Strip markdown fences if present
+      cleanRaw = cleanRaw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+      const m0=cleanRaw.match(/\{[\s\S]*\}/);
       if(!m0)throw new Error('AI summary did not contain valid JSON. Response length: '+raw.length+' chars. Try re-analyzing.');
       try{job.results=JSON.parse(m0[0]);}catch(parseErr){console.error('[Scan] Summary JSON parse failed. Raw:',raw.length,'Match:',m0[0].length);throw new Error('AI summary JSON was truncated ('+raw.length+' chars). Try re-analyzing.');}
 
