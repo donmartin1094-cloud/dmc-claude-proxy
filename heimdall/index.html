@@ -1346,14 +1346,16 @@ function App() {
       return ['nightmare57','ericsylvia57@gmail.com'].includes(u);
     } catch(e) { return false; }
   })();
-  const [n57Mobile, setN57Mobile] = useState(() => isNightmare57 && window.innerWidth < 768);
+  const _hdMobileUser = isNightmare57 || isIgiron;
+  const [hdMobile, setHdMobile] = useState(() => _hdMobileUser && window.innerWidth < 768);
   useEffect(() => {
-    if (!isNightmare57) return;
-    const h = () => setN57Mobile(window.innerWidth < 768);
+    if (!_hdMobileUser) return;
+    const h = () => setHdMobile(window.innerWidth < 768);
     window.addEventListener('resize', h);
     return () => window.removeEventListener('resize', h);
-  }, [isNightmare57]);
-  const [n57DevicesOpen, setN57DevicesOpen] = useState(false);
+  }, [_hdMobileUser]);
+  const [hdDevicesOpen, setHdDevicesOpen] = useState(false);
+  const [hdHaulOpen, setHdHaulOpen] = useState(false);
   const [gpsDevices, setGpsDevices]   = useState([]);
   const [gpsLoading, setGpsLoading]   = useState(true);
   const [gpsHibernated, setGpsHibernated] = useState(false);
@@ -2540,7 +2542,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
       <div style={{background:'var(--asphalt-mid)',borderBottom:'2px solid var(--stripe)',position:'sticky',top:0,zIndex:1500,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}>
 
         {/* Single brand row — title left · GPS status center · connect right */}
-        <div style={{display:'flex',alignItems:'center',gap:'16px',padding:n57Mobile?'8px 14px 0':'14px 24px 0'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'16px',padding:hdMobile?'8px 14px 0':'14px 24px 0'}}>
 
           {/* Left: title + subtitle */}
           <div style={{flex:'1 1 0',minWidth:0}}>
@@ -2553,7 +2555,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           </div>
 
           {/* Center: live status badge */}
-          {!n57Mobile && <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',flexShrink:0}}>
+          {!hdMobile && <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',flexShrink:0}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'11px',letterSpacing:'3px',color:'var(--concrete-dim)'}}>LIVE STATUS</div>
             <span style={{background:gpsConnected?'rgba(61,158,106,0.15)':'rgba(155,148,136,0.1)',color:gpsConnected?'#7ecb8f':'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 8px',borderRadius:'10px',border:`1px solid ${gpsConnected?'rgba(61,158,106,0.3)':'rgba(155,148,136,0.2)'}`,whiteSpace:'nowrap'}}>
               ● {gpsConnected ? (gpsHibernated ? 'Fleet Hibernated' : `GPS Live · ${gpsLoading ? '…' : gpsDevices.length} units`) : 'GPS Offline'}
@@ -2561,7 +2563,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           </div>}
 
           {/* Right: KPI chips (desktop/driver users) or connect buttons (admins) */}
-          <div style={{flex:'1 1 0',display:n57Mobile?'none':'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
+          <div style={{flex:'1 1 0',display:hdMobile?'none':'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
             {!gpsConnected && !isDriverUser && (
               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                 <input
@@ -2605,7 +2607,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
         </div>
 
         {/* Mobile KPI strip for nightmare57 */}
-        {n57Mobile && isDesktopUser && (() => {
+        {hdMobile && isDesktopUser && (() => {
           const _fleet = (() => { try { return JSON.parse(localStorage.getItem('dmc_fleet')||'[]').filter(e=>e.active!==false); } catch(e){return [];} })();
           const assignedGpsCount = gpsDevices.filter(dev => {
             const dn = getDeviceName(dev).toLowerCase();
@@ -3242,7 +3244,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           <div style={{display:'flex',flexWrap:'wrap',minHeight:'calc(100vh - 120px)',background:'var(--asphalt)'}}>
 
             {/* ── LEFT COLUMN: GPS Map + Device List ── */}
-            <div style={{flex: (isAdminUser || isNightmare57) ? '1 1 100%' : isDesktopUser ? '1 1 65%' : '1 1 54%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
+            <div style={{flex: (isAdminUser || isNightmare57 || hdMobile) ? '1 1 100%' : isDesktopUser ? '1 1 65%' : '1 1 54%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
 
               {/* ── Equipment GPS Map + List ── */}
               <div style={{background:'var(--asphalt-mid)',height:'100%'}}>
@@ -3277,10 +3279,10 @@ Be specific, practical, and flag any uncertainties clearly.`;
               </div>
 
               {/* Map + Fleet/Lowbed Moves — 50/50 split */}
-              <div style={{display:'flex',flexDirection:n57Mobile?'column':'row',alignItems:'stretch'}}>
+              <div style={{display:'flex',flexDirection:hdMobile?'column':'row',alignItems:'stretch'}}>
 
                 {/* Map — 50% */}
-                <div style={n57Mobile?{width:'100%',minWidth:0}:{flex:'0 0 50%',width:'50%',minWidth:0}}>
+                <div style={hdMobile?{width:'100%',minWidth:0}:{flex:'0 0 50%',width:'50%',minWidth:0}}>
                   {gpsLoading && (
                     <div style={{height:'400px',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'var(--concrete-dim)'}}>
                       📡 Fetching live GPS positions…
@@ -3326,7 +3328,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </div>
 
                 {/* Right panel — Fleet Status for admin, Lowbed Moves for others */}
-                <div style={n57Mobile?{width:'100%',minWidth:0,borderTop:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}:{flex:'0 0 50%',width:'50%',minWidth:0,borderLeft:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}}>
+                <div style={hdMobile?{width:'100%',minWidth:0,borderTop:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}:{flex:'0 0 50%',width:'50%',minWidth:0,borderLeft:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}}>
                   {isAdminUser ? (
                     <FleetWidget defaultOpen={true} onFleetChange={(active) => setFleetItems(active)} />
                   ) : (<>
@@ -3452,17 +3454,32 @@ Be specific, practical, and flag any uncertainties clearly.`;
               )}
 
               {/* Unassigned Devices toggle for nightmare57 mobile */}
-              {n57Mobile && gpsDevices.length > 0 && (
+              {/* Daily Haul toggle for igiron mobile */}
+              {hdMobile && isIgiron && (
                 <div
-                  onClick={() => setN57DevicesOpen(v => !v)}
+                  onClick={() => setHdHaulOpen(v => !v)}
+                  style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid var(--asphalt-light)',cursor:'pointer',userSelect:'none',background:'var(--asphalt)'}}>
+                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa'}}>📋 Daily Haul Assignment</span>
+                  <span style={{color:'var(--concrete-dim)',fontSize:'10px'}}>{hdHaulOpen ? '▼' : '▶'}</span>
+                </div>
+              )}
+              {hdMobile && isIgiron && hdHaulOpen && (
+                <div style={{padding:'12px 14px',borderBottom:'1px solid var(--asphalt-light)'}}>
+                  <DailyHaulWidget driverKey="igiron" />
+                </div>
+              )}
+
+              {hdMobile && gpsDevices.length > 0 && (
+                <div
+                  onClick={() => setHdDevicesOpen(v => !v)}
                   style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid var(--asphalt-light)',cursor:'pointer',userSelect:'none',background:'var(--asphalt)'}}>
                   <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'var(--stripe)'}}>📡 Unassigned Devices</span>
-                  <span style={{color:'var(--concrete-dim)',fontSize:'10px'}}>{n57DevicesOpen ? '▼' : '▶'}</span>
+                  <span style={{color:'var(--concrete-dim)',fontSize:'10px'}}>{hdDevicesOpen ? '▼' : '▶'}</span>
                 </div>
               )}
 
               {/* Legend */}
-              {!gpsLoading && gpsDevices.length > 0 && (!n57Mobile || n57DevicesOpen) && (
+              {!gpsLoading && gpsDevices.length > 0 && (!hdMobile || hdDevicesOpen) && (
                 <div style={{display:'flex',gap:'14px',padding:'7px 14px',borderBottom:'1px solid var(--asphalt-light)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'5px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>
                     <div style={{width:'8px',height:'8px',borderRadius:'50%',background:'#7ecb8f',border:'2px solid #f5c518',flexShrink:0}}></div> Stopped / Idle
@@ -3483,7 +3500,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
               )}
 
               {/* Device list — grouped by OneStepGPS group */}
-              {(!n57Mobile || n57DevicesOpen) && (() => {
+              {(!hdMobile || hdDevicesOpen) && (() => {
                 const visibleDevices = gpsDevices.filter(d => !hiddenDeviceIds.has(d.device_id));
                 const groupMap = {};
                 visibleDevices.forEach(dev => {
@@ -3612,7 +3629,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
             </div>
 
             {/* ── RIGHT COLUMN: for isDesktopUser → schedule/hours + KPI strip; for others → standard ── */}
-            {isDesktopUser && !isAdminUser && !isNightmare57 && (() => {
+            {isDesktopUser && !isAdminUser && !isNightmare57 && !hdMobile && (() => {
               return (
                 <div style={{flex:'0 0 35%',maxWidth:'35%',minWidth:'240px',overflowY:'auto',padding:'14px',display:'flex',flexDirection:'column',gap:'14px',boxSizing:'border-box',order:2}}>
 
