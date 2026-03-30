@@ -10317,6 +10317,10 @@ function selectJob(id) {
   closeSheetPanel();
   renderSidebar();
   const job = jobs.find(j => j.id === id); if (!job) return;
+  // Hide all content-area views so they don't bleed into the job detail
+  ['bidView','awardedView','pricedView','pricingView','scheduleView','backlogView','reportsView'].forEach(vid => {
+    const el = document.getElementById(vid); if (el) el.style.display = 'none';
+  });
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('jobDetailView').style.display = 'block';
   renderJobDetail(job);
