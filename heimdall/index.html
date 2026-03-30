@@ -3230,11 +3230,11 @@ Be specific, practical, and flag any uncertainties clearly.`;
                     style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'var(--radius)',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'4px 8px',cursor:'pointer'}}>
                     {gpsLoading ? '⏳' : '↺ Refresh'}
                   </button>
-                  <button
+                  {isAdminUser && <button
                     onClick={() => setShowNameEditor(true)}
                     style={{background:'rgba(245,197,24,0.12)',border:'1px solid rgba(245,197,24,0.35)',borderRadius:'var(--radius)',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
                     ✏️ Name Equipment
-                  </button>
+                  </button>}
                   <button
                     onClick={() => setShowManualMove(true)}
                     style={{background:'rgba(126,203,143,0.1)',border:'1px solid rgba(126,203,143,0.35)',borderRadius:'var(--radius)',color:'#7ecb8f',fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
