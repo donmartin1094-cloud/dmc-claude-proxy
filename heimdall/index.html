@@ -2540,7 +2540,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
       <div style={{background:'var(--asphalt-mid)',borderBottom:'2px solid var(--stripe)',position:'sticky',top:0,zIndex:1500,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}>
 
         {/* Single brand row — title left · GPS status center · connect right */}
-        <div style={{display:'flex',alignItems:'center',gap:'16px',padding:'14px 24px 0'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'16px',padding:n57Mobile?'8px 14px 0':'14px 24px 0'}}>
 
           {/* Left: title + subtitle */}
           <div style={{flex:'1 1 0',minWidth:0}}>
@@ -2561,7 +2561,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           </div>}
 
           {/* Right: KPI chips (desktop/driver users) or connect buttons (admins) */}
-          <div style={{flex:'1 1 0',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
+          <div style={{flex:'1 1 0',display:n57Mobile?'none':'flex',flexDirection:'column',alignItems:'flex-end',gap:'5px',minWidth:0}}>
             {!gpsConnected && !isDriverUser && (
               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                 <input
@@ -2603,6 +2603,31 @@ Be specific, practical, and flag any uncertainties clearly.`;
           </div>
 
         </div>
+
+        {/* Mobile KPI strip for nightmare57 */}
+        {n57Mobile && isDesktopUser && (() => {
+          const _fleet = (() => { try { return JSON.parse(localStorage.getItem('dmc_fleet')||'[]').filter(e=>e.active!==false); } catch(e){return [];} })();
+          const assignedGpsCount = gpsDevices.filter(dev => {
+            const dn = getDeviceName(dev).toLowerCase();
+            return _fleet.some(eq => { const n=(eq.name||'').toLowerCase(); if(!n) return false; return dn===n||dn.includes(n)||n.includes(dn.split(' ')[0]); });
+          }).length;
+          const kpis = [
+            { label:'Equipment',  val: assignedGpsCount,     color:'#5ab4f5', bg:'rgba(90,180,245,0.10)',  border:'rgba(90,180,245,0.28)'  },
+            { label:'Jobs',       val: mockJobs.length,      color:'#f5c518', bg:'rgba(245,197,24,0.08)',  border:'rgba(245,197,24,0.28)'  },
+            { label:'Dispatches', val: dispatches.length,    color:'#7ecb8f', bg:'rgba(126,203,143,0.10)', border:'rgba(126,203,143,0.28)' },
+            { label:'Conflicts',  val: planConflicts.length, color:'#d94f3d', bg:'rgba(217,79,61,0.10)',   border:'rgba(217,79,61,0.28)'   },
+          ];
+          return (
+            <div style={{display:'flex',gap:'6px',padding:'6px 14px 0',justifyContent:'space-between'}}>
+              {kpis.map(k => (
+                <div key={k.label} style={{background:k.bg,border:'1px solid '+k.border,borderRadius:'6px',padding:'4px 8px',display:'flex',alignItems:'center',gap:'5px',flex:'1 1 0'}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',color:k.color,lineHeight:1}}>{k.val}</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'var(--concrete-dim)',letterSpacing:'0.5px',textTransform:'uppercase',whiteSpace:'nowrap'}}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ── Tab Bar — flush directly below brand row ── */}
         <div className="scrollbar-hide" style={{display:'flex',overflowX:'auto',background:'var(--asphalt-mid)',padding:'0 4px',marginTop:'6px'}}>
