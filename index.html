@@ -2363,6 +2363,8 @@
     <div style="width:1px;background:var(--asphalt-light);align-self:stretch;margin:6px 2px;flex-shrink:0;"></div>
     <button class="coll-nav-btn" id="collNavEquipment" onclick="switchTab('equipment')">🔧 Equipment</button>
     <div style="width:1px;background:var(--asphalt-light);align-self:stretch;margin:6px 2px;flex-shrink:0;"></div>
+    <button class="coll-nav-btn" id="collNavATowBills" onclick="switchTab('atow_bills')">🧾 My Bills</button>
+    <div style="width:1px;background:var(--asphalt-light);align-self:stretch;margin:6px 2px;flex-shrink:0;"></div>
     <button class="coll-nav-btn" id="collNavHeimdall" onclick="switchTab('heimdall')">👁 Heimdall</button>
     <div style="width:1px;background:var(--asphalt-light);align-self:stretch;margin:6px 2px;flex-shrink:0;"></div>
     <button class="coll-nav-btn" id="collNavMail" onclick="switchTab('mail')">✉️ Mail</button>
@@ -2563,6 +2565,10 @@
         style="width:100%;padding:10px 14px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;letter-spacing:0.3px;">
         🔧 Equipment
       </button>
+      <button id="tabATowBills" onclick="switchTab('atow_bills')"
+        style="width:100%;padding:10px 14px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;letter-spacing:0.3px;">
+        🧾 My Bills
+      </button>
       <button id="tabMail" onclick="switchTab('mail')"
         style="width:100%;padding:10px 14px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;letter-spacing:0.3px;">
         ✉️ Mail
@@ -2644,6 +2650,7 @@
     <div id="mailView"        style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="employeesView"   style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="equipmentFleetView" style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
+    <div id="atowBillsView"     style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="settingsPageView" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
       <!-- Settings page header with tab bar -->
       <div style="flex-shrink:0;background:var(--asphalt-mid);border-bottom:1px solid var(--asphalt-light);padding:20px 24px 0;">
@@ -4738,8 +4745,9 @@ function switchTab(tab) {
   if (_chatSub) _chatSub.style.display = (tab === 'chat') ? 'flex' : 'none';
   setBtn('tabInvoices',   tab === 'ap' || tab === 'apAnalytics' || tab === 'apAia' || tab === 'apMix', '245,197,24');
   setBtn('tabEmployees',  tab === 'employees', '245,197,24');
-  setBtn('tabEquipment',  tab === 'equipment', '245,197,24');
-  setBtn('tabMail',       tab === 'mail',      '245,197,24');
+  setBtn('tabEquipment',  tab === 'equipment',   '245,197,24');
+  setBtn('tabATowBills',  tab === 'atow_bills',  '245,197,24');
+  setBtn('tabMail',       tab === 'mail',         '245,197,24');
 
   const jobsList      = document.getElementById('jobsList');
   const scheduleView  = document.getElementById('scheduleView');
@@ -4796,6 +4804,8 @@ function switchTab(tab) {
   if (settingsPageEl) settingsPageEl.style.display = 'none';
   const eqFleetHideEl = document.getElementById('equipmentFleetView');
   if (eqFleetHideEl) eqFleetHideEl.style.display = 'none';
+  const atowBillsHideEl = document.getElementById('atowBillsView');
+  if (atowBillsHideEl) atowBillsHideEl.style.display = 'none';
   document.getElementById('_fleetDetailOverlay')?.remove();
   jobsList.style.display        = '';
 
@@ -4997,6 +5007,12 @@ function switchTab(tab) {
     jobDetailView.style.display = 'none';
     var eqFleetEl = document.getElementById('equipmentFleetView');
     if (eqFleetEl) { eqFleetEl.style.display = 'flex'; renderEquipmentFleet(eqFleetEl); }
+  } else if (tab === 'atow_bills') {
+    jobsList.style.display = 'none';
+    emptyState.style.display = 'none';
+    jobDetailView.style.display = 'none';
+    var atowBillsEl = document.getElementById('atowBillsView');
+    if (atowBillsEl) { atowBillsEl.style.display = 'flex'; renderATowBills(atowBillsEl); }
   } else if (tab === 'settings-theme' || tab === 'settings-schedule' || tab === 'settings-rosters' || tab === 'settings-plants' || tab === 'settings-trucking' || tab === 'settings-users') {
     jobsList.style.display = 'none';
     emptyState.style.display = 'none';
@@ -5985,6 +6001,33 @@ function _homeAdminMobSectionsHtml() {
 }
 
 // ── DJ admin home: Sun–Sat schedule widget ─────────────────────────────────────
+function _homeATowBillsWidget() {
+  // Returns a collapsed card with pending ATow bills count; loads async
+  var id = '_homeATowBillsCard_' + Date.now();
+  setTimeout(function() {
+    var card = document.getElementById(id);
+    if (!card || !db) return;
+    db.collection('app_data').doc('atow_bills').get().then(function(doc) {
+      var bills = [];
+      if (doc.exists && doc.data() && doc.data().data) { try { bills = JSON.parse(doc.data().data); } catch(e) {} }
+      if (!Array.isArray(bills)) bills = [];
+      var pending  = bills.filter(function(b){ return b.status === 'pending' || !b.status; });
+      var pendTotal = pending.reduce(function(s,b){ return s + (parseFloat(b.amount)||0); }, 0);
+      if (!card) return;
+      card.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="switchTab(\'atow_bills\')">' +
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--concrete);">🚛 Andy\'s Towing Bills</div>' +
+        (pending.length
+          ? '<span style="background:rgba(245,197,24,0.15);border:1px solid rgba(245,197,24,0.4);border-radius:4px;padding:2px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f5c518;font-weight:700;">' + pending.length + ' PENDING — $' + pendTotal.toFixed(2) + '</span>'
+          : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">No pending bills</span>') +
+        '</div>';
+    }).catch(function(){});
+  }, 300);
+  return '<div id="' + id + '" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:8px;padding:10px 14px;cursor:pointer;" onclick="switchTab(\'atow_bills\')">' +
+    '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--concrete-dim);">🚛 Andy\'s Towing Bills — loading…</div>' +
+    '</div>';
+}
+
 function _homeWeekScheduleWidget() {
   var today = new Date();
   var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
@@ -6516,7 +6559,7 @@ function renderHomeView(el) {
           : '<div class="home-admin-top" style="display:flex;gap:16px;align-items:flex-start;flex-shrink:0;">' +
               '<div class="home-admin-gps-col" style="flex:0 0 60%;min-width:0;display:flex;flex-direction:column;gap:12px;">' + _homeRenderGpsFleetPanel() + '</div>' +
               '<div class="home-admin-hrs-col" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;align-self:stretch;">' +
-                '<div id="homeDJHoursPanel">' + _homeDJHoursWidget() + '</div>' + _homeWeekScheduleWidget() +
+                '<div id="homeDJHoursPanel">' + _homeDJHoursWidget() + '</div>' + _homeWeekScheduleWidget() + _homeATowBillsWidget() +
               '</div>' +
             '</div>'
         )
@@ -12850,14 +12893,15 @@ let specialActions = JSON.parse(localStorage.getItem(SPECIAL_ACTIONS_KEY) || JSO
 // tabId = 'ap' | 'backlog' | 'bids' | 'chat' | 'schedule' | 'reports'
 const TAB_PERMS_KEY = 'pavescope_tab_perms';
 const ALL_TABS = [
-  { id:'ap',        label:'🧾 AR' },
-  { id:'backlog',   label:'📋 Backlog' },
-  { id:'bids',      label:'📁 Bids' },
-  { id:'chat',      label:'💬 Chat' },
-  { id:'schedule',  label:'📅 Master Schedule' },
-  { id:'reports',   label:'📊 Reports' },
-  { id:'equipment', label:'🔧 Equipment' },
-  { id:'heimdall',  label:'👁 Heimdall' },
+  { id:'ap',         label:'🧾 AR' },
+  { id:'backlog',    label:'📋 Backlog' },
+  { id:'bids',       label:'📁 Bids' },
+  { id:'chat',       label:'💬 Chat' },
+  { id:'schedule',   label:'📅 Master Schedule' },
+  { id:'reports',    label:'📊 Reports' },
+  { id:'equipment',  label:'🔧 Equipment' },
+  { id:'heimdall',   label:'👁 Heimdall' },
+  { id:'atow_bills', label:'🧾 My Bills' },
 ];
 const DEFAULT_TAB_PERMS = {
   // Values: 'edit' = full access, 'view' = read-only, false = hidden
@@ -13291,8 +13335,16 @@ function isHardcodedUser() {
   return DEFAULT_TEAM_ACCOUNTS.some(a => a.username.toLowerCase() === u || (a.email || '').toLowerCase() === u);
 }
 function canSeeTab(tabId) {
+  // atow_bills is exclusively for ATow — block all other users including admins
+  if (tabId === 'atow_bills') {
+    return (localStorage.getItem('dmc_u') || '').toLowerCase() === 'atow';
+  }
   if (isAdmin()) return true;
   const role = getCurrentRole();
+  // ATow (Andy's Towing) — only Heimdall, Equipment, and My Bills
+  if ((localStorage.getItem('dmc_u') || '').toLowerCase() === 'atow') {
+    return ['heimdall', 'equipment', 'atow_bills'].includes(tabId);
+  }
   // Operators, laborers, and drivers cannot access the master schedule
   if (['operator','laborer','driver','lowbed_driver'].includes(role) && tabId === 'schedule') return false;
   // Drivers always follow their tab perms — no bypass
@@ -13371,14 +13423,15 @@ function applyTabPermissions() {
 
   // Sidebar button id for each tab (null = no dedicated sidebar button)
   const tabMap = {
-    ap:        'tabInvoices',
-    backlog:   'tabBacklog',
-    bids:      'tabBids',
-    chat:      'tabChat',
-    schedule:  'tabSchedule',
-    reports:   'tabReports',
-    equipment: 'tabEquipment',
-    heimdall:  null,
+    ap:         'tabInvoices',
+    backlog:    'tabBacklog',
+    bids:       'tabBids',
+    chat:       'tabChat',
+    schedule:   'tabSchedule',
+    reports:    'tabReports',
+    equipment:  'tabEquipment',
+    heimdall:   null,
+    atow_bills: 'tabATowBills',
   };
   // Expand/collapse toggle buttons for each tab
   const toggleMap = {
@@ -13395,8 +13448,9 @@ function applyTabPermissions() {
     chat:      ['hdrFolderChat',   'collNavChat'],
     schedule:  ['hdrFolderSched',  'collNavSchedule'],
     reports:   ['hdrFolderReports','collNavReports',  'collNavReportsSub'],
-    equipment: ['hdrFolderEquip',  'collNavEquipment'],
-    heimdall:  ['hdrFolderHeimdall','collNavHeimdall'],
+    equipment:  ['hdrFolderEquip',  'collNavEquipment'],
+    heimdall:   ['hdrFolderHeimdall','collNavHeimdall'],
+    atow_bills: ['collNavATowBills'],
   };
 
   ALL_TABS.forEach(t => {
@@ -13419,7 +13473,8 @@ function applyTabPermissions() {
   const role = getCurrentRole();
   const isDriverRole = role === 'driver' || role === 'lowbed_driver';
   const isArStaff    = role === 'ar_staff';
-  const restrictedHideIds = (isDriverRole || isArStaff)
+  const isATow       = (localStorage.getItem('dmc_u') || '').toLowerCase() === 'atow';
+  const restrictedHideIds = (isDriverRole || isArStaff || isATow)
     ? ['tabEmployees','tabMail','tabSettings','toggleSettingsSubTabs','settingsSubTabs',
        'collNavEmployees','collNavMail','collNavSettings','collNavSettingsSub',
        'hdrFolderMail','hdrFolderEmp','hdrFolderTakeoffs']
@@ -31327,6 +31382,230 @@ function _fleetBuildStatusSections(filtered) {
       '</div>';
   });
   return html || '<div style="padding:60px;text-align:center;color:var(--concrete-dim);font-size:13px;">No equipment matches your filter.</div>';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ATOW BILLS — upload + viewer
+// ══════════════════════════════════════════════════════════════════════════════
+var _atowBillsUploading = false;
+
+function renderATowBills(containerEl) {
+  if (!containerEl) return;
+  var user = localStorage.getItem('dmc_u') || '';
+  var uLow = user.toLowerCase();
+  var isAdmin = (uLow === 'dj' || uLow === 'donmartin');
+  var isATow  = uLow === 'atow';
+
+  containerEl.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;"><div id="_atowBillsInner" style="flex:1;overflow-y:auto;padding:20px 24px 40px;"></div></div>';
+  var inner = document.getElementById('_atowBillsInner');
+
+  function _renderInner() {
+    if (!inner) return;
+    var html = '<div style="max-width:760px;margin:0 auto;">';
+    html += '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:28px;letter-spacing:2.5px;color:var(--stripe);margin-bottom:18px;">🧾 My Bills</div>';
+
+    if (isATow) {
+      // Upload card
+      html += '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:10px;padding:20px;margin-bottom:24px;">';
+      html += '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--concrete);margin-bottom:14px;">Submit a Bill</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+      html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+      html += '<div style="flex:1;min-width:160px;"><label style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--concrete-dim);letter-spacing:0.5px;display:block;margin-bottom:4px;">DATE</label><input id="_atowBillDate" type="date" value="' + new Date().toISOString().slice(0,10) + '" style="width:100%;box-sizing:border-box;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:6px;padding:8px 10px;color:var(--concrete);font-family:\'DM Mono\',monospace;font-size:12px;"></div>';
+      html += '<div style="flex:1;min-width:120px;"><label style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--concrete-dim);letter-spacing:0.5px;display:block;margin-bottom:4px;">AMOUNT ($)</label><input id="_atowBillAmount" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:6px;padding:8px 10px;color:var(--concrete);font-family:\'DM Mono\',monospace;font-size:12px;"></div>';
+      html += '</div>';
+      html += '<div><label style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--concrete-dim);letter-spacing:0.5px;display:block;margin-bottom:4px;">DESCRIPTION</label><input id="_atowBillDesc" type="text" placeholder="e.g. Tow on I-95, load from Homestead to Kendall..." style="width:100%;box-sizing:border-box;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:6px;padding:8px 10px;color:var(--concrete);font-family:\'DM Sans\',sans-serif;font-size:12px;"></div>';
+      html += '<div><label style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--concrete-dim);letter-spacing:0.5px;display:block;margin-bottom:4px;">ATTACHMENT (PDF, Word, or Image)</label><input id="_atowBillFile" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp" style="width:100%;box-sizing:border-box;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:6px;padding:8px 10px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:12px;"></div>';
+      html += '<button onclick="_atowSubmitBill()" style="padding:10px 20px;background:#1a3a1a;border:1px solid #7ecb8f;border-radius:6px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px;" onmouseover="this.style.background=\'#7ecb8f\';this.style.color=\'#000\'" onmouseout="this.style.background=\'#1a3a1a\';this.style.color=\'#7ecb8f\'">⬆ SUBMIT BILL</button>';
+      html += '</div></div>';
+    }
+
+    // Bills list header
+    html += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--concrete-dim);letter-spacing:0.8px;margin-bottom:10px;">' + (isAdmin ? 'ALL ATOW BILLS' : 'YOUR SUBMITTED BILLS') + '</div>';
+    html += '<div id="_atowBillsList" style="display:flex;flex-direction:column;gap:8px;">';
+    html += '<div style="color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:20px 0;text-align:center;">Loading bills…</div>';
+    html += '</div>';
+    html += '</div>';
+    inner.innerHTML = html;
+    _atowLoadBills();
+  }
+
+  _renderInner();
+}
+
+function _atowStatusBadge(status) {
+  var map = {
+    pending:  { bg:'rgba(245,197,24,0.15)', border:'rgba(245,197,24,0.4)', color:'#f5c518', label:'Pending' },
+    reviewed: { bg:'rgba(90,180,245,0.12)', border:'rgba(90,180,245,0.35)', color:'#5ab4f5', label:'Reviewed' },
+    approved: { bg:'rgba(126,203,143,0.12)', border:'rgba(126,203,143,0.35)', color:'#7ecb8f', label:'Approved' },
+    disputed: { bg:'rgba(245,90,90,0.12)', border:'rgba(245,90,90,0.35)', color:'#f55a5a', label:'Disputed' },
+  };
+  var s = map[status] || map.pending;
+  return '<span style="padding:2px 8px;background:' + s.bg + ';border:1px solid ' + s.border + ';border-radius:4px;color:' + s.color + ';font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:0.5px;">' + s.label.toUpperCase() + '</span>';
+}
+
+function _atowLoadBills() {
+  var listEl = document.getElementById('_atowBillsList');
+  if (!listEl) return;
+  if (!db) { listEl.innerHTML = '<div style="color:#f55a5a;font-family:\'DM Mono\',monospace;font-size:11px;padding:20px 0;text-align:center;">No database connection.</div>'; return; }
+
+  db.collection('app_data').doc('atow_bills').get().then(function(doc) {
+    var bills = [];
+    if (doc.exists && doc.data() && doc.data().data) {
+      try { bills = JSON.parse(doc.data().data); } catch(e) {}
+    }
+    if (!Array.isArray(bills)) bills = [];
+    // Sort newest first
+    bills.sort(function(a, b) { return (b.submittedAt || 0) - (a.submittedAt || 0); });
+
+    var user = localStorage.getItem('dmc_u') || '';
+    var uLow = user.toLowerCase();
+    var isAdmin = (uLow === 'dj' || uLow === 'donmartin');
+
+    if (!listEl) return;
+    if (!bills.length) {
+      listEl.innerHTML = '<div style="color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:20px 0;text-align:center;">No bills submitted yet.</div>';
+      return;
+    }
+
+    var html = '';
+    bills.forEach(function(bill) {
+      var dateStr = bill.date || '';
+      var amtStr  = bill.amount ? '$' + parseFloat(bill.amount).toFixed(2) : '—';
+      var statusBadge = _atowStatusBadge(bill.status || 'pending');
+      html += '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:8px;padding:14px 16px;">';
+      html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--concrete);margin-bottom:4px;">' + escHtml(bill.description || 'Bill') + '</div>';
+      html += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">' + escHtml(dateStr) + ' · ' + amtStr;
+      if (bill.fileName) html += ' · <a href="' + escHtml(bill.fileUrl || '#') + '" target="_blank" style="color:#5ab4f5;text-decoration:none;" rel="noopener noreferrer">📎 ' + escHtml(bill.fileName) + '</a>';
+      html += '</div>';
+      if (bill.notes) html += '<div style="margin-top:6px;font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);font-style:italic;">' + escHtml(bill.notes) + '</div>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">';
+      html += statusBadge;
+      if (isAdmin) {
+        // Status dropdown + notes for admins
+        html += '<select onchange="_atowUpdateBillStatus(\'' + escHtml(bill.id) + '\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 6px;cursor:pointer;">';
+        ['pending','reviewed','approved','disputed'].forEach(function(s) {
+          html += '<option value="' + s + '"' + (bill.status === s ? ' selected' : '') + '>' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+        });
+        html += '</select>';
+        html += '<input type="text" placeholder="Admin notes…" value="' + escHtml(bill.notes || '') + '" onblur="_atowUpdateBillNotes(\'' + escHtml(bill.id) + '\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:10px;padding:3px 7px;width:160px;">';
+      }
+      html += '</div>';
+      html += '</div>';
+      html += '</div>';
+    });
+    listEl.innerHTML = html;
+
+    // Admin totals banner
+    if (isAdmin) {
+      var pending  = bills.filter(function(b){ return b.status === 'pending' || !b.status; });
+      var approved = bills.filter(function(b){ return b.status === 'approved'; });
+      var pendTotal  = pending.reduce(function(s,b){ return s + (parseFloat(b.amount)||0); }, 0);
+      var approvedTotal = approved.reduce(function(s,b){ return s + (parseFloat(b.amount)||0); }, 0);
+      var banner = document.createElement('div');
+      banner.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;';
+      banner.innerHTML = '<div style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:6px;padding:8px 14px;font-family:\'DM Mono\',monospace;font-size:11px;color:#f5c518;">⏳ ' + pending.length + ' pending — $' + pendTotal.toFixed(2) + '</div>' +
+        '<div style="background:rgba(126,203,143,0.1);border:1px solid rgba(126,203,143,0.3);border-radius:6px;padding:8px 14px;font-family:\'DM Mono\',monospace;font-size:11px;color:#7ecb8f;">✅ ' + approved.length + ' approved — $' + approvedTotal.toFixed(2) + '</div>';
+      listEl.parentNode.insertBefore(banner, listEl);
+    }
+  }).catch(function(err) {
+    if (listEl) listEl.innerHTML = '<div style="color:#f55a5a;font-family:\'DM Mono\',monospace;font-size:11px;padding:20px 0;text-align:center;">Error loading bills: ' + escHtml(err.message) + '</div>';
+  });
+}
+
+function _atowSubmitBill() {
+  if (_atowBillsUploading) return;
+  var dateEl   = document.getElementById('_atowBillDate');
+  var descEl   = document.getElementById('_atowBillDesc');
+  var amtEl    = document.getElementById('_atowBillAmount');
+  var fileEl   = document.getElementById('_atowBillFile');
+  if (!dateEl || !descEl || !amtEl) return;
+  var date   = (dateEl.value || '').trim();
+  var desc   = (descEl.value || '').trim();
+  var amount = (amtEl.value || '').trim();
+  if (!date || !desc) { pushNotif('warn', 'Missing fields', 'Please fill in date and description.'); return; }
+
+  var file = fileEl && fileEl.files && fileEl.files[0];
+  _atowBillsUploading = true;
+
+  function _saveBill(fileName, fileUrl, storagePath) {
+    var bill = {
+      id: 'bill_' + Date.now(),
+      submittedBy: 'ATow',
+      date: date,
+      description: desc,
+      amount: amount || '',
+      fileName: fileName || '',
+      fileUrl: fileUrl || '',
+      storagePath: storagePath || '',
+      status: 'pending',
+      submittedAt: Date.now(),
+      reviewedBy: null,
+      reviewedAt: null,
+      notes: ''
+    };
+    db.collection('app_data').doc('atow_bills').get().then(function(doc) {
+      var bills = [];
+      if (doc.exists && doc.data() && doc.data().data) { try { bills = JSON.parse(doc.data().data); } catch(e) {} }
+      if (!Array.isArray(bills)) bills = [];
+      bills.unshift(bill);
+      return db.collection('app_data').doc('atow_bills').set({ data: JSON.stringify(bills) });
+    }).then(function() {
+      _atowBillsUploading = false;
+      pushNotif('success', 'Bill Submitted', '✅ Your bill has been sent to DMC for review.');
+      if (descEl) descEl.value = '';
+      if (amtEl)  amtEl.value  = '';
+      if (fileEl) fileEl.value = '';
+      _atowLoadBills();
+    }).catch(function(err) {
+      _atowBillsUploading = false;
+      pushNotif('error', 'Submit Failed', err.message || 'Could not save bill.');
+    });
+  }
+
+  if (file) {
+    if (!window.storage) { pushNotif('warn', 'Storage unavailable', 'Cannot attach file — no Firebase Storage.'); _saveBill('','',''); return; }
+    var path = 'atow-bills/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    var ref  = window.storage.ref(path);
+    ref.put(file).then(function() {
+      return ref.getDownloadURL();
+    }).then(function(url) {
+      _saveBill(file.name, url, path);
+    }).catch(function(err) {
+      _atowBillsUploading = false;
+      pushNotif('error', 'Upload Failed', err.message || 'File upload failed.');
+    });
+  } else {
+    _saveBill('', '', '');
+  }
+}
+
+function _atowUpdateBillStatus(billId, newStatus) {
+  if (!db) return;
+  db.collection('app_data').doc('atow_bills').get().then(function(doc) {
+    var bills = [];
+    if (doc.exists && doc.data() && doc.data().data) { try { bills = JSON.parse(doc.data().data); } catch(e) {} }
+    var bill = bills.find(function(b){ return b.id === billId; });
+    if (!bill) return;
+    bill.status = newStatus;
+    bill.reviewedBy = localStorage.getItem('dmc_u') || '';
+    bill.reviewedAt = Date.now();
+    return db.collection('app_data').doc('atow_bills').set({ data: JSON.stringify(bills) });
+  }).then(function(){ _atowLoadBills(); }).catch(function(err){ pushNotif('error','Save Failed',err.message); });
+}
+
+function _atowUpdateBillNotes(billId, notes) {
+  if (!db) return;
+  db.collection('app_data').doc('atow_bills').get().then(function(doc) {
+    var bills = [];
+    if (doc.exists && doc.data() && doc.data().data) { try { bills = JSON.parse(doc.data().data); } catch(e) {} }
+    var bill = bills.find(function(b){ return b.id === billId; });
+    if (!bill || bill.notes === notes) return;
+    bill.notes = notes;
+    return db.collection('app_data').doc('atow_bills').set({ data: JSON.stringify(bills) });
+  }).then(function(){ _atowLoadBills(); }).catch(function(err){ pushNotif('error','Save Failed',err.message); });
 }
 
 function renderEquipmentFleet(containerEl) {
