@@ -1707,6 +1707,7 @@ function App() {
   const [manualDriver,   setManualDriver]   = useState('');
   const [manualFrom,     setManualFrom]     = useState('');
   const [manualTo,       setManualTo]       = useState('');
+  const [manualToLocked, setManualToLocked] = useState(false);
   const [manualDeadline, setManualDeadline] = useState('');
   const [manualItems,    setManualItems]    = useState([]);
   const [manualEqOpen,   setManualEqOpen]   = useState({});
@@ -1808,7 +1809,7 @@ function App() {
       : (manualMoveMode === 'job' ? 'job_' + ts : 'single_' + newId);
     groups.push({ id: newId, jobGroupId: resolvedJobGroupId, manual: true, date: manualDate, driverName: manualDriver, from: manualFrom, to: manualTo, deadline: manualDeadline, notes: manualNotes, items: manualItems, status: 'pending', createdAt: ts });
     saveLowbedGroups(groups);
-    setManualItems([]); setManualDriver(''); setManualFrom(''); setManualTo(''); setManualDeadline(''); setManualNotes(''); setManualEqOpen({}); setShowManualMove(false);
+    setManualItems([]); setManualDriver(''); setManualFrom(''); setManualTo(''); setManualDeadline(''); setManualNotes(''); setManualEqOpen({}); setManualToLocked(false); setShowManualMove(false);
   };
 
   // ── Equipment photo helpers ──
@@ -3391,7 +3392,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
                     return (<>
                       {/* ── Header ── */}
-                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px',flexWrap:'wrap'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px',flexWrap:'wrap'}}>
                         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',flexShrink:0}}>🚚 LOWBED MOVES</div>
                         {isAdminUser && completed > 0 && (
                           <button onClick={() => { if (!window.confirm('Clear all ' + completed + ' completed move' + (completed!==1?'s':'') + '? This cannot be undone.')) return; saveLowbedGroups(lowbedGroups.filter(g => !(g.manual===true && !g.deviceId && (g.status||'pending')==='complete'))); }}
@@ -3416,9 +3417,8 @@ Be specific, practical, and flag any uncertainties clearly.`;
                           <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center'}}>No active lowbed moves</div>
                         </div>
                       ) : (
-                        <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                        <div style={{display:'grid',gridTemplateColumns:hdMobile?'1fr':'repeat(2,1fr)',gap:'12px',padding:'4px 0 12px'}}>
                           {(() => {
-                            // Build grouped display: job_ groups → single job card; single_/legacy → individual cards
                             const groupedItems = [];
                             const seenJobGroups = new Set();
                             manualMoves.forEach(move => {
@@ -3433,314 +3433,144 @@ Be specific, practical, and flag any uncertainties clearly.`;
                               }
                             });
 
-                            return groupedItems.map((item, _idx) => {
-                            if (item.type === 'job_group') {
-                              const { jobGroupId, moves: jMoves } = item;
-                              const toLabel      = resolveLoc(jMoves[0].to);
-                              const totalEq      = jMoves.reduce((s,m) => s + (m.items||[]).length, 0);
-                              const deliveredEq  = jMoves.reduce((s,m) => s + (m.items||[]).filter(it=>it.delivered).length, 0);
-                              const isExpGroup   = expandedMoves.has(jobGroupId);
-                              const toggleGrp    = () => setExpandedMoves(prev => { const n=new Set(prev); if(n.has(jobGroupId))n.delete(jobGroupId); else n.add(jobGroupId); return n; });
-                              const statuses     = jMoves.map(m => m.status||'pending');
-                              const overallSt    = statuses.every(s=>s==='complete') ? 'complete' : statuses.some(s=>s==='in_progress') ? 'in_progress' : 'pending';
-                              const siG          = statusInfo(overallSt);
-                              const jDate        = jMoves[0].date;
+                            const moveSt = (grp) => {
+                              const s = grp.status || 'pending';
+                              if (s === 'complete')    return { bg:'#0d1a0d', bdr:'1px solid #2a5a2a', tc:'#4a7a4a', op:0.7, strike:true,  badge:'✓ Complete',    bBg:'rgba(42,90,42,0.3)',    bBorder:'#2a5a2a',                  bColor:'#4a7a4a' };
+                              if (s === 'in_progress') return { bg:'#3a2e00', bdr:'1px solid #c9a800', tc:'#f0d060', op:1,   strike:false, badge:'⚡ In Progress', bBg:'rgba(201,168,0,0.15)',  bBorder:'#c9a800',                  bColor:'#f0d060' };
+                              if (s === 'cancelled')   return { bg:'rgba(50,10,10,0.7)', bdr:'1px solid rgba(217,79,61,0.3)', tc:'rgba(217,79,61,0.6)', op:0.6, strike:false, badge:'✕ Cancelled', bBg:'rgba(217,79,61,0.1)', bBorder:'rgba(217,79,61,0.3)', bColor:'rgba(217,79,61,0.7)' };
+                              return                         { bg:'#1a2a3e', bdr:'1px solid #4a6fa6', tc:'#7ab3f0', op:1,   strike:false, badge:'⏳ Pending',     bBg:'rgba(74,111,166,0.15)', bBorder:'#4a6fa6',                  bColor:'#7ab3f0' };
+                            };
 
-                              const renderSubMove = (grp) => {
-                                const si2 = statusInfo(grp.status);
-                                const isExp2 = expandedMoves.has(grp.id);
-                                const eqCount2 = (grp.items||[]).length;
-                                const delCount2 = (grp.items||[]).filter(it=>it.delivered).length;
-                                const fromLabel2 = resolveLoc(grp.from);
-                                const toggle2 = () => setExpandedMoves(prev => { const n=new Set(prev); if(n.has(grp.id))n.delete(grp.id); else n.add(grp.id); return n; });
-                                const updateGrp2 = (patch) => saveLowbedGroups(lowbedGroups.map(g => g.id===grp.id ? {...g,...patch} : g));
-                                const delGrp2 = () => { if(!window.confirm('Delete this move from the job?'))return; saveLowbedGroups(lowbedGroups.filter(g=>g.id!==grp.id)); };
-                                const toggleDel2 = (itemId) => { const ni=(grp.items||[]).map(it=>it.id===itemId?{...it,delivered:!it.delivered}:it); updateGrp2({items:ni}); };
+                            const renderMoveContent = (grp, moveNum, totalMoves) => {
+                              const ms  = moveSt(grp);
+                              const fl  = resolveLoc(grp.from);
+                              const tl  = resolveLoc(grp.to);
+                              const upd = (patch) => saveLowbedGroups(lowbedGroups.map(g => g.id===grp.id ? {...g,...patch} : g));
+                              const del = () => { if(!window.confirm('Delete this move? This cannot be undone.'))return; saveLowbedGroups(lowbedGroups.filter(g=>g.id!==grp.id)); };
+                              return (<>
+                                {totalMoves > 1 && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',marginBottom:'4px',letterSpacing:'1px'}}>MOVE {moveNum} OF {totalMoves}</div>}
+                                <div style={{display:'flex',alignItems:'flex-start',gap:'5px',marginBottom:'5px'}}>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:ms.tc,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fl} → {tl}</div>
+                                    {grp.date && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',marginTop:'1px'}}>{grp.date}</div>}
+                                  </div>
+                                  <div style={{flexShrink:0,display:'flex',gap:'4px',alignItems:'center'}}>
+                                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',borderRadius:'8px',background:ms.bBg,border:'1px solid '+ms.bBorder,color:ms.bColor,whiteSpace:'nowrap'}}>{ms.badge}</span>
+                                    {isAdminUser && <button onClick={del} style={{background:'none',border:'none',color:'rgba(217,79,61,0.5)',fontSize:'11px',cursor:'pointer',padding:'0',lineHeight:1}}>🗑</button>}
+                                  </div>
+                                </div>
+                                <div style={{marginBottom:'5px'}}>
+                                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',marginBottom:'2px',letterSpacing:'1px'}}>DRIVER</div>
+                                  {isAdminUser ? (
+                                    <select value={grp.driverName||''} onChange={e=>upd({driverName:e.target.value})} style={{width:'100%',background:'rgba(10,10,25,0.8)',border:'1px solid rgba(90,180,245,0.2)',borderRadius:'3px',color:grp.driverName?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
+                                      <option value=''>⚠ Unassigned</option>
+                                      {CORE_LOWBED_DRIVERS.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
+                                    </select>
+                                  ) : canChangeStatus ? (() => {
+                                    const unc  = !grp.driverName||grp.driverName.toLowerCase()==='various';
+                                    const mine = grp.driverName&&grp.driverName.toLowerCase()===_myFullName.toLowerCase();
+                                    return unc  ? (<button onClick={()=>upd({driverName:_myFullName})} style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'3px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 8px',cursor:'pointer',fontWeight:700}}>✋ Claim</button>)
+                                      : mine ? (<div style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f'}}>{grp.driverName}</span><button onClick={()=>upd({driverName:''})} style={{background:'none',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'0 4px',cursor:'pointer'}}>Unclaim</button></div>)
+                                      : (<span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f'}}>{grp.driverName}</span>);
+                                  })() : (<span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:grp.driverName?ms.tc:'rgba(245,197,24,0.7)'}}>{grp.driverName||'⚠ Unassigned'}</span>)}
+                                </div>
+                                {(grp.items||[]).length > 0 && (
+                                  <div style={{marginBottom:'5px'}}>
+                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',marginBottom:'3px',letterSpacing:'1px'}}>EQUIPMENT ({(grp.items||[]).length})</div>
+                                    {(grp.items||[]).map(it => (
+                                      <div key={it.id} style={{display:'flex',alignItems:'center',gap:'4px',marginBottom:'2px'}}>
+                                        <span style={{fontSize:'9px',flexShrink:0}}>{EQ_ICONS[it.type]||'📦'}</span>
+                                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:it.delivered?'rgba(126,203,143,0.6)':ms.tc,textDecoration:(it.delivered||ms.strike)?'line-through':'none',flex:1,opacity:it.delivered?0.6:1}}>{it.name||it.type}</span>
+                                        {(isAdminUser||isForeman) && <button onClick={()=>{const ni=(grp.items||[]).map(i=>i.id===it.id?{...i,delivered:!i.delivered}:i);upd({items:ni});}} style={{flexShrink:0,background:'none',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'2px',color:it.delivered?'#7ecb8f':'rgba(155,148,136,0.35)',fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'0 3px',cursor:'pointer'}}>{it.delivered?'✓':'+'}</button>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {canChangeStatus ? (
+                                  <select value={grp.status||'pending'} onChange={e=>upd({status:e.target.value})} style={{width:'100%',background:'rgba(10,10,25,0.8)',border:'1px solid '+ms.bBorder,borderRadius:'3px',color:ms.bColor,fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none',marginTop:'3px'}}>
+                                    <option value='pending'>Pending</option>
+                                    <option value='in_progress'>In Progress</option>
+                                    <option value='complete'>Complete</option>
+                                  </select>
+                                ) : isAdminUser && grp.status !== 'cancelled' ? (
+                                  <button onClick={()=>upd({status:'cancelled'})} style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'2px 8px',cursor:'pointer',marginTop:'3px'}}>Cancel Move</button>
+                                ) : null}
+                                {(grp.notes||grp.deadline) && (
+                                  <div style={{marginTop:'5px',paddingTop:'5px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                                    {grp.notes    && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',fontStyle:'italic'}}>📝 {grp.notes}</div>}
+                                    {grp.deadline && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#c0392b',fontWeight:700}}>⚠ Due {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
+                                  </div>
+                                )}
+                              </>);
+                            };
+
+                            return groupedItems.map((item) => {
+                              if (item.type === 'job_group') {
+                                const { jobGroupId, moves: jMoves } = item;
+                                const destId  = jMoves[0].to;
+                                const toLabel = resolveLoc(destId);
+                                const jDate   = jMoves.map(m=>m.date).filter(Boolean).sort()[0];
+                                const totalEq = jMoves.reduce((s,m) => s + (m.items||[]).length, 0);
+                                const jPend   = jMoves.filter(m => (m.status||'pending')==='pending').length;
+                                const jInP    = jMoves.filter(m => m.status==='in_progress').length;
+                                const jDone   = jMoves.filter(m => m.status==='complete').length;
+                                const isExpGroup = expandedMoves.has(jobGroupId);
+                                const toggleGrp  = () => setExpandedMoves(prev => { const n=new Set(prev); if(n.has(jobGroupId))n.delete(jobGroupId); else n.add(jobGroupId); return n; });
                                 return (
-                                  <div key={grp.id} style={{background:'rgba(10,10,25,0.6)',border:'1px solid rgba(167,139,250,0.12)',borderRadius:'5px',overflow:'hidden'}}>
-                                    <div onClick={toggle2} style={{display:'flex',alignItems:'center',gap:'6px',padding:'6px 8px',cursor:'pointer',userSelect:'none'}}>
-                                      {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0,minWidth:'58px'}}>{grp.date}</span>}
-                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fromLabel2} → {toLabel}</span>
-                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.45)',flexShrink:0,whiteSpace:'nowrap'}}>{eqCount2} pc{eqCount2!==1?'s':''}</span>
-                                      {grp.driverName && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#7ecb8f',flexShrink:0,maxWidth:'65px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.driverName.split(' ')[0]}</span>}
-                                      <div style={{flexShrink:0,padding:'1px 6px',borderRadius:'8px',background:si2.bg,border:'1px solid '+si2.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:si2.color,whiteSpace:'nowrap'}}>{si2.label}</div>
-                                      <span style={{flexShrink:0,color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExp2?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
+                                  <div key={jobGroupId} style={{background:'#2a1a3e',border:'1px solid #7b4fa6',borderLeft:'3px solid #9b6fd6',borderRadius:'8px',overflow:'hidden',boxSizing:'border-box'}}>
+                                    <div onClick={toggleGrp} style={{padding:'12px',cursor:'pointer',userSelect:'none'}}>
+                                      <div style={{display:'flex',alignItems:'flex-start',gap:'6px',marginBottom:'5px'}}>
+                                        <div style={{flex:1,minWidth:0}}>
+                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#d8c8ff',fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{toLabel}</div>
+                                        </div>
+                                        <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:'5px'}}>
+                                          {isAdminUser && <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete all '+jMoves.length+' move'+(jMoves.length!==1?'s':'')+' for "'+toLabel+'"? This cannot be undone.'))return;saveLowbedGroups(lowbedGroups.filter(g=>g.jobGroupId!==jobGroupId));}} style={{background:'none',border:'none',color:'rgba(217,79,61,0.5)',fontSize:'12px',cursor:'pointer',padding:'0',lineHeight:1}}>🗑</button>}
+                                          <span style={{color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExpGroup?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
+                                        </div>
+                                      </div>
+                                      <div style={{display:'flex',gap:'5px',flexWrap:'wrap',alignItems:'center',marginBottom:'5px'}}>
+                                        {jDate && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)'}}>{jDate}</span>}
+                                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(167,139,250,0.6)'}}>{jMoves.length} load{jMoves.length!==1?'s':''} · {totalEq} pcs</span>
+                                      </div>
+                                      <div style={{display:'flex',gap:'4px',flexWrap:'wrap'}}>
+                                        {jPend > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(74,111,166,0.15)',border:'1px solid #4a6fa6',color:'#7ab3f0'}}>⏳ {jPend} pending</span>}
+                                        {jInP  > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(201,168,0,0.12)',border:'1px solid #c9a800',color:'#f0d060'}}>⚡ {jInP} active</span>}
+                                        {jDone > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(42,90,42,0.2)',border:'1px solid #2a5a2a',color:'#4a7a4a'}}>✓ {jDone} done</span>}
+                                      </div>
                                     </div>
-                                    {isExp2 && (
-                                      <div style={{borderTop:'1px solid rgba(90,180,245,0.1)',padding:'10px 12px',display:'flex',flexDirection:'column',gap:'10px'}}>
-                                        <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
-                                          <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',flexShrink:0}}>ROUTE</span>
-                                          <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#c0d8f0'}}>{fromLabel2} → {toLabel}</span>
-                                          {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)',marginLeft:'auto'}}>{grp.date}</span>}
-                                        </div>
-                                        {eqCount2 > 0 && (
-                                          <div>
-                                            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
-                                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)'}}>EQUIPMENT — {eqCount2} total · {delCount2} delivered · {eqCount2-delCount2} remaining</span>
+                                    {isExpGroup && (
+                                      <div style={{borderTop:'1px solid rgba(123,79,166,0.35)'}}>
+                                        {jMoves.map((m, mIdx) => {
+                                          const ms2 = moveSt(m);
+                                          return (
+                                            <div key={m.id} style={{borderTop:mIdx>0?'1px dashed #4a3a5a':'none',padding:'10px 12px',background:ms2.bg,opacity:ms2.op}}>
+                                              {renderMoveContent(m, mIdx+1, jMoves.length)}
                                             </div>
-                                            <div style={{height:'3px',background:'rgba(255,255,255,0.07)',borderRadius:'2px',overflow:'hidden',marginBottom:'6px'}}>
-                                              <div style={{height:'100%',width:(eqCount2>0?(delCount2/eqCount2*100):0)+'%',background:'#7ecb8f',borderRadius:'2px',transition:'width 0.3s'}} />
-                                            </div>
-                                            <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
-                                              {(grp.items||[]).map(it => (
-                                                <div key={it.id} style={{display:'flex',alignItems:'center',gap:'6px',padding:'4px 6px',borderRadius:'4px',background:it.delivered?'rgba(126,203,143,0.06)':'rgba(255,255,255,0.03)',border:'1px solid '+(it.delivered?'rgba(126,203,143,0.2)':'rgba(255,255,255,0.05)')}}>
-                                                  <span style={{fontSize:'10px',flexShrink:0}}>{EQ_ICONS[it.type]||'📦'}</span>
-                                                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:it.delivered?'rgba(126,203,143,0.65)':'#c0d8f0',flex:1,textDecoration:it.delivered?'line-through':'none'}}>{it.name||it.type}</span>
-                                                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.35)'}}>{it.type}</span>
-                                                  {(isAdminUser||isForeman) && (
-                                                    <button onClick={(e)=>{e.stopPropagation();toggleDel2(it.id);}} style={{flexShrink:0,background:it.delivered?'rgba(126,203,143,0.12)':'rgba(255,255,255,0.04)',border:'1px solid '+(it.delivered?'rgba(126,203,143,0.35)':'rgba(255,255,255,0.1)'),borderRadius:'3px',color:it.delivered?'#7ecb8f':'rgba(155,148,136,0.45)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',cursor:'pointer'}}>
-                                                      {it.delivered ? '✓ Done' : 'Mark'}
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                        <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'flex-end'}}>
-                                          <div style={{flex:1,minWidth:'120px'}}>
-                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>DRIVER</div>
-                                            {isAdminUser ? (
-                                              <select value={grp.driverName||''} onChange={e=>updateGrp2({driverName:e.target.value})} style={{width:'100%',background:'rgba(20,20,40,0.9)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'4px',color:grp.driverName?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
-                                                <option value=''>⚠ Unassigned</option>
-                                                {CORE_LOWBED_DRIVERS.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
-                                              </select>
-                                            ) : canChangeStatus ? (() => {
-                                              const unc = !grp.driverName||grp.driverName.toLowerCase()==='various';
-                                              const mine = grp.driverName&&grp.driverName.toLowerCase()===_myFullName.toLowerCase();
-                                              return unc ? (<button onClick={()=>updateGrp2({driverName:_myFullName})} style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'4px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer',fontWeight:700}}>✋ Claim This Move</button>)
-                                              : mine ? (<div style={{display:'flex',alignItems:'center',gap:'5px'}}><span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f'}}>{grp.driverName}</span><button onClick={()=>updateGrp2({driverName:''})} style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',cursor:'pointer'}}>Unclaim</button></div>)
-                                              : (<div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f'}}>{grp.driverName}</div>);
-                                            })() : (<div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:grp.driverName?'#7ecb8f':'rgba(155,148,136,0.4)'}}>{grp.driverName||'⚠ Unassigned'}</div>)}
-                                          </div>
-                                          <div style={{flex:1,minWidth:'120px'}}>
-                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>STATUS</div>
-                                            {canChangeStatus ? (
-                                              <select value={grp.status||'pending'} onChange={e=>updateGrp2({status:e.target.value})} style={{width:'100%',background:'rgba(20,20,40,0.9)',border:'1px solid '+si2.border,borderRadius:'4px',color:si2.color,fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
-                                                <option value='pending'>Pending</option>
-                                                <option value='in_progress'>In Progress</option>
-                                                <option value='complete'>Complete</option>
-                                              </select>
-                                            ) : isAdminUser ? (
-                                              <div style={{display:'flex',alignItems:'center',gap:'5px',flexWrap:'wrap'}}>
-                                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:si2.bg,border:'1px solid '+si2.border,color:si2.color,fontWeight:700}}>{si2.label}</div>
-                                                {grp.status!=='cancelled' && <button onClick={()=>updateGrp2({status:'cancelled'})} style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 6px',cursor:'pointer'}}>Cancel</button>}
-                                              </div>
-                                            ) : (<div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:si2.bg,border:'1px solid '+si2.border,color:si2.color,fontWeight:700,display:'inline-block'}}>{si2.label}</div>)}
-                                          </div>
-                                        </div>
-                                        {(grp.notes||grp.deadline||(grp.id||'').startsWith('mm_')) && (
-                                          <div style={{display:'flex',flexDirection:'column',gap:'4px',paddingTop:'4px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
-                                            {grp.notes    && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',fontStyle:'italic'}}>📝 {grp.notes}</div>}
-                                            {grp.deadline && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0392b',fontWeight:700}}>⚠ Due {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
-                                            {(grp.id||'').startsWith('mm_') && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.28)'}}>Created {new Date(parseInt(grp.id.replace('mm_',''))).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>}
-                                          </div>
-                                        )}
+                                          );
+                                        })}
                                         {isAdminUser && (
-                                          <div style={{display:'flex',justifyContent:'flex-end',paddingTop:'4px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
-                                            <button onClick={(e)=>{e.stopPropagation();delGrp2();}} style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.28)',borderRadius:'4px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer'}}>🗑 Delete Move</button>
+                                          <div style={{padding:'8px 12px',borderTop:'1px dashed #4a3a5a'}}>
+                                            <button onClick={()=>{ setManualTo(destId); setManualToLocked(true); setManualMoveMode('job'); setShowManualMove(true); }}
+                                              style={{width:'100%',background:'transparent',border:'1px dashed #7b4fa6',borderRadius:'5px',color:'#9b6fd6',fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'7px 12px',cursor:'pointer',fontWeight:700}}>
+                                              ＋ Add Move to This Job
+                                            </button>
                                           </div>
                                         )}
                                       </div>
                                     )}
                                   </div>
                                 );
-                              };
-
+                              }
+                              // single / legacy move
+                              const grp = item.move;
+                              const ms  = moveSt(grp);
                               return (
-                                <div key={jobGroupId} style={{background:'rgba(20,20,35,0.8)',border:'1px solid rgba(167,139,250,0.28)',borderRadius:'7px',overflow:'hidden',boxSizing:'border-box'}}>
-                                  {/* Job group header */}
-                                  <div onClick={toggleGrp} style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 10px',cursor:'pointer',userSelect:'none',background:'rgba(167,139,250,0.07)'}}>
-                                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(167,139,250,0.8)',flexShrink:0,fontWeight:700,letterSpacing:'1px'}}>JOB</span>
-                                    {jDate && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0,minWidth:'58px'}}>{jDate}</span>}
-                                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#d8c8ff',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:700}}>{toLabel}</span>
-                                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.45)',flexShrink:0,whiteSpace:'nowrap'}}>{jMoves.length} load{jMoves.length!==1?'s':''} · {totalEq} pcs</span>
-                                    <div style={{flexShrink:0,padding:'1px 6px',borderRadius:'8px',background:siG.bg,border:'1px solid '+siG.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:siG.color,whiteSpace:'nowrap'}}>{siG.label}</div>
-                                    <span style={{flexShrink:0,color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExpGroup?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
-                                  </div>
-                                  {/* Equipment progress bar across all sub-moves */}
-                                  {totalEq > 0 && (
-                                    <div style={{height:'2px',background:'rgba(255,255,255,0.07)'}}>
-                                      <div style={{height:'100%',width:(deliveredEq/totalEq*100)+'%',background:'#7ecb8f',transition:'width 0.3s'}} />
-                                    </div>
-                                  )}
-                                  {/* Sub-moves */}
-                                  {isExpGroup && (
-                                    <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:'5px'}}>
-                                      {jMoves.map(m => renderSubMove(m))}
-                                      {isAdminUser && (
-                                        <div style={{display:'flex',justifyContent:'flex-end',paddingTop:'2px'}}>
-                                          <button onClick={()=>{ if(!window.confirm('Delete ALL moves in this job group?'))return; saveLowbedGroups(lowbedGroups.filter(g=>g.jobGroupId!==jobGroupId)); }}
-                                            style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.28)',borderRadius:'4px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer'}}>
-                                            🗑 Delete Job Group
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
+                                <div key={grp.id} style={{background:'#1a1a2e',border:'1px solid #4a4a6a',borderRadius:'8px',padding:'12px',boxSizing:'border-box',opacity:ms.op}}>
+                                  {renderMoveContent(grp, 1, 1)}
                                 </div>
                               );
-                            }
-
-                            // single / legacy move
-                            const grp = item.move;
-                            const isExpanded      = expandedMoves.has(grp.id);
-                            const si              = statusInfo(grp.status);
-                            const eqCount         = (grp.items||[]).length;
-                            const deliveredCount  = (grp.items||[]).filter(it => it.delivered).length;
-                            const fromLabel       = resolveLoc(grp.from);
-                            const toLabel         = resolveLoc(grp.to);
-
-                            const toggleExpand = () => setExpandedMoves(prev => {
-                              const next = new Set(prev);
-                              if (next.has(grp.id)) next.delete(grp.id); else next.add(grp.id);
-                              return next;
                             });
-
-                            const updateGroup = (patch) => saveLowbedGroups(lowbedGroups.map(g => g.id === grp.id ? {...g, ...patch} : g));
-
-                            const deleteGroup = () => {
-                              if (!window.confirm('Permanently delete this move? This cannot be undone.')) return;
-                              saveLowbedGroups(lowbedGroups.filter(g => g.id !== grp.id));
-                            };
-
-                            const toggleItemDelivered = (itemId) => {
-                              const newItems = (grp.items||[]).map(it => it.id === itemId ? {...it, delivered: !it.delivered} : it);
-                              updateGroup({items: newItems});
-                            };
-
-                            return (
-                              <div key={grp.id} style={{background:'rgba(20,20,35,0.8)',border:'1px solid rgba(90,180,245,0.15)',borderRadius:'7px',overflow:'hidden',boxSizing:'border-box'}}>
-                                {/* ── Collapsed row — always visible ── */}
-                                <div onClick={toggleExpand} style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 10px',cursor:'pointer',userSelect:'none'}}>
-                                  {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0,minWidth:'58px'}}>{grp.date}</span>}
-                                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fromLabel} → {toLabel}</span>
-                                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.45)',flexShrink:0,whiteSpace:'nowrap'}}>{eqCount} pc{eqCount!==1?'s':''}</span>
-                                  {grp.driverName && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#7ecb8f',flexShrink:0,maxWidth:'65px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.driverName.split(' ')[0]}</span>}
-                                  <div style={{flexShrink:0,padding:'1px 6px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:si.color,whiteSpace:'nowrap'}}>{si.label}</div>
-                                  <span style={{flexShrink:0,color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
-                                </div>
-
-                                {/* ── Expanded detail ── */}
-                                {isExpanded && (
-                                  <div style={{borderTop:'1px solid rgba(90,180,245,0.1)',padding:'10px 12px',display:'flex',flexDirection:'column',gap:'10px'}}>
-
-                                    {/* Route */}
-                                    <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
-                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',flexShrink:0}}>ROUTE</span>
-                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#c0d8f0'}}>{fromLabel} → {toLabel}</span>
-                                      {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)',marginLeft:'auto'}}>{grp.date}</span>}
-                                    </div>
-
-                                    {/* Equipment progress + list */}
-                                    {eqCount > 0 && (
-                                      <div>
-                                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
-                                          <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.5)'}}>EQUIPMENT — {eqCount} total · {deliveredCount} delivered · {eqCount - deliveredCount} remaining</span>
-                                        </div>
-                                        <div style={{height:'3px',background:'rgba(255,255,255,0.07)',borderRadius:'2px',overflow:'hidden',marginBottom:'6px'}}>
-                                          <div style={{height:'100%',width:(eqCount>0?(deliveredCount/eqCount*100):0)+'%',background:'#7ecb8f',borderRadius:'2px',transition:'width 0.3s'}} />
-                                        </div>
-                                        <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
-                                          {(grp.items||[]).map(it => (
-                                            <div key={it.id} style={{display:'flex',alignItems:'center',gap:'6px',padding:'4px 6px',borderRadius:'4px',background:it.delivered?'rgba(126,203,143,0.06)':'rgba(255,255,255,0.03)',border:'1px solid '+(it.delivered?'rgba(126,203,143,0.2)':'rgba(255,255,255,0.05)')}}>
-                                              <span style={{fontSize:'10px',flexShrink:0}}>{EQ_ICONS[it.type]||'📦'}</span>
-                                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:it.delivered?'rgba(126,203,143,0.65)':'#c0d8f0',flex:1,textDecoration:it.delivered?'line-through':'none'}}>{it.name||it.type}</span>
-                                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.35)'}}>{it.type}</span>
-                                              {(isAdminUser||isForeman) && (
-                                                <button onClick={(e)=>{e.stopPropagation();toggleItemDelivered(it.id);}} style={{flexShrink:0,background:it.delivered?'rgba(126,203,143,0.12)':'rgba(255,255,255,0.04)',border:'1px solid '+(it.delivered?'rgba(126,203,143,0.35)':'rgba(255,255,255,0.1)'),borderRadius:'3px',color:it.delivered?'#7ecb8f':'rgba(155,148,136,0.45)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',cursor:'pointer'}}>
-                                                  {it.delivered ? '✓ Done' : 'Mark'}
-                                                </button>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Driver + Status */}
-                                    <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'flex-end'}}>
-                                      {/* DRIVER — admin assigns, driver claims/unclaims, others read-only */}
-                                      <div style={{flex:1,minWidth:'120px'}}>
-                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>DRIVER</div>
-                                        {isAdminUser ? (
-                                          <select value={grp.driverName||''} onChange={e=>updateGroup({driverName:e.target.value})}
-                                            style={{width:'100%',background:'rgba(20,20,40,0.9)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'4px',color:grp.driverName?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
-                                            <option value=''>⚠ Unassigned</option>
-                                            {CORE_LOWBED_DRIVERS.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
-                                          </select>
-                                        ) : canChangeStatus ? (() => {
-                                          const unclaimed = !grp.driverName || grp.driverName.toLowerCase() === 'various';
-                                          const claimedByMe = grp.driverName && grp.driverName.toLowerCase() === _myFullName.toLowerCase();
-                                          return unclaimed ? (
-                                            <button onClick={()=>updateGroup({driverName:_myFullName})}
-                                              style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'4px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer',fontWeight:700}}>
-                                              ✋ Claim This Move
-                                            </button>
-                                          ) : claimedByMe ? (
-                                            <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
-                                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f'}}>{grp.driverName}</span>
-                                              <button onClick={()=>updateGroup({driverName:''})}
-                                                style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',cursor:'pointer'}}>
-                                                Unclaim
-                                              </button>
-                                            </div>
-                                          ) : (
-                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f'}}>{grp.driverName}</div>
-                                          );
-                                        })() : (
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:grp.driverName?'#7ecb8f':'rgba(155,148,136,0.4)'}}>{grp.driverName||'⚠ Unassigned'}</div>
-                                        )}
-                                      </div>
-                                      {/* STATUS — driver: pending/in_progress/complete; admin: badge + cancel only; foreman: badge only */}
-                                      <div style={{flex:1,minWidth:'120px'}}>
-                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>STATUS</div>
-                                        {canChangeStatus ? (
-                                          <select value={grp.status||'pending'} onChange={e=>updateGroup({status:e.target.value})}
-                                            style={{width:'100%',background:'rgba(20,20,40,0.9)',border:'1px solid '+si.border,borderRadius:'4px',color:si.color,fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
-                                            <option value='pending'>Pending</option>
-                                            <option value='in_progress'>In Progress</option>
-                                            <option value='complete'>Complete</option>
-                                          </select>
-                                        ) : isAdminUser ? (
-                                          <div style={{display:'flex',alignItems:'center',gap:'5px',flexWrap:'wrap'}}>
-                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,color:si.color,fontWeight:700}}>{si.label}</div>
-                                            {grp.status !== 'cancelled' && (
-                                              <button onClick={()=>updateGroup({status:'cancelled'})}
-                                                style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 6px',cursor:'pointer'}}>
-                                                Cancel
-                                              </button>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,color:si.color,fontWeight:700,display:'inline-block'}}>{si.label}</div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {/* Notes / Deadline / Created */}
-                                    {(grp.notes || grp.deadline || (grp.id||'').startsWith('mm_')) && (
-                                      <div style={{display:'flex',flexDirection:'column',gap:'4px',paddingTop:'4px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
-                                        {grp.notes    && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',fontStyle:'italic'}}>📝 {grp.notes}</div>}
-                                        {grp.deadline && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0392b',fontWeight:700}}>⚠ Due {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
-                                        {(grp.id||'').startsWith('mm_') && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.28)'}}>Created {new Date(parseInt(grp.id.replace('mm_',''))).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>}
-                                      </div>
-                                    )}
-
-                                    {/* Delete — admin only */}
-                                    {isAdminUser && (
-                                      <div style={{display:'flex',justifyContent:'flex-end',paddingTop:'4px',borderTop:'1px solid rgba(255,255,255,0.04)'}}>
-                                        <button onClick={(e)=>{e.stopPropagation();deleteGroup();}}
-                                          style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.28)',borderRadius:'4px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer'}}>
-                                          🗑 Delete Move
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }); })()}
+                          })()}
                         </div>
                       )}
                     </>);
@@ -5964,7 +5794,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
         });
 
         return (
-          <div onClick={() => setShowManualMove(false)}
+          <div onClick={() => { setShowManualMove(false); setManualToLocked(false); }}
             style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:9600,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
             <div onClick={e => e.stopPropagation()}
               style={{background:'var(--asphalt-mid)',border:'1px solid rgba(245,197,24,0.3)',borderRadius:'10px',width:'100%',maxWidth:'520px',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.8)'}}>
@@ -5972,7 +5802,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
               {/* Header */}
               <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'14px 18px',borderBottom:'1px solid var(--asphalt-light)',flexShrink:0}}>
                 <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'18px',letterSpacing:'2px',color:'var(--stripe)',flex:1}}>🚛 {manualMoveMode === 'job' ? 'Job Setup — All Equipment' : 'Manual Lowbed Move'}</div>
-                <button onClick={() => setShowManualMove(false)} style={{background:'none',border:'none',color:'var(--concrete-dim)',fontSize:'16px',cursor:'pointer'}}>✕</button>
+                <button onClick={() => { setShowManualMove(false); setManualToLocked(false); }} style={{background:'none',border:'none',color:'var(--concrete-dim)',fontSize:'16px',cursor:'pointer'}}>✕</button>
               </div>
 
               <div style={{flex:1,overflowY:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:'14px'}}>
@@ -5999,11 +5829,15 @@ Be specific, practical, and flag any uncertainties clearly.`;
                     </select>
                   </div>
                   <div>
-                    <div style={labelStyle}>TO</div>
-                    <select value={manualTo} onChange={e => setManualTo(e.target.value)} style={locStyle}>
-                      <option value="">— Select location —</option>
-                      {locationOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <div style={labelStyle}>TO{manualToLocked && <span style={{color:'rgba(155,148,136,0.5)',fontWeight:400}}> — locked</span>}</div>
+                    {manualToLocked ? (
+                      <div style={{...locStyle, color:'#9b6fd6', opacity:0.9, cursor:'not-allowed'}}>{locationOpts.find(o=>o.value===manualTo)?.label || manualTo}</div>
+                    ) : (
+                      <select value={manualTo} onChange={e => setManualTo(e.target.value)} style={locStyle}>
+                        <option value="">— Select location —</option>
+                        {locationOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    )}
                   </div>
                 </div>
 
@@ -6098,7 +5932,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
               {/* Footer */}
               <div style={{display:'flex',justifyContent:'space-between',padding:'12px 18px',borderTop:'1px solid var(--asphalt-light)',flexShrink:0}}>
-                <button onClick={() => setShowManualMove(false)} style={{background:'none',border:'1px solid var(--asphalt-light)',borderRadius:'5px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'7px 16px',cursor:'pointer'}}>Cancel</button>
+                <button onClick={() => { setShowManualMove(false); setManualToLocked(false); }} style={{background:'none',border:'1px solid var(--asphalt-light)',borderRadius:'5px',color:'var(--concrete-dim)',fontFamily:"'DM Mono',monospace",fontSize:'10px',padding:'7px 16px',cursor:'pointer'}}>Cancel</button>
                 <button onClick={saveManualMove} style={{background:'rgba(245,197,24,0.12)',border:'1px solid rgba(245,197,24,0.5)',borderRadius:'5px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,padding:'7px 20px',cursor:'pointer'}}>Save Move</button>
               </div>
             </div>
