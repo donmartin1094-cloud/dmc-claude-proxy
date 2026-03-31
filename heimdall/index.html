@@ -1762,6 +1762,23 @@ function App() {
     return Math.max(hours, svc.minHours) * svc.rate;
   };
 
+  const getEquipmentStatus = (eqId, groups) => {
+    const activeMoves = groups.filter(m =>
+      m.manual &&
+      m.status !== 'cancelled' &&
+      m.status !== 'cleared' &&
+      m.items &&
+      m.items.find(i => i.id === eqId)
+    );
+    if (!activeMoves.length) return { status: 'available', label: 'At Garage', color: '#4a7a4a' };
+    const inTransit = activeMoves.find(m => m.status === 'in_progress');
+    if (inTransit) return { status: 'in_transit', label: 'In Transit → ' + (inTransit.to || 'Unknown'), color: '#c9a800', moveId: inTransit.id, jobGroupId: inTransit.jobGroupId };
+    const pending = activeMoves.find(m => m.status === 'pending' || !m.status);
+    if (pending) return { status: 'assigned', label: 'Assigned — pending move', color: '#7ab3f0', moveId: pending.id, jobGroupId: pending.jobGroupId };
+    const complete = activeMoves.find(m => m.status === 'complete');
+    if (complete) return { status: 'on_site', label: 'On Site at job', color: '#9b6fd6', moveId: complete.id, jobGroupId: complete.jobGroupId };
+    return { status: 'available', label: 'At Garage', color: '#4a7a4a' };
+  };
 
   const checkCompat = (newType, existingItems) => {
     if (!existingItems.length) return { ok: true };
@@ -3501,6 +3518,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                               if (s === 'complete')    return { bg:'#0d1a0d', bdr:'1px solid #2a5a2a', tc:'#4a7a4a', op:0.7, strike:true,  badge:'✓ Complete',    bBg:'rgba(42,90,42,0.3)',    bBorder:'#2a5a2a',                  bColor:'#4a7a4a' };
                               if (s === 'in_progress') return { bg:'#3a2e00', bdr:'1px solid #c9a800', tc:'#f0d060', op:1,   strike:false, badge:'⚡ In Progress', bBg:'rgba(201,168,0,0.15)',  bBorder:'#c9a800',                  bColor:'#f0d060' };
                               if (s === 'cancelled')   return { bg:'rgba(50,10,10,0.7)', bdr:'1px solid rgba(217,79,61,0.3)', tc:'rgba(217,79,61,0.6)', op:0.6, strike:false, badge:'✕ Cancelled', bBg:'rgba(217,79,61,0.1)', bBorder:'rgba(217,79,61,0.3)', bColor:'rgba(217,79,61,0.7)' };
+                              if (s === 'cleared')     return { bg:'#0d0d0d', bdr:'1px solid rgba(155,111,214,0.25)', tc:'rgba(155,111,214,0.5)', op:0.5, strike:true,  badge:'🧹 Cleared',     bBg:'rgba(155,111,214,0.08)', bBorder:'rgba(155,111,214,0.3)', bColor:'rgba(155,111,214,0.6)' };
                               return                         { bg:'#1a2a3e', bdr:'1px solid #4a6fa6', tc:'#7ab3f0', op:1,   strike:false, badge:'⏳ Pending',     bBg:'rgba(74,111,166,0.15)', bBorder:'#4a6fa6',                  bColor:'#7ab3f0' };
                             };
 
@@ -3629,14 +3647,16 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                 ];
                                 const isExpGroup = expandedMoves.has(jobGroupId);
                                 const toggleGrp  = () => setExpandedMoves(prev => { const n=new Set(prev); if(n.has(jobGroupId))n.delete(jobGroupId); else n.add(jobGroupId); return n; });
+                                const isCleared  = jMoves.every(m => m.status === 'cleared');
                                 return (
-                                  <div key={jobGroupId} style={{background:'#2a1a3e',border:'1px solid #7b4fa6',borderLeft:'3px solid #9b6fd6',borderRadius:'8px',overflow:'hidden',boxSizing:'border-box'}}>
+                                  <div key={jobGroupId} style={{background:'#2a1a3e',border:'1px solid #7b4fa6',borderLeft:'3px solid #9b6fd6',borderRadius:'8px',overflow:'hidden',boxSizing:'border-box',opacity:isCleared?0.5:1}}>
                                     <div onClick={toggleGrp} style={{padding:'12px',cursor:'pointer',userSelect:'none'}}>
                                       <div style={{display:'flex',alignItems:'flex-start',gap:'6px',marginBottom:'5px'}}>
                                         <div style={{flex:1,minWidth:0}}>
                                           <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#d8c8ff',fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{toLabel}</div>
                                         </div>
                                         <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:'5px'}}>
+                                          {isCleared && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',borderRadius:'3px',background:'rgba(155,111,214,0.12)',border:'1px solid rgba(155,111,214,0.3)',color:'rgba(155,111,214,0.8)'}}>🧹 Cleared</span>}
                                           {isAdminUser && <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete all '+jMoves.length+' move'+(jMoves.length!==1?'s':'')+' for "'+toLabel+'"? This cannot be undone.'))return;saveLowbedGroups(lowbedGroups.filter(g=>g.jobGroupId!==jobGroupId));}} style={{background:'none',border:'none',color:'rgba(217,79,61,0.5)',fontSize:'12px',cursor:'pointer',padding:'0',lineHeight:1}}>🗑</button>}
                                           <span style={{color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExpGroup?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
                                         </div>
@@ -3726,6 +3746,22 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                             <button onClick={()=>{ setManualTo(destId); setManualToLocked(true); setManualMoveMode('job'); setShowManualMove(true); }}
                                               style={{width:'100%',background:'transparent',border:'1px dashed #7b4fa6',borderRadius:'5px',color:'#9b6fd6',fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'7px 12px',cursor:'pointer',fontWeight:700}}>
                                               ＋ Add Move to This Job
+                                            </button>
+                                          </div>
+                                        )}
+                                        {isAdminUser && jMoves.every(m => m.status === 'complete') && !isCleared && (
+                                          <div style={{padding:'8px 12px',borderTop:'1px dashed #4a3a5a'}}>
+                                            <button onClick={()=>{
+                                              if (!window.confirm('Mark all equipment from "' + toLabel + '" as returned to garage?\n\nThis will make them available for new moves.')) return;
+                                              const _cu = (localStorage.getItem('dmc_u') || '').toLowerCase();
+                                              const _now = Date.now();
+                                              saveLowbedGroups(lowbedGroups.map(g =>
+                                                g.jobGroupId === jobGroupId
+                                                  ? { ...g, status: 'cleared', clearedAt: _now, clearedBy: _cu }
+                                                  : g
+                                              ));
+                                            }} style={{width:'100%',background:'transparent',border:'1px solid #9b6fd6',borderRadius:'5px',color:'#9b6fd6',fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'7px 12px',cursor:'pointer',fontWeight:700}}>
+                                              🧹 Clean Out — Release equipment for reassignment
                                             </button>
                                           </div>
                                         )}
@@ -6066,21 +6102,48 @@ Be specific, practical, and flag any uncertainties clearly.`;
                             <div style={{display:'flex',flexDirection:'column',gap:'2px',padding:'4px 6px 6px'}}>
                               {items.map(eq => {
                                 const compat = manualMoveMode === 'job' ? { ok: true } : checkCompat(eq.type, manualItems);
+                                const avail  = getEquipmentStatus(eq.id, lowbedGroups);
+                                const blocked = !compat.ok || avail.status === 'in_transit' || avail.status === 'on_site';
+                                const handleClick = () => {
+                                  if (!compat.ok) { alert('⚠️ ' + compat.reason); return; }
+                                  if (avail.status === 'in_transit') { alert('🚛 ' + eq.name + ' is currently in transit. It cannot be assigned to another move.'); return; }
+                                  if (avail.status === 'on_site')    { alert('📍 ' + eq.name + ' is on site. Press Clean Out on the job card first to reassign it.'); return; }
+                                  if (avail.status === 'assigned') {
+                                    if (!window.confirm(eq.name + ' is already assigned to another pending move. Add it anyway?')) return;
+                                  }
+                                  setManualItems([...manualItems, {id:eq.id,name:eq.name,type:eq.type}]);
+                                };
+                                const rowBg = avail.status === 'assigned'   ? 'rgba(122,179,240,0.05)'
+                                            : avail.status === 'in_transit'  ? 'rgba(201,168,0,0.06)'
+                                            : avail.status === 'on_site'     ? 'rgba(155,111,214,0.06)'
+                                            : 'rgba(255,255,255,0.02)';
+                                const rowBorder = avail.status === 'available' ? 'rgba(255,255,255,0.04)' : avail.color + '44';
                                 return (
                                   <div key={eq.id}
-                                    onClick={() => { if (!compat.ok) { alert('⚠️ '+compat.reason); return; } setManualItems([...manualItems, {id:eq.id,name:eq.name,type:eq.type}]); }}
+                                    onClick={handleClick}
                                     style={{display:'flex',alignItems:'center',gap:'8px',padding:'5px 8px',borderRadius:'4px',
-                                      cursor:compat.ok?'pointer':'not-allowed',opacity:compat.ok?1:0.4,
-                                      background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.04)'}}
-                                    onMouseEnter={e => { if(compat.ok) e.currentTarget.style.background='rgba(245,197,24,0.07)'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.02)'; }}>
+                                      cursor:blocked?'not-allowed':'pointer',
+                                      opacity:(!compat.ok||avail.status==='in_transit'||avail.status==='on_site')?0.55:1,
+                                      background:rowBg,border:'1px solid '+rowBorder}}
+                                    onMouseEnter={e => { if(!blocked) e.currentTarget.style.background='rgba(245,197,24,0.07)'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background=rowBg; }}>
                                     <div style={{flex:1}}>
                                       <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'var(--white)'}}>{eq.name}</div>
-                                      {eq.category && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'var(--concrete-dim)'}}>{eq.category}</div>}
+                                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:avail.color,marginTop:'1px'}}>
+                                        {avail.status === 'available' ? '● At Garage'
+                                          : avail.status === 'assigned'   ? '⚠ Assigned to pending move'
+                                          : avail.status === 'in_transit' ? '🚛 In Transit'
+                                          : avail.status === 'on_site'    ? '📍 On Site at job'
+                                          : '● ' + avail.label}
+                                      </div>
                                     </div>
-                                    {compat.ok
-                                      ? <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(126,203,143,0.6)'}}>+ Add</span>
-                                      : <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'var(--red)'}}>⚠ incompatible</span>}
+                                    {!compat.ok
+                                      ? <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'var(--red)'}}>⚠ incompatible</span>
+                                      : blocked
+                                        ? <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:avail.color}}>🚫</span>
+                                        : avail.status === 'assigned'
+                                          ? <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ab3f0'}}>+ Add</span>
+                                          : <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(126,203,143,0.6)'}}>+ Add</span>}
                                   </div>
                                 );
                               })}
