@@ -1349,20 +1349,26 @@ function App() {
       return acct ? acct.role === 'foreman' : false;
     } catch(e) { return false; }
   })();
+  const isMechanic = (() => {
+    try {
+      const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+      const accounts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
+      const acct = accounts.find(a => (a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u);
+      return acct ? acct.role === 'mechanic' : false;
+    } catch(e) { return false; }
+  })();
   const isNightmare57 = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
       return ['nightmare57','ericsylvia57@gmail.com'].includes(u);
     } catch(e) { return false; }
   })();
-  const _hdMobileUser = isNightmare57 || isIgiron;
-  const [hdMobile, setHdMobile] = useState(() => _hdMobileUser && window.innerWidth < 768);
+  const [hdMobile, setHdMobile] = useState(() => window.innerWidth < 768);
   useEffect(() => {
-    if (!_hdMobileUser) return;
     const h = () => setHdMobile(window.innerWidth < 768);
     window.addEventListener('resize', h);
     return () => window.removeEventListener('resize', h);
-  }, [_hdMobileUser]);
+  }, []);
   const [hdDevicesOpen, setHdDevicesOpen] = useState(false);
   const [hdHaulOpen, setHdHaulOpen] = useState(false);
   const [gpsDevices, setGpsDevices]   = useState([]);
@@ -1860,8 +1866,9 @@ function App() {
     const isLowbedDriverRole = role === 'lowbed_driver' || (driverTypes && driverTypes.includes('lowbed'));
     const isRentalLowbedDriverRole = role === 'rental_lowbed_driver' || (driverTypes && driverTypes.includes('rental_lowbed'));
     const isForemanRole = role === 'foreman';
+    const isMechanicRole = role === 'mechanic';
     const isAdmin = ['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
-    if (!(isAdmin || isLowbedDriverRole || isRentalLowbedDriverRole || isForemanRole)) return;
+    if (!(isAdmin || isLowbedDriverRole || isRentalLowbedDriverRole || isForemanRole || isMechanicRole)) return;
 
     // Load lowbed_groups: merge local + remote, keeping whichever has more total items,
     // then push the winner back to Firestore so all users converge on the same data
@@ -3379,82 +3386,78 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   )}
                   {isAdminUser && <div style={{borderTop:'1px solid var(--asphalt-light)',marginTop:'10px',paddingTop:'10px'}} />}
                   <>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',marginBottom:'10px'}}>🚚 LOWBED MOVES</div>
+                  {/* ── Header ── */}
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa'}}>🚚 LOWBED MOVES</div>
+                    {lowbedPlan && lowbedPlan.jobs && lowbedPlan.jobs.length > 0 && (
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(167,139,250,0.7)',background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:'8px',padding:'1px 6px'}}>
+                        {lowbedPlan.jobs.reduce((n,j)=>n+(j.moves||[]).length,0)} moves
+                      </span>
+                    )}
+                  </div>
+                  {/* ── Empty state ── */}
                   {(!lowbedPlan || !lowbedPlan.jobs || lowbedPlan.jobs.length === 0) ? (
-                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center',padding:'40px 0'}}>No active lowbed plan</div>
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 0',gap:'8px'}}>
+                      <span style={{fontSize:'28px',opacity:0.35}}>🚛</span>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center'}}>No active lowbed moves</div>
+                    </div>
                   ) : (() => {
+                    // Status badge helper
+                    const statusBadge = (s) => {
+                      if (s === 'complete')    return { label:'Complete',    color:'#7ecb8f', bg:'rgba(126,203,143,0.12)', border:'rgba(126,203,143,0.3)' };
+                      if (s === 'in_progress') return { label:'In Progress', color:'#5ab4f5', bg:'rgba(90,180,245,0.12)',  border:'rgba(90,180,245,0.3)'  };
+                      if (s === 'assigned')    return { label:'Assigned',    color:'#5ab4f5', bg:'rgba(90,180,245,0.12)',  border:'rgba(90,180,245,0.3)'  };
+                      if (s === 'cancelled')   return { label:'Cancelled',   color:'#d94f3d', bg:'rgba(217,79,61,0.12)',   border:'rgba(217,79,61,0.3)'   };
+                      return                         { label:'Pending',      color:'#f5c518', bg:'rgba(245,197,24,0.12)',  border:'rgba(245,197,24,0.3)'  };
+                    };
                     return (
-                      <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
+                      <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
                         {lowbedPlan.jobs.map((job, ji) => {
                           const moves = job.moves || [];
                           const onSiteNames = new Set();
                           moves.forEach(mv => { if (mv.status==='complete') (mv.equipment||[]).forEach(eq => eq.name && onSiteNames.add(eq.name)); });
-                          const allEq = job.allEquipment || [];
                           const allDone = moves.length > 0 && moves.every(mv => mv.status === 'complete');
                           const jobKey = String(job.jobNum || job.jobName || ji);
                           const cleanoutSent = cleanoutSet.has(jobKey);
                           return (
-                            <div key={ji} style={{display:'flex',alignItems:'stretch',gap:'6px'}}>
-                              {/* LEFT: Job card — purple */}
-                              <div style={{flex:'0 0 34%',minWidth:0,background:'rgba(167,139,250,0.07)',border:'1px solid rgba(167,139,250,0.28)',borderRadius:'8px',padding:'8px 10px',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
-                                <div>
-                                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,color:'#a78bfa',marginBottom:'5px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{job.jobName||job.jobNum||('Job '+(ji+1))}</div>
-                                  {allEq.length === 0
-                                    ? <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)'}}>No equipment assigned</div>
-                                    : <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
-                                        {allEq.map((eq,ei) => {
-                                          const arrived = onSiteNames.has(eq.name);
-                                          return (
-                                            <span key={ei} style={{background: arrived?'rgba(126,203,143,0.13)':'rgba(167,139,250,0.09)',border: arrived?'1px solid rgba(126,203,143,0.35)':'1px solid rgba(167,139,250,0.22)',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'7px',color: arrived?'#7ecb8f':'rgba(167,139,250,0.8)'}}>
-                                              {arrived ? '✓' : '⏳'} {eq.name||eq.type}
-                                            </span>
-                                          );
-                                        })}
-                                      </div>
-                                  }
-                                </div>
-                                {/* Clean Out button — desktop users only, when all moves done */}
-                                {allDone && isDesktopUser && !cleanoutSent && (
-                                  <button onClick={() => sendCleanOut(jobKey, job.jobName||job.jobNum||('Job '+(ji+1)))}
-                                    style={{marginTop:'7px',width:'100%',padding:'5px 0',background:'rgba(245,197,24,0.13)',border:'1px solid rgba(245,197,24,0.45)',borderRadius:'5px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,letterSpacing:'0.5px',cursor:'pointer',textTransform:'uppercase'}}>
-                                    🔔 Authorize Clean Out
-                                  </button>
+                            <div key={ji}>
+                              {/* Job header row */}
+                              <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'6px',paddingBottom:'5px',borderBottom:'1px solid rgba(167,139,250,0.2)'}}>
+                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,color:'#a78bfa',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{job.jobName||job.jobNum||('Job '+(ji+1))}</div>
+                                {job.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0}}>{job.date}</span>}
+                                {allDone && !cleanoutSent && (
+                                  <button onClick={() => sendCleanOut(jobKey, job.jobName||job.jobNum||('Job '+(ji+1)))} style={{flexShrink:0,padding:'2px 7px',background:'rgba(245,197,24,0.13)',border:'1px solid rgba(245,197,24,0.45)',borderRadius:'4px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,cursor:'pointer'}}>🔔 Clean Out</button>
                                 )}
-                                {cleanoutSent && (
-                                  <div style={{marginTop:'7px',padding:'4px 6px',background:'rgba(126,203,143,0.12)',border:'1px solid rgba(126,203,143,0.3)',borderRadius:'5px',fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#7ecb8f',textAlign:'center'}}>✅ Clean Out Authorized</div>
-                                )}
+                                {cleanoutSent && <span style={{flexShrink:0,fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#7ecb8f'}}>✅ Authorized</span>}
                               </div>
-
-                              {/* CONNECTOR: simple dashed line */}
-                              <div style={{flexShrink:0,width:'12px',display:'flex',alignItems:'center'}}>
-                                <div style={{width:'12px',borderTop:'1.5px dashed rgba(167,139,250,0.4)'}}/>
-                              </div>
-
-                              {/* RIGHT: Moves — wrapping square grid */}
-                              <div style={{flex:1,minWidth:0,display:'flex',flexWrap:'wrap',gap:'5px',alignContent:'flex-start'}}>
-                                {moves.length === 0
-                                  ? <div style={{padding:'12px',fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)'}}>No moves planned</div>
-                                  : moves.map((mv, mi) => {
-                                      const done = mv.status === 'complete';
+                              {/* Moves list */}
+                              {moves.length === 0
+                                ? <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)',padding:'4px 0'}}>No moves planned</div>
+                                : <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                                    {moves.map((mv, mi) => {
+                                      const sb = statusBadge(mv.status);
+                                      const eqNames = (mv.equipment||[]).map(e=>(EQ_ICONS[e.type]||'📦')+' '+(e.name||e.type)).join(', ');
                                       return (
-                                        <div key={mi} style={{flex:'1 1 95px',maxWidth:'140px',boxSizing:'border-box',background: done?'rgba(126,203,143,0.05)':'rgba(90,180,245,0.06)',border:'1px solid '+(done?'rgba(126,203,143,0.2)':'rgba(90,180,245,0.16)'),borderRadius:'6px',padding:'6px 7px',opacity: done ? 0.7 : 1}}>
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color: done?'rgba(126,203,143,0.8)':'#5ab4f5',textDecoration: done?'line-through':'none',marginBottom:'2px'}}>Move {mi+1}</div>
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color: mv.assignedDriver?(done?'rgba(126,203,143,0.7)':'#7ecb8f'):'rgba(155,148,136,0.5)',textDecoration: done?'line-through':'none',marginBottom:'4px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
-                                          <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
-                                            {(mv.equipment||[]).map((eq,ei) => (
-                                              <span key={ei} style={{display:'block',background: done?'rgba(126,203,143,0.1)':'rgba(90,180,245,0.11)',border:'1px solid '+(done?'rgba(126,203,143,0.25)':'rgba(90,180,245,0.2)'),borderRadius:'3px',padding:'1px 4px',fontFamily:"'DM Mono',monospace",fontSize:'7px',color: done?'rgba(126,203,143,0.8)':'#c0d8f0',textDecoration: done?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                                                {EQ_ICONS[eq.type]||'📦'} {eq.name||eq.type}
-                                              </span>
-                                            ))}
-                                          </div>
-                                          {mv.deadline && !done && (
-                                            <div style={{marginTop:'4px'}}><span style={{background:'#fff',border:'2px solid #c0392b',borderRadius:'3px',padding:'1px 5px',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:'#c0392b'}}>⚠ {new Date(mv.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+                                        <div key={mi} style={{background:'rgba(30,30,50,0.6)',border:'1px solid rgba(90,180,245,0.12)',borderRadius:'6px',padding:'7px 9px',display:'flex',flexDirection:hdMobile?'column':'row',alignItems:hdMobile?'flex-start':'center',gap:hdMobile?'4px':'8px',boxSizing:'border-box'}}>
+                                          {/* Move label */}
+                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color:'rgba(155,148,136,0.5)',flexShrink:0,minWidth:hdMobile?undefined:'34px'}}>M{mi+1}</div>
+                                          {/* Equipment — bold on mobile */}
+                                          <div style={{flex:hdMobile?undefined:1,minWidth:0,fontFamily:"'DM Mono',monospace",fontSize:hdMobile?'9px':'8px',fontWeight:hdMobile?700:400,color:'#c0d8f0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{eqNames||'—'}</div>
+                                          {/* Destination line — mobile only */}
+                                          {hdMobile && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.65)'}}>{'\u2192'} {job.location||job.jobName||'—'}</div>}
+                                          {/* Driver */}
+                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:mv.assignedDriver?'#7ecb8f':'rgba(155,148,136,0.4)',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:hdMobile?undefined:'110px'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
+                                          {/* Status badge */}
+                                          <div style={{flexShrink:0,padding:'1px 7px',borderRadius:'8px',background:sb.bg,border:'1px solid '+sb.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:sb.color,letterSpacing:'0.3px',whiteSpace:'nowrap'}}>{sb.label}</div>
+                                          {/* Deadline */}
+                                          {mv.deadline && mv.status !== 'complete' && (
+                                            <div style={{flexShrink:0,padding:'1px 5px',background:'#fff',border:'2px solid #c0392b',borderRadius:'3px',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:'#c0392b',whiteSpace:'nowrap'}}>⚠ {new Date(mv.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
                                           )}
                                         </div>
                                       );
-                                    })
-                                }
-                              </div>
+                                    })}
+                                  </div>
+                              }
                             </div>
                           );
                         })}
