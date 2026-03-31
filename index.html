@@ -5809,7 +5809,8 @@ function _homeLowbedSectionHtml() {
   var plan = null;
   try { plan = JSON.parse(localStorage.getItem('dmc_lowbed_plan') || 'null'); } catch(e) {}
   var hasPlan = plan && plan.jobs && plan.jobs.length > 0;
-  if (!hasPlan) { plan = _homeLowbedFakeData(); hasPlan = true; }
+  // REMOVE fake lowbed data for all accounts: do not fallback to _homeLowbedFakeData
+  if (!hasPlan) { plan = { jobs: [] }; hasPlan = false; }
 
   var EQ_ICONS = { paver:'🟡', roller:'🔵', excavator:'🟠', dozer:'🟤', grader:'🟣', milling_machine:'⬛', loader:'🟢' };
 
@@ -5942,6 +5943,10 @@ function _homeAdminMobSectionsHtml() {
     '</div>' +
     '<div class="home-admin-sect-card" data-sect="week">' +
       _homeWeekScheduleWidget() +
+    '</div>' +
+    // Pinned Lowbed Moves card (toggleable)
+    '<div class="home-admin-sect-card" data-sect="lowbed">' +
+      _homeLowbedSectionHtml() +
     '</div>';
 
   // Reorderable sections (no extra title headers — each section has its own internal label)
