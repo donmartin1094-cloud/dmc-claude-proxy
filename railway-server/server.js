@@ -674,7 +674,14 @@ app.post('/mail/message', async (req, res) => {
           contentType: a.contentType || 'application/octet-stream'
         }))
       };
-      await client.messageFlagsAdd({ uid: parseInt(uid) }, ['\\Seen'], { uid: true });
+    }
+    // Mark as read AFTER the fetch loop completes — not mid-stream
+    if (result) {
+      try {
+        await client.messageFlagsAdd({ uid: parseInt(uid) }, ['\\Seen'], { uid: true });
+      } catch(e) {
+        console.warn('[Message] Could not mark as read:', e.message);
+      }
     }
     if (!result) return res.status(404).json({ error: 'Message not found' });
     res.json(result);
