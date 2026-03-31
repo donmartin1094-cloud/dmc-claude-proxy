@@ -7115,13 +7115,22 @@ function widgetBacklog() {
   const PAGE_SIZE = 10;
   const visible = active.slice(0, PAGE_SIZE);
   const overflow = active.length - PAGE_SIZE;
+  const today = new Date().toISOString().slice(0,10);
+  const jobTodayTons = j => {
+    if (!pavingSlips || !pavingSlips.length) return 0;
+    return pavingSlips.filter(sl => sl.date === today && (sl.jobId === j.id || sl.jobNum === (j.jobNum||j.number) || (j.name && sl.jobName && sl.jobName.toLowerCase() === j.name.toLowerCase()))).reduce((t,s)=>t+(parseFloat(s.tons)||0),0);
+  };
   const rows = active.length
-    ? visible.map(j => `
-        <div class="home-backlog-row">
+    ? visible.map(j => {
+        const tt = jobTodayTons(j);
+        return `
+        <div class="home-backlog-row" data-tonnage-job="${escHtml(j.id||'')}">
           <span class="home-backlog-num">${escHtml(j.jobNum||j.number||'—')}</span>
           <span class="home-backlog-name">${escHtml(j.name||j.jobName||'Unnamed')}</span>
+          ${tt > 0 ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--stripe);background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.25);border-radius:10px;padding:1px 7px;white-space:nowrap;">&#128202; ${tt.toFixed(1)}T</span>` : ''}
           <span class="home-backlog-status" style="color:${statusColors[j.jobStatus]||'var(--concrete-dim)'};background:${statusBgs[j.jobStatus]||'transparent'};">${j.jobStatus||'pending'}</span>
-        </div>`).join('') + (overflow > 0 ? `<div style="padding:8px 12px;font-size:11px;color:var(--concrete-dim);text-align:center;cursor:pointer;" onclick="switchTab('backlog')">+${overflow} more — Open Directory →</div>` : '')
+        </div>`;
+      }).join('') + (overflow > 0 ? `<div style="padding:8px 12px;font-size:11px;color:var(--concrete-dim);text-align:center;cursor:pointer;" onclick="switchTab('backlog')">+${overflow} more — Open Directory →</div>` : '')
     : '<div class="home-widget-empty">No active backlog jobs.</div>';
 
   return `<div class="home-widget">
@@ -21689,6 +21698,15 @@ function openJobFolder(jobId) {
   ov.className = 'jf-overlay';
   ov.addEventListener('click', e => { if (e.target === ov) closeJobFolder(); });
 
+  // Compute slip count for badge
+  _slipsLoad();
+  const _jfSlipCount = pavingSlips.filter(sl =>
+    (job.id   && sl.jobId   === job.id)   ||
+    (job.num  && sl.jobNum  === job.num)   ||
+    (job.name && sl.jobName && sl.jobName.toLowerCase() === job.name.toLowerCase())
+  ).length;
+  const _slipTabLabel = '📄 Paving Slips' + (_jfSlipCount > 0 ? ` <span style="background:rgba(245,197,24,0.2);color:var(--stripe);font-size:8px;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle;">${_jfSlipCount}</span>` : '');
+
   ov.innerHTML = `
     <div class="jf-panel">
       <div class="jf-panel-header">
@@ -21697,12 +21715,13 @@ function openJobFolder(jobId) {
           <div class="jf-panel-name">${escHtml(job.name||'Unnamed Job')}</div>
           <div class="jf-panel-gc">${escHtml(job.gc||'')}${job.awardingAuthority?' · '+escHtml(job.awardingAuthority):''}</div>
         </div>
+        <button onclick="_scanSlipForJob('${escHtml(job.id||'')}','${escHtml(job.name||'')}','${escHtml(job.num||'')}')" style="background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.3);border-radius:var(--radius);color:var(--stripe);font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📷 Scan Slip</button>
         <button onclick="closeJobFolder()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;padding:4px 8px;">✕</button>
       </div>
       <div class="jf-tabs" id="jfTabs">
         ${['overview','foreman','daily','equipment','aia','bills','compliance','fieldintel','slips','other'].map(t=>`
           <button class="jf-tab${_jfActiveTab===t?' active':''}" onclick="switchJfTab('${jobId}','${t}')">${
-            {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',slips:'📄 Paving Slips',other:'📎 Other Docs'}[t]
+            t === 'slips' ? _slipTabLabel : {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',other:'📎 Other Docs'}[t]
           }</button>`).join('')}
       </div>
       <div class="jf-body" id="jfBody">
@@ -21965,21 +21984,22 @@ function _jfRenderTab(job, tab) {
     const byDate = {};
     jobSlips.forEach(sl => { const d=sl.date||'Unknown'; if(!byDate[d])byDate[d]=[]; byDate[d].push(sl); });
     const sortedDates = Object.keys(byDate).sort().reverse();
+    const today = new Date().toISOString().slice(0,10);
     const fmtDL = d => { try{return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:'numeric'});}catch(e){return d;} };
     const fmtT  = n => (parseFloat(n)||0).toLocaleString('en-US',{maximumFractionDigits:2});
 
-    const totalTons = jobSlips.reduce((t,s)=>t+(parseFloat(s.tons)||0),0);
-    const byMix = {};
-    jobSlips.forEach(sl=>{const m=sl.mixType||'Other';byMix[m]=(byMix[m]||0)+(parseFloat(sl.tons)||0);});
-
     const foldersHTML = !sortedDates.length
-      ? `<div style="padding:30px;text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);">No paving slips on file for this job yet.<br><br>Add slips from the 🛢 Liquid Asphalt tab when editing an AIA Req.</div>`
+      ? `<div style="padding:30px;text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);">No paving slips on file for this job yet.<br><br>
+          <button onclick="_scanSlipForJob('${esc(job.id||'')}','${esc(job.name||'')}','${esc(job.num||'')}')" style="margin-top:12px;padding:8px 18px;background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.35);border-radius:var(--radius);color:var(--stripe);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;">📷 Scan First Slip</button>
+        </div>`
       : sortedDates.map(dateKey => {
           const daySlips = byDate[dateKey];
           const dayTons  = daySlips.reduce((t,s)=>t+(parseFloat(s.tons)||0),0);
           const dayMix   = {};
           daySlips.forEach(sl=>{const m=sl.mixType||'Other';dayMix[m]=(dayMix[m]||0)+(parseFloat(sl.tons)||0);});
           const mixBar   = Object.keys(dayMix).map(m=>`<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${escHtml(m)} <strong style="color:var(--stripe);">${fmtT(dayMix[m])}T</strong></span>`).join(' &nbsp; ');
+          const isToday  = dateKey === today;
+          const grpId    = 'jfSlipGrp_' + dateKey.replace(/-/g,'');
           const rows = daySlips.map(sl=>`
             <div style="display:flex;align-items:center;gap:10px;padding:6px 14px;border-bottom:1px solid rgba(255,255,255,0.04);">
               ${sl.photoUrl?`<img src="${escHtml(sl.photoUrl)}" style="width:38px;height:38px;object-fit:cover;border-radius:3px;border:1px solid var(--asphalt-light);cursor:pointer;" onclick="_laViewSlipPhoto('${sl.id}')">`
@@ -21989,29 +22009,27 @@ function _jfRenderTab(job, tab) {
                 <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);margin-top:2px;">${[sl.ticketNo?'#'+sl.ticketNo:'',sl.truckNum?'Truck '+sl.truckNum:'',sl.plant,sl.autoScanned?'🤖 AI Scanned':''].filter(Boolean).join(' · ')}</div>
               </div>
             </div>`).join('');
-          return `<div style="border:1px solid var(--asphalt-light);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
-            <div style="background:var(--asphalt);padding:9px 14px;display:flex;align-items:center;gap:10px;">
-              <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--white);font-weight:700;flex:1;">📅 ${escHtml(fmtDL(dateKey))}</span>
+          return `<div style="border:1px solid ${isToday?'rgba(245,197,24,0.25)':'var(--asphalt-light)'};border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
+            <div onclick="(function(){var b=document.getElementById('${grpId}');if(b)b.style.display=b.style.display==='none'?'block':'none';})()" style="background:${isToday?'rgba(245,197,24,0.08)':'var(--asphalt)'};padding:9px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
+              <span style="font-family:'DM Mono',monospace;font-size:11px;color:${isToday?'var(--stripe)':'var(--white)'};font-weight:700;flex:1;">${isToday?'⬤ ':''}📅 ${escHtml(fmtDL(dateKey))}</span>
               <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--stripe);font-weight:700;">${fmtT(dayTons)}T</span>
               <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">(${daySlips.length} slip${daySlips.length!==1?'s':''})</span>
+              <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);">▾</span>
             </div>
-            ${mixBar?`<div style="padding:3px 14px;background:rgba(0,0,0,0.12);border-bottom:1px solid rgba(255,255,255,0.04);">${mixBar}</div>`:''}
-            ${rows}
+            <div id="${grpId}" style="display:${isToday?'block':'none'};">
+              ${mixBar?`<div style="padding:3px 14px;background:rgba(0,0,0,0.12);border-bottom:1px solid rgba(255,255,255,0.04);">${mixBar}</div>`:''}
+              ${rows}
+            </div>
           </div>`;
         }).join('');
 
-    const mixSummary = Object.keys(byMix).map(m=>`<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${escHtml(m)} <strong style="color:var(--stripe);">${fmtT(byMix[m])}T</strong></span>`).join(' &nbsp;&nbsp; ');
-
     return `<div style="padding:0;">
-      <div style="padding:12px 16px;background:var(--asphalt);border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <span style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);">📄 Paving Slips</span>
-        <span style="background:rgba(245,197,24,0.15);color:var(--stripe);font-family:'DM Mono',monospace;font-size:8px;padding:1px 8px;border-radius:10px;font-weight:700;">${jobSlips.length} slip${jobSlips.length!==1?'s':''}</span>
-        ${jobSlips.length?`<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--stripe);font-weight:700;">${fmtT(totalTons)}T total</span>`:''}
-        ${mixSummary?`<span style="color:var(--concrete-dim);">|</span>${mixSummary}`:''}
+      <div style="padding:10px 14px;background:var(--asphalt);border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;gap:10px;">
+        <button onclick="_scanSlipForJob('${esc(job.id||'')}','${esc(job.name||'')}','${esc(job.num||'')}')" style="padding:6px 14px;background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.35);border-radius:var(--radius);color:var(--stripe);font-family:'DM Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.3px;">📷 Scan Slip</button>
         <div style="flex:1;"></div>
-        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);">Add slips via the AIA Req → 🛢 Liquid Asphalt tab</span>
+        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);">${jobSlips.length} slip${jobSlips.length!==1?'s':''} on file</span>
       </div>
-      <div style="padding:12px 16px;">${foldersHTML}</div>
+      <div style="padding:12px 16px;">${renderTonnageTracker(job.id, job.num, job.name)}${foldersHTML}</div>
     </div>`;
   }
 
@@ -33337,6 +33355,106 @@ function _laViewSlipPhoto(slipId) {
   document.body.appendChild(ov);
 }
 
+// Tonnage tracker — renders a stats card for a job's paving slips
+function renderTonnageTracker(jobId, jobNum, jobName) {
+  _slipsLoad();
+  var today = new Date().toISOString().slice(0,10);
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId || j.num === jobNum; });
+  var targetTons = (job && job.targetTons) ? parseFloat(job.targetTons) : 0;
+  var jobSlips = pavingSlips.filter(function(sl){
+    return (jobId   && sl.jobId   === jobId)   ||
+           (jobNum  && sl.jobNum  === jobNum)   ||
+           (jobName && sl.jobName && sl.jobName.toLowerCase() === (jobName||'').toLowerCase());
+  });
+  var todaySlips = jobSlips.filter(function(sl){ return sl.date === today; });
+  var totalTons  = jobSlips.reduce(function(t,s){ return t+(parseFloat(s.tons)||0); }, 0);
+  var todayTons  = todaySlips.reduce(function(t,s){ return t+(parseFloat(s.tons)||0); }, 0);
+  var byMix = {};
+  jobSlips.forEach(function(sl){ var m=sl.mixType||'Other'; byMix[m]=(byMix[m]||0)+(parseFloat(sl.tons)||0); });
+  var fmtT = function(n){ return (parseFloat(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}); };
+  var pct  = targetTons > 0 ? Math.min(100, (totalTons/targetTons)*100) : 0;
+  var admin = isAdmin();
+  var mixBars = Object.keys(byMix).map(function(m){
+    var w = totalTons > 0 ? Math.round((byMix[m]/totalTons)*100) : 0;
+    return '<div style="margin-bottom:4px;">'+
+      '<div style="display:flex;justify-content:space-between;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:2px;">'+
+        '<span>'+escHtml(m)+'</span><span style="color:var(--stripe);">'+fmtT(byMix[m])+'T</span>'+
+      '</div>'+
+      '<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">'+
+        '<div style="height:100%;width:'+w+'%;background:rgba(245,197,24,0.6);border-radius:2px;"></div>'+
+      '</div></div>';
+  }).join('');
+  return '<div data-tonnage-job="'+escHtml(jobId||jobNum||'')+'" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
+      '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:var(--stripe);">&#128202; Tonnage Tracker</span>'+
+      '<div style="flex:1;"></div>'+
+      (admin ? '<button onclick="_setJobTargetTons(\''+escHtml(jobId||'')+'\',\''+escHtml(jobNum||'')+'\',\''+escHtml(jobName||'')+'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 8px;cursor:pointer;">&#9881; Set Target</button>' : '')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'+
+      '<div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:var(--radius);padding:8px 4px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--stripe);">'+fmtT(todayTons)+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:.5px;">Today Tons</div>'+
+      '</div>'+
+      '<div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:var(--radius);padding:8px 4px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--white);">'+todaySlips.length+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:.5px;">Today Loads</div>'+
+      '</div>'+
+      '<div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:var(--radius);padding:8px 4px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--stripe);">'+fmtT(totalTons)+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:.5px;">Total Tons</div>'+
+      '</div>'+
+      '<div style="text-align:center;background:rgba(0,0,0,0.2);border-radius:var(--radius);padding:8px 4px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--white);">'+jobSlips.length+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:.5px;">Total Loads</div>'+
+      '</div>'+
+    '</div>'+
+    (targetTons > 0 ?
+      '<div style="margin-bottom:10px;">'+
+        '<div style="display:flex;justify-content:space-between;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:4px;">'+
+          '<span>vs Contracted '+fmtT(targetTons)+'T</span>'+
+          '<span style="color:'+(pct>=100?'#7ecb8f':'var(--stripe)')+';">'+Math.round(pct)+'%</span>'+
+        '</div>'+
+        '<div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">'+
+          '<div style="height:100%;width:'+Math.round(pct)+'%;background:'+(pct>=100?'rgba(126,203,143,0.8)':'rgba(245,197,24,0.7)')+';border-radius:4px;"></div>'+
+        '</div>'+
+      '</div>'
+    : '')+
+    (mixBars ? '<div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">'+mixBars+'</div>' : '')+
+  '</div>';
+}
+
+// Set contracted tonnage target on a job
+function _setJobTargetTons(jobId, jobNum, jobName) {
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId || j.num === jobNum; });
+  if (!job) return;
+  var cur = job.targetTons ? String(job.targetTons) : '';
+  var val = window.prompt('Enter contracted/target tonnage for ' + (jobNum||jobName||'this job') + ':', cur);
+  if (val === null) return;
+  var tons = parseFloat(val);
+  if (isNaN(tons) || tons < 0) { alert('Invalid tonnage — enter a number.'); return; }
+  job.targetTons = tons;
+  saveBacklog();
+  // Refresh any visible trackers
+  document.querySelectorAll('[data-tonnage-job]').forEach(function(el){
+    var jid = el.getAttribute('data-tonnage-job');
+    if (jid === jobId || jid === jobNum) {
+      var fresh = document.createElement('div');
+      fresh.innerHTML = renderTonnageTracker(jobId, jobNum, jobName);
+      el.replaceWith(fresh.firstElementChild);
+    }
+  });
+}
+
+// Standalone slip scan — opens slip modal with a specific job pre-loaded
+function _scanSlipForJob(jobId, jobName, jobNum) {
+  window._slipScanContext = { jobId: jobId, jobName: jobName, jobNum: jobNum };
+  _laUploadSlipModal(null);
+  setTimeout(function(){
+    var inp = document.getElementById('laSlipFileIn');
+    if (inp) inp.click();
+  }, 200);
+}
+
 // Upload slip modal — manually add a slip with optional photo
 function _laUploadSlipModal(prefillDate) {
   document.getElementById('laSlipModal')?.remove();
@@ -33479,11 +33597,14 @@ function _laSlipSave() {
   var notes   = (document.getElementById('lsNotes') ||{}).value || '';
 
   _slipsLoad();
+  // Context override from standalone scan button (_scanSlipForJob)
+  var _ctx = window._slipScanContext || {};
+  window._slipScanContext = null;
   var slip = {
     id:           'slip_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-    jobId:        s.backlogJobId || null,
-    jobName:      s.projectName || '',
-    jobNum:       s.dmcJobNo    || '',
+    jobId:        _ctx.jobId   || s.backlogJobId || null,
+    jobName:      _ctx.jobName || s.projectName  || '',
+    jobNum:       _ctx.jobNum  || s.dmcJobNo     || '',
     reqId:        s.editId      || null,
     date:         date,
     mixType:      mixType,
@@ -33501,7 +33622,45 @@ function _laSlipSave() {
   _slipsSave();
   window._laSlipPhotoB64 = null;
 
+  // Auto-activate job on first slip of the day
+  if (slip.jobId) {
+    var _slJob = (backlogJobs||[]).find(function(j){ return j.id === slip.jobId; });
+    if (_slJob && (!_slJob.jobProgress || _slJob.jobProgress === 'none')) {
+      _slJob.jobProgress = 'active';
+      saveBacklog();
+    }
+  }
+
   document.getElementById('laSlipModal')?.remove();
+
+  // Daily summary toast
+  (function(){
+    var _today = new Date().toISOString().slice(0,10);
+    var _daySlips = pavingSlips.filter(function(sl){
+      return sl.date === _today && (sl.jobId === slip.jobId || sl.jobNum === slip.jobNum);
+    });
+    var _dayTons = _daySlips.reduce(function(t,s){ return t+(parseFloat(s.tons)||0); }, 0);
+    var _toast = document.createElement('div');
+    _toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.96);border:1px solid rgba(245,197,24,0.35);border-radius:var(--radius);padding:10px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);z-index:10001;min-width:240px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.5);pointer-events:none;';
+    _toast.innerHTML = '&#10003; Slip saved &nbsp;&middot;&nbsp; Today: <strong>'+_dayTons.toFixed(2)+'T</strong> in '+_daySlips.length+' load'+(_daySlips.length!==1?'s':'');
+    document.body.appendChild(_toast);
+    setTimeout(function(){ _toast.remove(); }, 3500);
+  })();
+
+  // Refresh any visible tonnage trackers for this job
+  (function(){
+    var _jid = slip.jobId || slip.jobNum;
+    if (!_jid) return;
+    document.querySelectorAll('[data-tonnage-job]').forEach(function(el){
+      var attr = el.getAttribute('data-tonnage-job');
+      if (attr === slip.jobId || attr === slip.jobNum) {
+        var fresh = document.createElement('div');
+        fresh.innerHTML = renderTonnageTracker(slip.jobId, slip.jobNum, slip.jobName);
+        el.replaceWith(fresh.firstElementChild);
+      }
+    });
+  })();
+
   // Re-render the entire LA tab to show the new slip in the right panel
   var tc = document.getElementById('aiaTabContent');
   if (tc) tc.innerHTML = _aiaRenderLA();
@@ -36001,7 +36160,7 @@ async function fbLoadAll() {
                 else if (key === 'truck_pricing') { truckPricing = { ...truckPricing, ...val }; }
                 else if (key === 'aia_reqs') { aiaReqs = Array.isArray(val) ? val : aiaReqs; }
                 else if (key === 'bills_in_progress') { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); }
-                else if (key === 'paving_slips')      { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); }
+                else if (key === 'paving_slips')      { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
                 else if (key === 'sched_queue')  { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
         else if (key === 'plants')      { plantsList = val; }
         else if (key === 'holidays')    { holidays = new Set(Array.isArray(val) ? val : []); localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays])); }
@@ -36350,7 +36509,7 @@ async function initApp(username) {
               else if (key === 'theme')            { pendingTheme = val; applyThemeVars(val); localStorage.setItem(THEME_KEY, JSON.stringify(val)); }
               else if (key === 'aia_reqs')            { aiaReqs = Array.isArray(val) ? val : aiaReqs; if (activeTab === 'apMix') renderInvoiceTracker(); }
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker(); }
-              else if (key === 'paving_slips')       { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); }
+              else if (key === 'paving_slips')       { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
               else if (key === 'daily_orders')     { dailyOrders = val; if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports(); }
               else if (key === 'lowbed_plan') {
