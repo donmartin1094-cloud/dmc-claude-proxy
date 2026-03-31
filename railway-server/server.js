@@ -43,6 +43,32 @@ function makeImap(user, pass) {
   });
 }
 
+// ── Auth login ──────────────────────────────────────────────────────────────
+app.post('/auth-login', (req, res) => {
+  const body = req.body || {};
+  const login = (body.username || body.login || '').trim();
+  const password = (body.password || '').trim();
+  if (!login || !password) return res.status(400).json({ error: 'Missing credentials' });
+
+  const STOCK_PASSWORD = 'DMCWelcome2026!';
+  const ACCOUNTS = {
+    'dj':          'Caboverde1094!',
+    'donmartin':   'DMCWelcome2026!',
+    'nightmare57': 'Chevy1970',
+    'Nightmare57': 'Chevy1970',
+    'igiron':      'DMCWelcome2026!',
+    'IGiron':      'DMCWelcome2026!',
+    'ATow':        'DMCTow2025',
+    'Christian':   'DMCWelcome2026!',
+    'DSouza':      'Pestario86!!',
+  };
+  const uLower = login.toLowerCase();
+  const matchKey = Object.keys(ACCOUNTS).find(k => k.toLowerCase() === uLower);
+  const valid = matchKey && (ACCOUNTS[matchKey] === password || password === STOCK_PASSWORD);
+  if (valid) return res.json({ ok: true, success: true, username: matchKey });
+  res.status(401).json({ error: 'Invalid credentials' });
+});
+
 // ── Claude proxy ────────────────────────────────────────────────────────────
 app.post('/claude', async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
@@ -92,7 +118,69 @@ app.post('/claude', async (req, res) => {
 
 // ── Plans scan: AI summary generation with SSE streaming ────────────────────
 function buildSummaryPrompt(pageExtracts, fileList) {
-  return `You are an expert HMA pavement estimator. The following are per-sheet extractions from civil plan PDFs (${fileList}). Consolidate them into one complete final analysis — deduplicate items that appear on multiple sheets, resolve any conflicts, and produce the full structured result.
+  return `You are an expert HMA pavement estimator for a paving contractor. Files: ${fileList}
+
+Analyze these civil plan extractions and produce a complete quantity takeoff. 
+
+HMA IDENTIFICATION — extract ALL items matching these criteria:
+
+INCLUDE these materials:
+- HMA, Hot Mix Asphalt, Bituminous Concrete, BC
+- Superpave, dense graded, open graded
+- Friction course, leveling course, binder course
+- Base course, intermediate course, surface course
+- Type I, Type II, Type III asphalt mixes
+- 19mm, 12.5mm, 9.5mm SP or SM mixes
+- SBC37.5 — this is a base layer asphalt mix, always include and flag as BASE COURSE
+- Bridge mix, bridge deck asphalt, waterproofing membrane asphalt
+- Asphalt sidewalks and shared use paths (include but label group as "Asphalt Sidewalk" or "Shared Use Path" separately from roadway)
+- Bituminous berm, bituminous concrete berm, BC berm — calculate linear feet AND tonnage (use 0.1 SY per LF as standard conversion, then apply tons formula)
+- Tack coat, prime coat between asphalt lifts
+- Milling of existing asphalt — identify ALL areas requiring milling, note depth of mill, calculate SF/SY of milling area separately
+- Reclaiming, pulverizing existing pavement
+- Any overlay, infrared repair, or wedge/leveling course
+
+MILLING IDENTIFICATION:
+- Look for notes like "mill X inches", "cold plane X inches", "remove existing pavement"
+- Calculate milling quantities in SY same as paving quantities
+- Flag milling depth separately — milling depth is NOT the same as paving depth
+- If milling depth matches a lift thickness, note it as a possible remove and replace
+
+BITUMINOUS BERM:
+- Look for BC berm, bituminous berm, asphalt berm on plan sheets and details
+- Quantity in linear feet (LF) as stated or calculated from plan dimensions
+- Convert to tons using: LF × 0.1 SY/LF × 0.056 × depth_inches
+- Standard berm depth is 4 inches unless otherwise noted
+
+DO NOT extract:
+- Portland cement concrete, PCC, reinforced concrete
+- Brick, pavers, cobblestone, unit masonry of any kind
+- Gravel, crushed stone base (unless directly labeled as part of HMA pavement section)
+- Subbase, subgrade, fill, earthwork
+- Landscaping, loam, seed, topsoil
+- Drainage structures, catch basins, utilities
+- Signage, pavement markings (extract separately only if tied to milling/paving scope)
+- Concrete sidewalks, concrete curb, concrete gutter
+
+PAVEMENT SECTION IDENTIFICATION:
+- Look specifically for TYPICAL PAVEMENT SECTION sheets or details
+- Correct section = roadway/travel lane/parking — NOT concrete sidewalk, NOT brick paver detail
+- If multiple typical sections exist, extract roadway section first, then asphalt sidewalk/path separately
+- If you see SBC37.5 in a section, that is the base course — flag it clearly and include full depth
+- Depths from roadway typical section are correct — never use sidewalk or pedestrian detail depths for roadway quantities
+- Flag any conflict between typical section depths and quantity table depths in issues[]
+
+QUANTITY CALCULATION RULES:
+- Extract all dimensions from roadway plans (lengths, widths, areas)
+- Extract all HMA lift depths from typical sections and cross sections
+- Calculate SF = length (ft) × width (ft) for each zone/segment
+- Calculate SY = SF ÷ 9
+- Calculate Tons = SY × 0.056 × depth_inches for each lift
+- If stated quantities exist on the plans, record them as statedQty
+- Always show your calculated quantities as calcQty
+- If dimensions are partially readable, flag as UNVERIFIED but still calculate
+- Break quantities out by lift/layer (e.g. base course, intermediate course, surface course)
+- If multiple segments or zones exist, calculate each separately then sum
 
 ${pageExtracts}
 
@@ -100,14 +188,42 @@ Return ONLY valid JSON (no markdown, no backticks):
 {
   "projectMeta": { "projectName": "...", "contractNumber": "...", "projectAddress": "...", "awardingAuthority": "..." },
   "summary": "Detailed 3-5 paragraph scope summary covering all HMA items, lift sequence, mix types, depths, and special items.",
-  "quantities": [{ "group": "...", "item": "...", "spec": "...", "depth": "...", "statedQty": "...", "calcQty": "...", "unverified": false }],
+  "quantities": [
+    {
+      "group": "HMA Surface Course | HMA Intermediate | HMA Base | Other",
+      "item": "item description",
+      "spec": "mix designation exactly as written",
+      "depth": "depth in inches as written on plans",
+      "depthInches": 0.0,
+      "sf": 0.0,
+      "statedQty": "SY as stated on plans or null",
+      "calcSY": 0.0,
+      "calcTons": 0.0,
+      "dimensions": "length x width or area description used to calculate",
+      "unverified": false
+    }
+  ],
   "issues": [{ "type": "UNVERIFIED | MISSING | CONFLICT | ASSUMED", "item": "...", "detail": "..." }],
-  "relevantSheets": ["sheet numbers/names with HMA content"],
+  "relevantSheets": {
+    "hmaSheets": ["sheet numbers containing HMA paving scope, typical sections, pavement details"],
+    "millingSheets": ["sheet numbers showing milling limits or notes"],
+    "gradingSheets": ["sheet numbers for grading plans — used to confirm elevations and depths"],
+    "profileSheets": ["sheet numbers for plan and profile — used to confirm lengths and grades"],
+    "trafficMarkingSheets": ["sheet numbers for traffic control, pavement markings, and striping plans"],
+    "bermSheets": ["sheet numbers showing bituminous berm details or locations"],
+    "bridgeSheets": ["sheet numbers for bridge deck or structure paving if applicable"]
+  },
   "materials": "Full pavement section bottom to top with each lift, mix, and depth.",
   "fieldSummary": "3-5 sentences for the foreman covering lifts, special items, and field notes."
 }
-
-RULES: Never invent quantities. Use null if unreadable. Report mix designations exactly as written.`;
+RULES:
+- Never invent dimensions. Use null if unreadable but flag it
+- Show all math — include dimensions field so calculations can be verified
+- Report mix designations exactly as written on plans
+- Tons formula: SY × 0.056 × depth_inches
+- If a quantity table exists on the plans, extract stated quantities AND independently calculate
+- When in doubt whether an item is HMA — include it but mark unverified: true
+- relevantSheets: include sheet number AND title where readable. If a sheet covers multiple categories, list it in all. Grading, profile, traffic/marking sheets are always relevant. If a sheet number is partially readable, note (unverified) in parentheses`;
 }
 
 app.post('/api/plans/scan', async (req, res) => {
