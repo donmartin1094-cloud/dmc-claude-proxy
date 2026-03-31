@@ -3324,21 +3324,21 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   {/* ── Header ── */}
                   <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
                     <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa'}}>🚚 LOWBED MOVES</div>
-                    {lowbedGroups.length > 0 && (
+                    {(() => { const n = lowbedGroups.filter(g => g.manual === true && !g.deviceId).length; return n > 0 ? (
                       <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(167,139,250,0.7)',background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:'8px',padding:'1px 6px'}}>
-                        {lowbedGroups.length} move{lowbedGroups.length !== 1 ? 's' : ''}
+                        {n} move{n !== 1 ? 's' : ''}
                       </span>
-                    )}
+                    ) : null; })()}
                   </div>
                   {/* ── Empty state ── */}
-                  {lowbedGroups.length === 0 ? (
+                  {(() => { const manualMoves = lowbedGroups.filter(g => g.manual === true && !g.deviceId); return manualMoves.length === 0 ? (
                     <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 0',gap:'8px'}}>
                       <span style={{fontSize:'28px',opacity:0.35}}>🚛</span>
                       <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center'}}>No active lowbed moves</div>
                     </div>
                   ) : (
                     <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
-                      {lowbedGroups.map((grp) => {
+                      {manualMoves.map((grp) => {
                         const eqNames = (grp.items||[]).map(e=>(EQ_ICONS[e.type]||'📦')+' '+(e.name||e.type)).join(', ');
                         const hasDriver = !!grp.driverName;
                         return (
@@ -3384,7 +3384,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                         );
                       })}
                     </div>
-                  )}
+                  ); })()}
                   </>
                 </div>
 
