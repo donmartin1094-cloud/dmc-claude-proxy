@@ -26853,6 +26853,13 @@ var _mailFolderNm = 'Inbox';
 var _mailMessages = [];
 var _mailOpenUid  = null;
 
+function escapeSrcdoc(html) {
+  return (html || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function _mailRailBase() {
   var u = (localStorage.getItem('dmc_claude_proxy_url') || 'https://dmc-claude-proxy-production.up.railway.app/claude').trim();
   // Strip trailing slash, then strip /claude suffix
@@ -27060,7 +27067,7 @@ function _mailBuildApp(wrap, c) {
         '</div>'+
 
         // Message list
-        '<div id="mailList" style="width:300px;flex-shrink:0;background:var(--asphalt-mid);border-right:1px solid var(--asphalt-light);display:flex;flex-direction:column;overflow:hidden;">'+
+        '<div id="mailList" style="width:260px;flex-shrink:0;background:var(--asphalt-mid);border-right:1px solid var(--asphalt-light);display:flex;flex-direction:column;overflow:hidden;">'+
           '<div id="mailListHdr" style="flex-shrink:0;padding:8px 14px;border-bottom:1px solid var(--asphalt-light);font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Inbox</div>'+
           '<div id="mailListBody" style="flex:1;overflow-y:auto;">'+
             '<div style="padding:20px;text-align:center;color:var(--concrete-dim);font-size:11px;">Loading…</div>'+
@@ -27068,7 +27075,7 @@ function _mailBuildApp(wrap, c) {
         '</div>'+
 
         // Message viewer
-        '<div id="mailViewer" style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--asphalt-mid);">'+
+        '<div id="mailViewer" style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--asphalt-mid);min-height:calc(100vh - 200px);">'+
           '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;">'+
             'Select a message to read'+
           '</div>'+
@@ -27155,11 +27162,11 @@ function _mailLoadMessages(folder, folderName) {
         ' onmouseover="this.style.background=\'rgba(255,255,255,0.06)\'" onmouseout="this.style.background=\''+(unread?'rgba(245,197,24,0.04)':'')+'\'">'+
         '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'+
           '<span id="mailDot_'+m.uid+'" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;'+(unread?'background:var(--stripe);':'')+'"></span>'+
-          '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:11px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
+          '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:12px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
           '<span id="mailFlag_'+m.uid+'" style="color:var(--stripe);font-size:10px;'+(flagged?'':'display:none;')+'">★</span>'+
           '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">'+escHtml(dt)+'</div>'+
         '</div>'+
-        '<div id="mailSubj_'+m.uid+'" style="font-size:11px;color:'+(unread?'var(--white)':'var(--concrete-dim)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:12px;">'+escHtml(subj)+'</div>'+
+        '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
       '</div>';
     }).join('');
   }).catch(function(err) {
@@ -27215,11 +27222,20 @@ function _mailOpenMessage(uid, folder) {
           (hasAtt ? '<div id="mailAttachmentBar" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>' : '')+
         '</div>'+
       '</div>'+
-      '<div style="flex:1;overflow:hidden;">'+
-        (msg.html
-          ? '<iframe srcdoc="'+msg.html.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" style="width:100%;height:100%;border:none;" sandbox="allow-same-origin allow-popups"></iframe>'
-          : '<div style="padding:18px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);white-space:pre-wrap;overflow-y:auto;height:100%;box-sizing:border-box;">'+escHtml(msg.text||'(empty)')+'</div>')+
+      '<div id="_mailBodyWrap" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">'+
+        (!msg.html ? '<div style="padding:18px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);white-space:pre-wrap;overflow-y:auto;flex:1;min-height:0;box-sizing:border-box;">'+escHtml(msg.text||'(empty)')+'</div>' : '')+
       '</div>';
+    // Inject iframe via DOM so srcdoc is set as a property — avoids all HTML attribute escaping issues
+    if (msg.html) {
+      var wrap = document.getElementById('_mailBodyWrap');
+      if (wrap) {
+        var iframe = document.createElement('iframe');
+        iframe.style.cssText = 'width:100%;flex:1;min-height:0;border:none;display:block;';
+        iframe.setAttribute('sandbox', 'allow-same-origin allow-popups');
+        wrap.appendChild(iframe);
+        iframe.srcdoc = msg.html;
+      }
+    }
     if (hasAtt) { _mailRenderAttachments(msg.attachments, uid, folder); }
   }).catch(function(err) {
     if (v) v.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(err.message)+'</div>';
