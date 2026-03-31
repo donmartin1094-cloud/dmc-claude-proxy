@@ -35629,8 +35629,10 @@ const DEFAULT_TEAM_ACCOUNTS = [
   { username:'DSouza',      email:'danasouza@donmartincorp.com',          password:'Pestario86!!',   role:'staff',    displayName:'Dana' },
   { username:'DGomez',      email:'dgomez1085@gmail.com',                 password:'JenDavis1085!!', role:'ar_staff', displayName:'Donna' },
   // ── Lowbed / Hybrid Drivers ─────────────────────────────────────────────────
-  { username:'Nightmare57', email:'ericsylvia57@gmail.com',               password:'Chevy1970',      role:'lowbed_driver', displayName:'Eric Sylvia',  driverTypes:['lowbed'] },
-  { username:'IGiron',      email:'igiron@donmartincorp.com',             password:STOCK_PASSWORD,   role:'lowbed_driver', displayName:'Ingrid Giron', driverTypes:['lowbed','mixtruck'] },
+  { username:'Nightmare57', email:'ericsylvia57@gmail.com',               password:'Chevy1970',      role:'lowbed_driver',        displayName:'Eric Sylvia',      driverTypes:['lowbed'] },
+  { username:'IGiron',      email:'igiron@donmartincorp.com',             password:STOCK_PASSWORD,   role:'lowbed_driver',        displayName:'Ingrid Giron',     driverTypes:['lowbed','mixtruck'] },
+  // ── Rental Lowbed Drivers ─────────────────────────────────────────────────
+  { username:'ATow',        password:'DMCTow2025',                        role:'rental_lowbed_driver', displayName:"Andy's Towing" },
 ];
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog

@@ -1324,7 +1324,7 @@ function App() {
   const isDesktopUser = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
-      return ['nightmare57','ericsylvia57@gmail.com','igiron','igiron@donmartincorp.com','dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
+      return ['nightmare57','ericsylvia57@gmail.com','igiron','igiron@donmartincorp.com','dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com','atow'].includes(u);
     } catch(e) { return false; }
   })();
   const isIgiron = (() => {
@@ -1369,6 +1369,9 @@ function App() {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
       return ['nightmare57','ericsylvia57@gmail.com'].includes(u);
     } catch(e) { return false; }
+  })();
+  const isATow = (() => {
+    try { return (localStorage.getItem('dmc_u') || '').toLowerCase() === 'atow'; } catch(e) { return false; }
   })();
   const [hdMobile, setHdMobile] = useState(() => window.innerWidth < 768);
   useEffect(() => {
@@ -2648,7 +2651,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
         {/* ── Tab Bar — flush directly below brand row ── */}
         <div className="scrollbar-hide" style={{display:'flex',overflowX:'auto',background:'var(--asphalt-mid)',padding:'0 4px',marginTop:'6px'}}>
-          {TABS.map(t => {
+          {TABS.filter(t => !(isATow && t === 'Master Schedule')).map(t => {
             const _activeCount = t === 'Conflicts' ? planConflicts.filter(c => {
               if (c._planConflict) {
                 if (!lowbedPlan || !c._primaryMove) return true;
@@ -3259,7 +3262,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           <div style={{display:'flex',flexWrap:'wrap',minHeight:'calc(100vh - 120px)',background:'var(--asphalt)'}}>
 
             {/* ── LEFT COLUMN: GPS Map + Device List ── */}
-            <div style={{flex: (isAdminUser || isNightmare57 || hdMobile) ? '1 1 100%' : isDesktopUser ? '1 1 65%' : '1 1 54%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
+            <div style={{flex: (isAdminUser || isNightmare57 || hdMobile) ? '1 1 100%' : isATow ? '0 0 50%' : isDesktopUser ? '1 1 65%' : '1 1 54%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
 
               {/* ── Equipment GPS Map + List ── */}
               <div style={{background:'var(--asphalt-mid)',height:'100%'}}>
@@ -3623,7 +3626,40 @@ Be specific, practical, and flag any uncertainties clearly.`;
                 </div>
               )}
 
-              {hdMobile && gpsDevices.length > 0 && (
+              {/* ATow mobile lowbed card */}
+              {hdMobile && isATow && (() => {
+                const _rL = (val) => { if (!val) return '—'; if (val==='__garage__') return 'Garage'; const job=jobList.find(j=>String(j.id)===String(val)||String(j.num)===String(val)); if (job) return (job.num||job.id)+(job.name?' — '+job.name:''); if (/^\d{10,}$/.test(String(val))) return 'Job '+String(val); return val; };
+                const _si2 = (s) => { if (s==='complete') return {label:'Complete',color:'#7ecb8f',bg:'rgba(126,203,143,0.12)',border:'rgba(126,203,143,0.3)'}; if (s==='in_progress') return {label:'In Progress',color:'#5ab4f5',bg:'rgba(90,180,245,0.12)',border:'rgba(90,180,245,0.3)'}; if (s==='cancelled') return {label:'Cancelled',color:'#d94f3d',bg:'rgba(217,79,61,0.12)',border:'rgba(217,79,61,0.3)'}; return {label:'Pending',color:'#f5c518',bg:'rgba(245,197,24,0.12)',border:'rgba(245,197,24,0.3)'}; };
+                const atowMoves2 = lowbedGroups.filter(g=>g.manual===true&&!g.deviceId&&(g.driverName==='ATow'||g.driverName==="Andy's Towing"));
+                return (<div style={{borderTop:'1px solid var(--asphalt-light)',padding:'12px 14px'}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',marginBottom:'10px'}}>🚚 YOUR ASSIGNED MOVES</div>
+                  {atowMoves2.length === 0 ? (
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'24px 0',gap:'6px'}}>
+                      <span style={{fontSize:'24px',opacity:0.35}}>🚛</span>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center'}}>No moves currently assigned to Andy's Towing</div>
+                    </div>
+                  ) : atowMoves2.map(grp => {
+                    const si=_si2(grp.status||'pending'); const isExp=expandedMoves.has(grp.id);
+                    const toggleExp=()=>setExpandedMoves(prev=>{const n=new Set(prev);n.has(grp.id)?n.delete(grp.id):n.add(grp.id);return n;});
+                    return (<div key={grp.id} style={{background:'rgba(20,20,35,0.8)',border:'1px solid rgba(90,180,245,0.15)',borderRadius:'7px',overflow:'hidden',marginBottom:'6px'}}>
+                      <div onClick={toggleExp} style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 10px',cursor:'pointer',userSelect:'none'}}>
+                        {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0}}>{grp.date}</span>}
+                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{_rL(grp.from)} → {_rL(grp.to)}</span>
+                        <div style={{flexShrink:0,padding:'1px 6px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:si.color}}>{si.label}</div>
+                        <span style={{flexShrink:0,color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExp?'rotate(180deg)':'rotate(0)',transition:'transform 0.15s'}}>▼</span>
+                      </div>
+                      {isExp && (<div style={{borderTop:'1px solid rgba(90,180,245,0.1)',padding:'8px 10px',display:'flex',flexDirection:'column',gap:'6px'}}>
+                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#c0d8f0'}}>{_rL(grp.from)} → {_rL(grp.to)}</div>
+                        {(grp.items||[]).map(it=><div key={it.id} style={{display:'flex',alignItems:'center',gap:'5px',padding:'2px 4px'}}><span style={{fontSize:'10px'}}>{EQ_ICONS[it.type]||'📦'}</span><span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0'}}>{it.name||it.type}</span></div>)}
+                        {grp.notes && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',fontStyle:'italic'}}>📝 {grp.notes}</div>}
+                        {grp.deadline && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0392b',fontWeight:700}}>⚠ Due {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>}
+                      </div>)}
+                    </div>);
+                  })}
+                </div>);
+              })()}
+
+              {hdMobile && !isATow && gpsDevices.length > 0 && (
                 <div
                   onClick={() => setHdDevicesOpen(v => !v)}
                   style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid var(--asphalt-light)',cursor:'pointer',userSelect:'none',background:'var(--asphalt)'}}>
@@ -3654,7 +3690,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
               )}
 
               {/* Device list — grouped by OneStepGPS group */}
-              {(!hdMobile || hdDevicesOpen) && (() => {
+              {!isATow && (!hdMobile || hdDevicesOpen) && (() => {
                 const visibleDevices = gpsDevices.filter(d => !hiddenDeviceIds.has(d.device_id));
                 const groupMap = {};
                 visibleDevices.forEach(dev => {
@@ -3783,7 +3819,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
             </div>
 
             {/* ── RIGHT COLUMN: for isDesktopUser → schedule/hours + KPI strip; for others → standard ── */}
-            {isDesktopUser && !isAdminUser && !isNightmare57 && !hdMobile && (() => {
+            {isDesktopUser && !isAdminUser && !isNightmare57 && !isATow && !hdMobile && (() => {
               return (
                 <div style={{flex:'0 0 35%',maxWidth:'35%',minWidth:'240px',overflowY:'auto',padding:'14px',display:'flex',flexDirection:'column',gap:'14px',boxSizing:'border-box',order:2}}>
 
@@ -3807,6 +3843,79 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   {/* Daily Haul Assignment — Ingrid only */}
                   {isIgiron && <DailyHaulWidget driverKey="igiron" />}
 
+                </div>
+              );
+            })()}
+
+            {/* ── ATow right column — assigned lowbed moves only, read-only ── */}
+            {isATow && !hdMobile && (() => {
+              const _resolveLoc = (val) => {
+                if (!val) return '—';
+                if (val === '__garage__') return 'Garage';
+                const job = jobList.find(j => String(j.id)===String(val)||String(j.num)===String(val));
+                if (job) return (job.num||job.id)+(job.name?' — '+job.name:'');
+                if (/^\d{10,}$/.test(String(val))) return 'Job '+String(val);
+                return val;
+              };
+              const _si = (s) => {
+                if (s==='complete')    return {label:'Complete',    color:'#7ecb8f',bg:'rgba(126,203,143,0.12)',border:'rgba(126,203,143,0.3)'};
+                if (s==='in_progress') return {label:'In Progress', color:'#5ab4f5',bg:'rgba(90,180,245,0.12)', border:'rgba(90,180,245,0.3)' };
+                if (s==='cancelled')   return {label:'Cancelled',   color:'#d94f3d',bg:'rgba(217,79,61,0.12)',  border:'rgba(217,79,61,0.3)'  };
+                return                        {label:'Pending',     color:'#f5c518',bg:'rgba(245,197,24,0.12)', border:'rgba(245,197,24,0.3)' };
+              };
+              const atowMoves = lowbedGroups.filter(g => g.manual===true && !g.deviceId && (g.driverName==='ATow'||g.driverName==="Andy's Towing"));
+              return (
+                <div style={{flex:'0 0 50%',maxWidth:'50%',minWidth:'260px',overflowY:'auto',padding:'14px',boxSizing:'border-box',order:2}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',marginBottom:'12px'}}>🚚 YOUR ASSIGNED MOVES</div>
+                  {atowMoves.length === 0 ? (
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 0',gap:'8px'}}>
+                      <span style={{fontSize:'28px',opacity:0.35}}>🚛</span>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center'}}>No moves currently assigned to Andy's Towing</div>
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                      {atowMoves.map(grp => {
+                        const isExp = expandedMoves.has(grp.id);
+                        const si = _si(grp.status||'pending');
+                        const eqCount = (grp.items||[]).length;
+                        const toggleExp = () => setExpandedMoves(prev => { const n=new Set(prev); n.has(grp.id)?n.delete(grp.id):n.add(grp.id); return n; });
+                        return (
+                          <div key={grp.id} style={{background:'rgba(20,20,35,0.8)',border:'1px solid rgba(90,180,245,0.15)',borderRadius:'7px',overflow:'hidden'}}>
+                            <div onClick={toggleExp} style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 10px',cursor:'pointer',userSelect:'none'}}>
+                              {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0,minWidth:'58px'}}>{grp.date}</span>}
+                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{_resolveLoc(grp.from)} → {_resolveLoc(grp.to)}</span>
+                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.45)',flexShrink:0}}>{eqCount} pc{eqCount!==1?'s':''}</span>
+                              <div style={{flexShrink:0,padding:'1px 6px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:si.color,whiteSpace:'nowrap'}}>{si.label}</div>
+                              <span style={{flexShrink:0,color:'rgba(155,148,136,0.4)',fontSize:'9px',display:'inline-block',transform:isExp?'rotate(180deg)':'rotate(0)',transition:'transform 0.15s'}}>▼</span>
+                            </div>
+                            {isExp && (
+                              <div style={{borderTop:'1px solid rgba(90,180,245,0.1)',padding:'10px 12px',display:'flex',flexDirection:'column',gap:'8px'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+                                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)'}}>ROUTE</span>
+                                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#c0d8f0'}}>{_resolveLoc(grp.from)} → {_resolveLoc(grp.to)}</span>
+                                  {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.4)',marginLeft:'auto'}}>{grp.date}</span>}
+                                </div>
+                                {(grp.items||[]).length > 0 && (
+                                  <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'2px'}}>EQUIPMENT ({eqCount})</div>
+                                    {(grp.items||[]).map(it => (
+                                      <div key={it.id} style={{display:'flex',alignItems:'center',gap:'6px',padding:'3px 6px',borderRadius:'4px',background:'rgba(255,255,255,0.03)'}}>
+                                        <span style={{fontSize:'10px'}}>{EQ_ICONS[it.type]||'📦'}</span>
+                                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',flex:1}}>{it.name||it.type}</span>
+                                        <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.35)'}}>{it.type}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {grp.notes && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',fontStyle:'italic'}}>📝 {grp.notes}</div>}
+                                {grp.deadline && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0392b',fontWeight:700}}>⚠ Due {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })()}
