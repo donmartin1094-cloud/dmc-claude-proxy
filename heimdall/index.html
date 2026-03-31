@@ -1393,58 +1393,9 @@ function App() {
   const [showNameEditor, setShowNameEditor] = useState(false);
 
   // ── Dispatch (live lowbed plan from main app) ──
-  const [lowbedPlan, setLowbedPlan] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('dmc_lowbed_plan') || 'null');
-      if (stored) return stored;
-    } catch(e) {}
-    // DEV PREVIEW — remove once real plans are being generated
-    return {
-      status: 'verified',
-      jobs: [
-        {
-          jobName: 'SR-99 Overlay', jobNum: '2024-041', date: '2025-04-07', location: 'Fresno, CA',
-          allEquipment: [
-            { type: 'paver',     name: 'Volvo P6820D' },
-            { type: 'roller',    name: 'Hamm HD+90' },
-            { type: 'roller',    name: 'Hamm HD+70' },
-            { type: 'milling',   name: 'W210i Cold Planer' },
-            { type: 'dump_truck',name: 'Mack GR64F #7' }
-          ],
-          moves: [
-            { status: 'complete', assignedDriver: 'Mike Reyes',  equipment: [{ type:'paver',     name:'Volvo P6820D' },  { type:'milling', name:'W210i Cold Planer' }] },
-            { status: 'assigned', assignedDriver: 'Carlos Vega', equipment: [{ type:'roller',    name:'Hamm HD+90' },    { type:'roller',  name:'Hamm HD+70' }] },
-            { status: undefined,  assignedDriver: null,           equipment: [{ type:'dump_truck',name:'Mack GR64F #7' }] }
-          ]
-        },
-        {
-          jobName: 'Airport Rd Rehab', jobNum: '2024-038', date: '2025-04-07', location: 'Madera, CA',
-          allEquipment: [
-            { type: 'excavator',  name: 'CAT 349' },
-            { type: 'loader',     name: 'CAT 980M' },
-            { type: 'compactor',  name: 'CAT CS56B' },
-            { type: 'water_truck',name: 'Water Truck #2' }
-          ],
-          moves: [
-            { status: 'complete', assignedDriver: 'Tony Delgado', equipment: [{ type:'excavator', name:'CAT 349' },    { type:'loader',     name:'CAT 980M' }] },
-            { status: 'assigned', assignedDriver: 'Luis Fuentes', equipment: [{ type:'compactor', name:'CAT CS56B' }, { type:'water_truck',name:'Water Truck #2' }] }
-          ]
-        },
-        {
-          jobName: 'Clovis Ave Mill & Fill', jobNum: '2024-045', date: '2025-04-08', location: 'Clovis, CA',
-          allEquipment: [
-            { type: 'paver',     name: 'CAT AP1055F' },
-            { type: 'roller',    name: 'Dynapac CC2200' },
-            { type: 'skid_steer',name: 'CAT 262D3' }
-          ],
-          moves: [
-            { status: undefined, assignedDriver: null,          equipment: [{ type:'paver',  name:'CAT AP1055F' }] },
-            { status: undefined, assignedDriver: 'Ray Morales', equipment: [{ type:'roller', name:'Dynapac CC2200' }, { type:'skid_steer', name:'CAT 262D3' }] }
-          ]
-        }
-      ]
-    };
-  });
+  // FIX: always start empty — Firestore is the only source of truth
+  localStorage.removeItem('dmc_lowbed_plan');
+  const [lowbedPlan, setLowbedPlan] = useState({ status: 'empty', jobs: [] });
   const [driverMoveAlert, setDriverMoveAlert] = useState(null); // toast when a move is assigned to logged-in driver
   const _prevLowbedPlanRef = React.useRef(null);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -1903,11 +1854,14 @@ function App() {
         localStorage.setItem('hd_hidden_devices', JSON.stringify(remote));
       }
     });
-    // Initial load of lowbed_plan from Firestore — always prefer remote over stale localStorage
+    // Initial load of lowbed_plan from Firestore — Firestore is the only source of truth
     hdFsGet('lowbed_plan').then(remote => {
       if (remote && remote.jobs) {
         setLowbedPlan(remote);
         localStorage.setItem('dmc_lowbed_plan', JSON.stringify(remote));
+      } else {
+        // Document doesn't exist yet — stay with clean empty state
+        setLowbedPlan({ status: 'empty', jobs: [] });
       }
     });
 
@@ -1915,7 +1869,7 @@ function App() {
     let lastLowbedAt     = 0;
     let lastNamesAt      = 0;
     let lastHiddenAt     = 0;
-    let lastLowbedPlanAt = 0;
+    let lastLowbedPlanAt = -1;
     const poll = setInterval(async () => {
       try {
         const [lgRes, nmRes, hdRes, lpRes] = await Promise.all([
@@ -1966,7 +1920,7 @@ function App() {
         if (lpRes.ok) {
           const doc = await lpRes.json();
           const at = parseInt(doc.fields?.updatedAt?.integerValue || '0');
-          if (at > lastLowbedPlanAt) {
+          if (at >= lastLowbedPlanAt) {
             lastLowbedPlanAt = at;
             const raw = doc.fields?.data?.stringValue;
             if (raw) {
