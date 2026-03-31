@@ -10677,6 +10677,7 @@ function renderJobDetail(job) {
           <div class="job-detail-date">${job.number?`Job #${job.number}`:'<span style="color:var(--concrete-dim);font-style:italic;">No job # set</span>'} <button onclick="editJobNumber('${job.id}')" title="Edit job number" style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:11px;padding:0 3px;vertical-align:middle;line-height:1;" onmouseover="this.style.color='var(--white)'" onmouseout="this.style.color='var(--concrete-dim)'">✎</button>${job.number?'&nbsp;·&nbsp;':''}${job.location?`${job.location} &nbsp;·&nbsp; `:''}Created ${job.created}</div>
         </div>
         <div class="job-actions">
+          <button class="btn btn-ghost btn-sm" onclick="_scanSlipForJob('${job.id}','${job.name.replace(/'/g,"\\'")}','${(job.number||'').replace(/'/g,"\\'")}')">📷 Scan Slip</button>
           ${job.status==='analyzed'?`
             <button class="btn btn-ghost btn-sm" onclick="openSheetPanel(null)">📐 View Plans</button>
             <button class="btn btn-ghost btn-sm" onclick="openProposalPreview('bid','${job.id}')">📄 Proposal</button>
@@ -10705,6 +10706,7 @@ function renderJobDetail(job) {
           </div>
           <div class="progress-log" id="progressLog"></div>
         </div>`:''}
+      ${renderTonnageTracker(job.id, job.number||'', job.name)}
       ${job.results ? renderResults(job.results) : ''}
     </div>`;
 }
@@ -33460,9 +33462,17 @@ function _laUploadSlipModal(prefillDate) {
   document.getElementById('laSlipModal')?.remove();
   var s = _aiaState;
   var today = new Date().toISOString().slice(0,10);
-  var mixOpts = (s.la.rows||[]).map(function(r){ return r.mixType; });
+  var mixOpts = (s && s.la && s.la.rows || []).map(function(r){ return r.mixType; });
   if (!mixOpts.length) mixOpts = ['SBC 37.5','SIC 19.0','SIC 12.5','SIC 9.5','FC 9.5','MC 19.0'];
   var mixSelHTML = mixOpts.map(function(m){ return '<option value="'+escHtml(m)+'">'+escHtml(m)+'</option>'; }).join('');
+
+  // Job context from standalone scan button
+  var _ctx = window._slipScanContext || {};
+  var _ctxJobBanner = (_ctx.jobId || _ctx.jobName)
+    ? '<div style="padding:7px 18px;background:rgba(245,197,24,0.06);border-bottom:1px solid rgba(245,197,24,0.18);font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+
+        '&#128204; Scanning for: <strong style="color:var(--stripe);">'+escHtml(_ctx.jobName||_ctx.jobId||'')+'</strong>'+((_ctx.jobNum)?'&nbsp;&nbsp;#'+escHtml(_ctx.jobNum):'')+
+      '</div>'
+    : '';
 
   var overlay = document.createElement('div');
   overlay.id = 'laSlipModal';
@@ -33473,6 +33483,7 @@ function _laUploadSlipModal(prefillDate) {
       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--stripe);">&#128196; Add Paving Slip</div>'+
       '<button onclick="document.getElementById(\'laSlipModal\').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;">&#10005;</button>'+
     '</div>'+
+    _ctxJobBanner+
     '<div style="padding:16px 18px;">'+
       // Photo area
       '<div id="laSlipPhotoArea" onclick="document.getElementById(\'laSlipFileIn\').click()" style="background:var(--asphalt);border:2px dashed var(--asphalt-light);border-radius:var(--radius);min-height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-bottom:14px;position:relative;overflow:hidden;" title="Click to pick photo or scan">'+
@@ -33586,7 +33597,7 @@ function _laScanSlipFromPhoto() {
 
 // Save the slip from the modal
 function _laSlipSave() {
-  var s = _aiaState;
+  var s = _aiaState || {};
   var date    = (document.getElementById('lsDate')  ||{}).value || new Date().toISOString().slice(0,10);
   var mixType = (document.getElementById('lsMix')   ||{}).value || '';
   var tons    = parseFloat((document.getElementById('lsTons')  ||{}).value) || 0;
@@ -33628,6 +33639,7 @@ function _laSlipSave() {
     if (_slJob && (!_slJob.jobProgress || _slJob.jobProgress === 'none')) {
       _slJob.jobProgress = 'active';
       saveBacklog();
+      try { pushNotif('info', 'Job Activated', '📋 ' + (_slJob.name||'Job') + ' marked active — first slip received', _slJob.id); } catch(e) {}
     }
   }
 
@@ -33654,9 +33666,10 @@ function _laSlipSave() {
     document.querySelectorAll('[data-tonnage-job]').forEach(function(el){
       var attr = el.getAttribute('data-tonnage-job');
       if (attr === slip.jobId || attr === slip.jobNum) {
+        if (el.classList.contains('home-backlog-row')) return; // skip backlog rows — tracker cards only
         var fresh = document.createElement('div');
         fresh.innerHTML = renderTonnageTracker(slip.jobId, slip.jobNum, slip.jobName);
-        el.replaceWith(fresh.firstElementChild);
+        if (fresh.firstElementChild) el.replaceWith(fresh.firstElementChild);
       }
     });
   })();
@@ -36160,7 +36173,7 @@ async function fbLoadAll() {
                 else if (key === 'truck_pricing') { truckPricing = { ...truckPricing, ...val }; }
                 else if (key === 'aia_reqs') { aiaReqs = Array.isArray(val) ? val : aiaReqs; }
                 else if (key === 'bills_in_progress') { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); }
-                else if (key === 'paving_slips')      { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
+                else if (key === 'paving_slips')      { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
                 else if (key === 'sched_queue')  { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
         else if (key === 'plants')      { plantsList = val; }
         else if (key === 'holidays')    { holidays = new Set(Array.isArray(val) ? val : []); localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays])); }
@@ -36509,7 +36522,7 @@ async function initApp(username) {
               else if (key === 'theme')            { pendingTheme = val; applyThemeVars(val); localStorage.setItem(THEME_KEY, JSON.stringify(val)); }
               else if (key === 'aia_reqs')            { aiaReqs = Array.isArray(val) ? val : aiaReqs; if (activeTab === 'apMix') renderInvoiceTracker(); }
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker(); }
-              else if (key === 'paving_slips')       { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
+              else if (key === 'paving_slips')       { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
               else if (key === 'daily_orders')     { dailyOrders = val; if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports(); }
               else if (key === 'lowbed_plan') {
