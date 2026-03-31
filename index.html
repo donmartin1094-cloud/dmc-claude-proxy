@@ -36130,7 +36130,7 @@ function normalizeAccountsRoster(inputAccounts) {
     const unameLc = (a.username || '').toLowerCase();
     const required = REQUIRED_ACCOUNT_BY_USERNAME[unameLc];
     if (required) {
-      email = required.email.toLowerCase();
+      email = (required.email || '').toLowerCase();
     } else {
       if (!email || ADMIN_EMAILS.includes(email)) email = _toSafeEmailForUsername(a.username);
       while (usedEmailByOwner.has(email) && usedEmailByOwner.get(email) !== unameLc) {
