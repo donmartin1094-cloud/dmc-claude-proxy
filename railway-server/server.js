@@ -397,15 +397,13 @@ app.post('/mail/folders', async (req, res) => {
   const client = makeImap(user, pass);
   try {
     await client.connect();
-    const folders = [];
-    for await (const item of client.list()) {
-      folders.push({
-        name:       item.name,
-        path:       item.path,
-        specialUse: item.specialUse || null,
-        flags:      [...(item.flags || [])]
-      });
-    }
+    const list = await client.list();
+    const folders = list.map(item => ({
+      name:       item.name,
+      path:       item.path,
+      specialUse: item.specialUse || null,
+      flags:      [...(item.flags || [])]
+    }));
     await client.logout();
     res.json({ folders });
   } catch (err) {
@@ -574,7 +572,8 @@ app.post('/mail/action', async (req, res) => {
     if (action === 'delete') {
       let moved = false;
       // Try to find a Trash folder
-      for await (const f of client.list()) {
+      const allFolders = await client.list();
+      for (const f of allFolders) {
         const p = (f.path || '').toLowerCase();
         if (p === 'trash' || p === 'deleted items' || p === 'deleted messages' || f.specialUse === '\\Trash') {
           try { await client.messageMove({ uid: u }, f.path, { uid: true }); moved = true; } catch(e) {}
