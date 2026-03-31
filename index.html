@@ -35958,24 +35958,27 @@ function fbCopyErrorLog(btn) {
 
 // ── Firebase app_data helpers ──
 async function fbSet(docName, value) {
-  if (!db) {
-    try {
+  try {
+    if (!db) {
       if (typeof firebase !== 'undefined') {
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
+        console.log('[fbSet] db initialized on demand');
       }
-    } catch(e) {
-      // fall back to local cache if Firebase cannot be initialized right now
     }
-  }
-  console.log('[fbSet] db:', db ? 'ready' : 'null', '| doc:', docName);
-  if (!db) { localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value)); return; }
-  try {
+    if (!db) {
+      console.error('[fbSet] FAILED -- db still null after init attempt');
+      localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value));
+      return { ok: false, error: 'db null' };
+    }
+    console.log('[fbSet] writing', docName, 'to Firestore');
     setSyncBadge('saving');
     await db.collection('app_data').doc(docName).set({ data: JSON.stringify(value), updatedAt: Date.now() });
     setSyncBadge('synced');
+    console.log('[fbSet] successfully wrote', docName);
     return { ok: true };
   } catch(e) {
+    console.error('[fbSet] write error for', docName, ':', e);
     e._op = 'fbSet:' + docName;
     _logFbError('fbSet:' + docName, e);
     localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value));
