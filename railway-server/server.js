@@ -12,6 +12,14 @@ const { ImapFlow }     = require('imapflow');
 const nodemailer       = require('nodemailer');
 const { simpleParser } = require('mailparser');
 
+// ── Global error guards — prevent IMAP socket errors from crashing Node ──────
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught exception:', err.message, err.code);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] Unhandled rejection:', reason);
+});
+
 // ── Mail server settings ────────────────────────────────────────────────────
 const IMAP_HOST = 'register-imap-oxcs.hostingplatform.com';
 const IMAP_PORT = 993;
@@ -39,7 +47,7 @@ app.use(express.json({ limit: '50mb' }));
 
 // ── Helper: create IMAP client from credentials object ──────────────────────
 function makeImap(creds) {
-  return new ImapFlow({
+  const client = new ImapFlow({
     host:    creds.host,
     port:    creds.port    || 993,
     secure:  creds.secure  !== false,
@@ -49,6 +57,8 @@ function makeImap(creds) {
     greetingTimeout:   10000,
     socketTimeout:     30000
   });
+  client.on('error', err => console.error('[IMAP] Connection error:', err.message));
+  return client;
 }
 
 // ── Per-user credential lookup (env vars → Firestore) ────────────────────────
@@ -156,14 +166,15 @@ app.post('/mail/test', async (req, res) => {
     auth: { user, pass }, logger: false,
     connectionTimeout: 15000, greetingTimeout: 8000, socketTimeout: 20000
   });
+  client.on('error', err => console.error('[IMAP/test] Connection error:', err.message));
   try {
     await client.connect();
     const list = await client.list();
-    await client.logout();
     res.json({ ok: true, folderCount: list.length });
   } catch (e) {
-    try { await client.logout(); } catch (_) {}
     res.status(400).json({ ok: false, error: e.message });
+  } finally {
+    try { await client.logout(); } catch (_) {}
   }
 });
 
@@ -530,11 +541,12 @@ app.post('/mail/folders', async (req, res) => {
       specialUse: item.specialUse || null,
       flags:      [...(item.flags || [])]
     }));
-    await client.logout();
     res.json({ folders });
   } catch (err) {
+    console.error('[Mail /folders] Error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
     try { if (client) await client.logout(); } catch(e) {}
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -550,7 +562,6 @@ app.post('/mail/inbox', async (req, res) => {
     const mb    = await client.mailboxOpen(folder);
     const total = mb.exists;
     if (total === 0) {
-      await client.logout();
       return res.json({ messages: [], total: 0 });
     }
     const lim   = Math.min(parseInt(limit) || 50, total);
@@ -572,11 +583,12 @@ app.post('/mail/inbox', async (req, res) => {
         flagged: msg.flags?.has('\\Flagged') || false
       });
     }
-    await client.logout();
     res.json({ messages: messages.reverse(), total });
   } catch (err) {
+    console.error('[Mail /inbox] Error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
     try { if (client) await client.logout(); } catch(e) {}
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -616,12 +628,13 @@ app.post('/mail/message', async (req, res) => {
       };
       await client.messageFlagsAdd({ uid: parseInt(uid) }, ['\\Seen'], { uid: true });
     }
-    await client.logout();
     if (!result) return res.status(404).json({ error: 'Message not found' });
     res.json(result);
   } catch (err) {
+    console.error('[Mail /message] Error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
     try { if (client) await client.logout(); } catch(e) {}
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -650,11 +663,12 @@ app.post('/mail/attachment', async (req, res) => {
       res.setHeader('Content-Length', att.size || att.content.length);
       res.send(att.content);
     }
-    if (!found) res.status(404).json({ error: 'Attachment not found' });
-    await client.logout();
+    if (!found && !res.headersSent) res.status(404).json({ error: 'Attachment not found' });
   } catch(err) {
-    try { if (client) await client.logout(); } catch(e) {}
+    console.error('[Mail /attachment] Error:', err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
+    try { if (client) await client.logout(); } catch(e) {}
   }
 });
 
@@ -718,11 +732,12 @@ app.post('/mail/action', async (req, res) => {
         await client.mailboxExpunge();
       }
     }
-    await client.logout();
     res.json({ ok: true });
   } catch (err) {
+    console.error('[Mail /action] Error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
     try { if (client) await client.logout(); } catch(e) {}
-    res.status(500).json({ error: err.message });
   }
 });
 
