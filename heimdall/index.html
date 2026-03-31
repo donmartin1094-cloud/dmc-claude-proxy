@@ -1759,8 +1759,11 @@ function App() {
     }
     // Standard canPairWith check for non-heavy new items
     for (const item of existingItems) {
-      const er = LOWBED_RULES[item.type] || { loadClass:'light', canPairWith:[] };
-      if (!(nr.canPairWith || []).includes(item.type)) return { ok: false, reason: newType + ' is not compatible with ' + item.type + ' on the same load.' };
+      const er = LOWBED_RULES[item.type] || {};
+      // Skip canPairWith check if existing item is heavy (paver) — already approved by the paver-friendly path above
+      if (er.loadClass === 'heavy') continue;
+      if ((nr.canPairWith||[]).length > 0 && !(nr.canPairWith||[]).includes(item.type))
+        return { ok: false, reason: nr.loadClass + ' equipment is not compatible with ' + item.type + ' on the same load.' };
     }
     return { ok: true };
   };
