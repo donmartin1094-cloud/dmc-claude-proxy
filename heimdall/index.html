@@ -1736,6 +1736,33 @@ function App() {
     dump_truck: { loadClass:'skip' }, lowbed:{ loadClass:'skip' }, tack_truck:{ loadClass:'skip' }, water_truck:{ loadClass:'skip' },
   };
 
+  const ATOW_RATES = {
+    high_flat_trailer:        { label: 'High Flat Trailer',              rate: 160, unit: 'hr',   minHours: 2 },
+    tractor_only:             { label: 'Tractor Only',                   rate: 135, unit: 'hr',   minHours: 2 },
+    step_deck:                { label: 'Step Deck Trailer',              rate: 160, unit: 'hr',   minHours: 2 },
+    landoll_40ton:            { label: '40-Ton Landoll',                 rate: 185, unit: 'hr',   minHours: 2 },
+    lowbed_55ton:             { label: '55-Ton Lowbed',                  rate: 185, unit: 'hr',   minHours: 2 },
+    stretch_trailer:          { label: 'Stretch Trailer',                rate: 185, unit: 'hr',   minHours: 2 },
+    ramp_heavy:               { label: 'Heavy-Duty Ramp Truck (30k)',    rate: 150, unit: 'hr',   minHours: 2 },
+    ramp_medium:              { label: 'Medium-Duty Ramp Truck (10k)',   rate: 130, unit: 'hr',   minHours: 2 },
+    pilot_car:                { label: 'Pilot Car',                      rate: 100, unit: 'hr',   minHours: 4 },
+    rotator_50ton:            { label: '50-Ton Rotator',                 rate: 500, unit: 'hr',   minHours: 2 },
+    towing_heavy:             { label: 'Heavy-Duty Towing',              rate: 225, unit: 'hr',   minHours: 2 },
+    towing_heavy_driveline:   { label: 'Heavy-Duty Towing + Driveline',  rate: 250, unit: 'hr',   minHours: 2 },
+    towing_medium:            { label: 'Medium-Duty Towing',             rate: 175, unit: 'hr',   minHours: 2 },
+    towing_medium_driveline:  { label: 'Medium-Duty Towing + Driveline', rate: 200, unit: 'hr',   minHours: 2 },
+    light_duty_ramp:          { label: 'Light-Duty Ramp Truck',          rate: 100, unit: 'flat', minHours: 0, mileageRate: 4 },
+    roadside:                 { label: 'Roadside Assistance',            rate: 75,  unit: 'flat', minHours: 0 },
+  };
+
+  const calcRentalCost = (serviceKey, hours, mileage = 0) => {
+    const svc = ATOW_RATES[serviceKey];
+    if (!svc) return 0;
+    if (svc.unit === 'flat') return svc.rate + (mileage * (svc.mileageRate || 0));
+    return Math.max(hours, svc.minHours) * svc.rate;
+  };
+
+
   const checkCompat = (newType, existingItems) => {
     if (!existingItems.length) return { ok: true };
     const nr = LOWBED_RULES[newType] || { loadClass:'light', canPairWith:[] };
@@ -1807,7 +1834,8 @@ function App() {
     const resolvedJobGroupId = existingGroupMove
       ? existingGroupMove.jobGroupId
       : (manualMoveMode === 'job' ? 'job_' + ts : 'single_' + newId);
-    groups.push({ id: newId, jobGroupId: resolvedJobGroupId, manual: true, date: manualDate, driverName: manualDriver, from: manualFrom, to: manualTo, deadline: manualDeadline, notes: manualNotes, items: manualItems, status: 'pending', createdAt: ts });
+    const _isRentalSave = /atow|andy/i.test(manualDriver);
+    groups.push({ id: newId, jobGroupId: resolvedJobGroupId, manual: true, date: manualDate, driverName: manualDriver, from: manualFrom, to: manualTo, deadline: manualDeadline, notes: manualNotes, items: manualItems, status: 'pending', createdAt: ts, isRental: _isRentalSave, rentalService: null, rentalHours: 2, rentalMileage: 0, estimatedCost: 0, actualHours: null, actualCost: null });
     saveLowbedGroups(groups);
     setManualItems([]); setManualDriver(''); setManualFrom(''); setManualTo(''); setManualDeadline(''); setManualNotes(''); setManualEqOpen({}); setManualToLocked(false); setShowManualMove(false);
   };
@@ -3408,6 +3436,17 @@ Be specific, practical, and flag any uncertainties clearly.`;
                           {completed  > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:'rgba(126,203,143,0.1)',border:'1px solid rgba(126,203,143,0.3)',color:'#7ecb8f'}}>✓ {completed} Done</span>}
                           {inProgress > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',color:'#5ab4f5'}}>⚡ {inProgress} Active</span>}
                           {pending    > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:'rgba(245,197,24,0.1)',border:'1px solid rgba(245,197,24,0.3)',color:'#f5c518'}}>⏳ {pending} Pending</span>}
+                          {isAdminUser && (() => {
+                            const rentalMoves  = manualMoves.filter(m=>m.isRental);
+                            const rentalEst    = rentalMoves.reduce((s,m)=>s+(m.estimatedCost||0),0);
+                            const rentalActual = rentalMoves.filter(m=>m.actualCost!=null).reduce((s,m)=>s+(m.actualCost||0),0);
+                            const hasActual    = rentalMoves.some(m=>m.actualCost!=null);
+                            const fmt = n => '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+                            return (<>
+                              {rentalEst > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:'#2a2000',border:'1px solid #c9a800',color:'#f0d060',fontWeight:700}}>💰 Rental Est: {fmt(rentalEst)}</span>}
+                              {hasActual && rentalActual > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:'#2a2000',border:'1px solid #c9a800',color:'#f0d060',fontWeight:700}}>💰 Rental Actual: {fmt(rentalActual)}</span>}
+                            </>);
+                          })()}
                         </div>
                       )}
                       {/* ── Empty state ── */}
@@ -3462,7 +3501,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                 <div style={{marginBottom:'5px'}}>
                                   <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',marginBottom:'2px',letterSpacing:'1px'}}>DRIVER</div>
                                   {isAdminUser ? (
-                                    <select value={grp.driverName||''} onChange={e=>upd({driverName:e.target.value})} style={{width:'100%',background:'rgba(10,10,25,0.8)',border:'1px solid rgba(90,180,245,0.2)',borderRadius:'3px',color:grp.driverName?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
+                                    <select value={grp.driverName||''} onChange={e=>{ const n=e.target.value; const rd=/atow|andy/i.test(n); upd({driverName:n,...(rd&&!grp.isRental?{isRental:true,rentalService:grp.rentalService||null,rentalHours:grp.rentalHours||2,rentalMileage:grp.rentalMileage||0,estimatedCost:grp.estimatedCost||0,actualHours:grp.actualHours||null,actualCost:grp.actualCost||null}:{})}); }} style={{width:'100%',background:'rgba(10,10,25,0.8)',border:'1px solid rgba(90,180,245,0.2)',borderRadius:'3px',color:grp.driverName?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
                                       <option value=''>⚠ Unassigned</option>
                                       {CORE_LOWBED_DRIVERS.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
                                     </select>
@@ -3501,6 +3540,42 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                     {grp.deadline && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#c0392b',fontWeight:700}}>⚠ Due {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
                                   </div>
                                 )}
+                                {isAdminUser && grp.isRental && (
+                                  <div style={{marginTop:'8px',paddingTop:'8px',borderTop:'1px solid rgba(201,168,0,0.25)',display:'flex',flexDirection:'column',gap:'6px'}}>
+                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#f0d060',fontWeight:700,letterSpacing:'1px'}}>💰 RENTAL COST — ANDY'S TOWING</div>
+                                    <div>
+                                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',marginBottom:'2px'}}>SERVICE</div>
+                                      <select value={grp.rentalService||''} onChange={e=>{ const k=e.target.value; const c=calcRentalCost(k,grp.rentalHours||2,grp.rentalMileage||0); upd({rentalService:k,estimatedCost:c}); }} style={{width:'100%',background:'rgba(42,32,0,0.9)',border:'1px solid rgba(201,168,0,0.3)',borderRadius:'3px',color:grp.rentalService?'#f0d060':'rgba(155,148,136,0.5)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
+                                        <option value=''>— Select service —</option>
+                                        {Object.entries(ATOW_RATES).map(([k,v])=><option key={k} value={k}>{v.label} — ${v.unit==='flat'?v.rate+' flat':v.rate+'/hr'+(v.minHours>0?' ('+v.minHours+'h min)':'')}</option>)}
+                                      </select>
+                                    </div>
+                                    {grp.rentalService && ATOW_RATES[grp.rentalService] && ATOW_RATES[grp.rentalService].unit === 'hr' && (
+                                      <div>
+                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',marginBottom:'2px'}}>EST. HOURS (min {ATOW_RATES[grp.rentalService].minHours}h)</div>
+                                        <input type='number' min={ATOW_RATES[grp.rentalService].minHours} step='0.5' value={grp.rentalHours||2} onChange={e=>{ const h=parseFloat(e.target.value)||2; upd({rentalHours:h,estimatedCost:calcRentalCost(grp.rentalService,h,grp.rentalMileage||0)}); }} style={{width:'80px',background:'rgba(42,32,0,0.9)',border:'1px solid rgba(201,168,0,0.3)',borderRadius:'3px',color:'#f0d060',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 6px',outline:'none'}} />
+                                      </div>
+                                    )}
+                                    {grp.rentalService === 'light_duty_ramp' && (
+                                      <div>
+                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',marginBottom:'2px'}}>MILEAGE</div>
+                                        <input type='number' min='0' value={grp.rentalMileage||0} onChange={e=>{ const mi=parseFloat(e.target.value)||0; upd({rentalMileage:mi,estimatedCost:calcRentalCost(grp.rentalService,grp.rentalHours||2,mi)}); }} style={{width:'80px',background:'rgba(42,32,0,0.9)',border:'1px solid rgba(201,168,0,0.3)',borderRadius:'3px',color:'#f0d060',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 6px',outline:'none'}} />
+                                      </div>
+                                    )}
+                                    <div style={{display:'flex',gap:'8px',alignItems:'baseline',flexWrap:'wrap'}}>
+                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)'}}>ESTIMATED</span>
+                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'#f0d060',fontWeight:700}}>${(grp.estimatedCost||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                                    </div>
+                                    <div>
+                                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',marginBottom:'2px'}}>ACTUAL HOURS (post-completion)</div>
+                                      <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+                                        <input type='number' min='0' step='0.5' value={grp.actualHours!=null?grp.actualHours:''} placeholder='—' onChange={e=>{ const ah=e.target.value===''?null:(parseFloat(e.target.value)||0); const ac=ah!=null&&grp.rentalService?calcRentalCost(grp.rentalService,ah,grp.rentalMileage||0):null; upd({actualHours:ah,actualCost:ac}); }} style={{width:'80px',background:'rgba(42,32,0,0.9)',border:'1px solid rgba(201,168,0,0.3)',borderRadius:'3px',color:'#f0d060',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 6px',outline:'none'}} />
+                                        {grp.actualCost != null && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'#f0d060',fontWeight:700}}>Actual: ${grp.actualCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>}
+                                      </div>
+                                    </div>
+                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',color:'rgba(155,148,136,0.3)',lineHeight:'1.6'}}>* Rates billed portal to portal&nbsp;&nbsp;* 2-hr minimum. Pilot car 4-hr min.</div>
+                                  </div>
+                                )}
                               </>);
                             };
 
@@ -3537,6 +3612,18 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                         {jInP  > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(201,168,0,0.12)',border:'1px solid #c9a800',color:'#f0d060'}}>⚡ {jInP} active</span>}
                                         {jDone > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(42,90,42,0.2)',border:'1px solid #2a5a2a',color:'#4a7a4a'}}>✓ {jDone} done</span>}
                                       </div>
+                                      {isAdminUser && jMoves.some(m=>m.isRental) && (() => {
+                                        const gEst    = jMoves.reduce((s,m)=>s+(m.estimatedCost||0),0);
+                                        const gActual = jMoves.filter(m=>m.actualCost!=null).reduce((s,m)=>s+(m.actualCost||0),0);
+                                        const hasActual = jMoves.some(m=>m.actualCost!=null);
+                                        const fmt = n => '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+                                        return (
+                                          <div style={{display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'4px'}}>
+                                            {gEst > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'2px 8px',borderRadius:'4px',background:'#2a2000',border:'1px solid #c9a800',color:'#f0d060',fontWeight:700}}>💰 Est: {fmt(gEst)}</span>}
+                                            {hasActual && gActual > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'2px 8px',borderRadius:'4px',background:'#2a2000',border:'1px solid #c9a800',color:'#f0d060',fontWeight:700}}>💰 Actual: {fmt(gActual)}</span>}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                     {isExpGroup && (
                                       <div style={{borderTop:'1px solid rgba(123,79,166,0.35)'}}>
