@@ -1396,8 +1396,6 @@ function App() {
   // FIX: always start empty — Firestore is the only source of truth
   localStorage.removeItem('dmc_lowbed_plan');
   const [lowbedPlan, setLowbedPlan] = useState({ status: 'empty', jobs: [] });
-  const [driverMoveAlert, setDriverMoveAlert] = useState(null); // toast when a move is assigned to logged-in driver
-  const _prevLowbedPlanRef = React.useRef(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [dispatches, setDispatches] = useState(autoDispatches);
 
@@ -1854,29 +1852,16 @@ function App() {
         localStorage.setItem('hd_hidden_devices', JSON.stringify(remote));
       }
     });
-    // Initial load of lowbed_plan from Firestore — Firestore is the only source of truth
-    hdFsGet('lowbed_plan').then(remote => {
-      if (remote && remote.jobs) {
-        setLowbedPlan(remote);
-        localStorage.setItem('dmc_lowbed_plan', JSON.stringify(remote));
-      } else {
-        // Document doesn't exist yet — stay with clean empty state
-        setLowbedPlan({ status: 'empty', jobs: [] });
-      }
-    });
-
-    // Poll every 8 seconds — track updatedAt to skip no-op re-renders
-    let lastLowbedAt     = 0;
-    let lastNamesAt      = 0;
-    let lastHiddenAt     = 0;
-    let lastLowbedPlanAt = -1;
+    // Poll every 3 seconds — track updatedAt to skip no-op re-renders
+    let lastLowbedAt = 0;
+    let lastNamesAt  = 0;
+    let lastHiddenAt = 0;
     const poll = setInterval(async () => {
       try {
-        const [lgRes, nmRes, hdRes, lpRes] = await Promise.all([
+        const [lgRes, nmRes, hdRes] = await Promise.all([
           fetch(`${_HD_FS_BASE}/lowbed_groups?key=${_HD_FB_KEY}`),
           fetch(`${_HD_FS_BASE}/hd_equip_names?key=${_HD_FB_KEY}`),
-          fetch(`${_HD_FS_BASE}/hd_hidden_devices?key=${_HD_FB_KEY}`),
-          fetch(`${_HD_FS_BASE}/lowbed_plan?key=${_HD_FB_KEY}`)
+          fetch(`${_HD_FS_BASE}/hd_hidden_devices?key=${_HD_FB_KEY}`)
         ]);
         if (lgRes.ok) {
           const doc = await lgRes.json();
@@ -1914,40 +1899,6 @@ function App() {
               const arr = JSON.parse(raw);
               setHiddenDeviceIds(new Set(arr));
               localStorage.setItem('hd_hidden_devices', JSON.stringify(arr));
-            }
-          }
-        }
-        if (lpRes.ok) {
-          const doc = await lpRes.json();
-          const at = parseInt(doc.fields?.updatedAt?.integerValue || '0');
-          if (at >= lastLowbedPlanAt) {
-            lastLowbedPlanAt = at;
-            const raw = doc.fields?.data?.stringValue;
-            if (raw) {
-              const plan = JSON.parse(raw);
-              // ── Alert logged-in lowbed driver if a move was just assigned to them ──
-              if (isLowbedDriver) {
-                const _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
-                const _DN = { 'nightmare57':'Eric Sylvia','ericsylvia57@gmail.com':'Eric Sylvia','blydon':'Bill Lydon','billydon@donmartincorp.com':'Bill Lydon','igiron':'Ingrid Giron','igiron@donmartincorp.com':'Ingrid Giron' };
-                const _myName = (_DN[_u] || _u).toLowerCase();
-                const prevPlan = _prevLowbedPlanRef.current;
-                if (prevPlan) {
-                  outer: for (let _ji = 0; _ji < (plan.jobs||[]).length; _ji++) {
-                    for (let _mi = 0; _mi < (plan.jobs[_ji].moves||[]).length; _mi++) {
-                      const _mv = plan.jobs[_ji].moves[_mi];
-                      const _prev = prevPlan.jobs?.[_ji]?.moves?.[_mi];
-                      if ((_mv.assignedDriver||'').toLowerCase() === _myName && (_prev?.assignedDriver||'').toLowerCase() !== _myName) {
-                        setDriverMoveAlert(`🔔 Move ${_mi+1} for ${plan.jobs[_ji].jobName||('Job '+(_ji+1))} has been assigned to you`);
-                        break outer;
-                      }
-                    }
-                  }
-                }
-              }
-              _prevLowbedPlanRef.current = plan;
-              setLowbedPlan(plan);
-              localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
-              console.log('[Heimdall] Lowbed plan received from Firestore:', plan.jobs?.length, 'jobs');
             }
           }
         }
@@ -2838,14 +2789,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
           return (
             <div style={{padding:'16px',maxWidth:'680px',margin:'0 auto'}}>
-              {/* ── New assignment alert toast ── */}
-              {driverMoveAlert && (
-                <div style={{background:'rgba(126,203,143,0.12)',border:'1px solid rgba(126,203,143,0.45)',borderRadius:'8px',padding:'10px 14px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'10px'}}>
-                  <span style={{fontSize:'16px',flexShrink:0}}>🔔</span>
-                  <div style={{flex:1,fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'#7ecb8f',fontWeight:700}}>{driverMoveAlert}</div>
-                  <button onClick={() => setDriverMoveAlert(null)} style={{background:'none',border:'none',color:'rgba(155,148,136,0.5)',cursor:'pointer',fontSize:'15px',flexShrink:0,padding:'0 2px',lineHeight:1}}>✕</button>
-                </div>
-              )}
               {/* Driver header */}
               <div style={{background: isTowingDriver ? 'rgba(232,169,76,0.06)' : 'rgba(90,180,245,0.06)',border:'1px solid '+(isTowingDriver ? 'rgba(232,169,76,0.25)' : 'rgba(90,180,245,0.2)'),borderRadius:'10px',padding:'14px 18px',marginBottom:'16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div>
@@ -3381,100 +3324,67 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   {/* ── Header ── */}
                   <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
                     <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa'}}>🚚 LOWBED MOVES</div>
-                    {lowbedPlan && lowbedPlan.jobs && lowbedPlan.jobs.length > 0 && (
+                    {lowbedGroups.length > 0 && (
                       <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(167,139,250,0.7)',background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:'8px',padding:'1px 6px'}}>
-                        {lowbedPlan.jobs.reduce((n,j)=>n+(j.moves||[]).length,0)} moves
+                        {lowbedGroups.length} move{lowbedGroups.length !== 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
                   {/* ── Empty state ── */}
-                  {(!lowbedPlan || !lowbedPlan.jobs || lowbedPlan.jobs.length === 0) ? (
+                  {lowbedGroups.length === 0 ? (
                     <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 0',gap:'8px'}}>
                       <span style={{fontSize:'28px',opacity:0.35}}>🚛</span>
                       <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center'}}>No active lowbed moves</div>
                     </div>
-                  ) : (() => {
-                    // Status badge helper
-                    const statusBadge = (s) => {
-                      if (s === 'complete')    return { label:'Complete',    color:'#7ecb8f', bg:'rgba(126,203,143,0.12)', border:'rgba(126,203,143,0.3)' };
-                      if (s === 'in_progress') return { label:'In Progress', color:'#5ab4f5', bg:'rgba(90,180,245,0.12)',  border:'rgba(90,180,245,0.3)'  };
-                      if (s === 'assigned')    return { label:'Assigned',    color:'#5ab4f5', bg:'rgba(90,180,245,0.12)',  border:'rgba(90,180,245,0.3)'  };
-                      if (s === 'cancelled')   return { label:'Cancelled',   color:'#d94f3d', bg:'rgba(217,79,61,0.12)',   border:'rgba(217,79,61,0.3)'   };
-                      return                         { label:'Pending',      color:'#f5c518', bg:'rgba(245,197,24,0.12)',  border:'rgba(245,197,24,0.3)'  };
-                    };
-                    return (
-                      <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
-                        {lowbedPlan.jobs.map((job, ji) => {
-                          const moves = job.moves || [];
-                          const onSiteNames = new Set();
-                          moves.forEach(mv => { if (mv.status==='complete') (mv.equipment||[]).forEach(eq => eq.name && onSiteNames.add(eq.name)); });
-                          const allDone = moves.length > 0 && moves.every(mv => mv.status === 'complete');
-                          const jobKey = String(job.jobNum || job.jobName || ji);
-                          const cleanoutSent = cleanoutSet.has(jobKey);
-                          return (
-                            <div key={ji}>
-                              {/* Job header row */}
-                              <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'6px',paddingBottom:'5px',borderBottom:'1px solid rgba(167,139,250,0.2)'}}>
-                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',fontWeight:700,color:'#a78bfa',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{job.jobName||job.jobNum||('Job '+(ji+1))}</div>
-                                {job.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0}}>{job.date}</span>}
-                                {allDone && !cleanoutSent && (
-                                  <button onClick={() => sendCleanOut(jobKey, job.jobName||job.jobNum||('Job '+(ji+1)))} style={{flexShrink:0,padding:'2px 7px',background:'rgba(245,197,24,0.13)',border:'1px solid rgba(245,197,24,0.45)',borderRadius:'4px',color:'var(--stripe)',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,cursor:'pointer'}}>🔔 Clean Out</button>
-                                )}
-                                {cleanoutSent && <span style={{flexShrink:0,fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'#7ecb8f'}}>✅ Authorized</span>}
-                              </div>
-                              {/* Moves list */}
-                              {moves.length === 0
-                                ? <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'rgba(155,148,136,0.4)',padding:'4px 0'}}>No moves planned</div>
-                                : <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                                    {moves.map((mv, mi) => {
-                                      const sb = statusBadge(mv.status);
-                                      const eqNames = (mv.equipment||[]).map(e=>(EQ_ICONS[e.type]||'📦')+' '+(e.name||e.type)).join(', ');
-                                      return (
-                                        <div key={mi} style={{background:'rgba(30,30,50,0.6)',border:'1px solid rgba(90,180,245,0.12)',borderRadius:'6px',padding:'7px 9px',display:'flex',flexDirection:hdMobile?'column':'row',alignItems:hdMobile?'flex-start':'center',gap:hdMobile?'4px':'8px',boxSizing:'border-box'}}>
-                                          {/* Move label */}
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',fontWeight:700,color:'rgba(155,148,136,0.5)',flexShrink:0,minWidth:hdMobile?undefined:'34px'}}>M{mi+1}</div>
-                                          {/* Equipment — bold on mobile */}
-                                          <div style={{flex:hdMobile?undefined:1,minWidth:0,fontFamily:"'DM Mono',monospace",fontSize:hdMobile?'9px':'8px',fontWeight:hdMobile?700:400,color:'#c0d8f0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{eqNames||'—'}</div>
-                                          {/* Destination line — mobile only */}
-                                          {hdMobile && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.65)'}}>{'\u2192'} {job.location||job.jobName||'—'}</div>}
-                                          {/* Driver — select for admin/foreman, static text for others */}
-                                          {(isAdminUser || isForeman) ? (
-                                            <select
-                                              value={mv.assignedDriver || ''}
-                                              onChange={(e) => {
-                                                const newDriver = e.target.value;
-                                                const plan2 = JSON.parse(JSON.stringify(lowbedPlan));
-                                                plan2.jobs[ji].moves[mi].assignedDriver = newDriver || null;
-                                                plan2.jobs[ji].moves[mi].status = newDriver ? 'assigned' : 'pending';
-                                                if (newDriver) plan2.jobs[ji].moves[mi].assignedAt = Date.now();
-                                                savePlanAndRefresh(plan2);
-                                              }}
-                                              style={{flexShrink:0,maxWidth:hdMobile?'100%':'120px',background:'rgba(20,20,40,0.9)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'4px',color:mv.assignedDriver?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 4px',cursor:'pointer',outline:'none'}}>
-                                              <option value=''>⚠ Unassigned</option>
-                                              {CORE_LOWBED_DRIVERS.map(d => (
-                                                <option key={d.value} value={d.value}>{d.label}</option>
-                                              ))}
-                                            </select>
-                                          ) : (
-                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:mv.assignedDriver?'#7ecb8f':'rgba(155,148,136,0.4)',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:hdMobile?undefined:'110px'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
-                                          )}
-                                          {/* Status badge */}
-                                          <div style={{flexShrink:0,padding:'1px 7px',borderRadius:'8px',background:sb.bg,border:'1px solid '+sb.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:sb.color,letterSpacing:'0.3px',whiteSpace:'nowrap'}}>{sb.label}</div>
-                                          {/* Deadline */}
-                                          {mv.deadline && mv.status !== 'complete' && (
-                                            <div style={{flexShrink:0,padding:'1px 5px',background:'#fff',border:'2px solid #c0392b',borderRadius:'3px',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:'#c0392b',whiteSpace:'nowrap'}}>⚠ {new Date(mv.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                              }
+                  ) : (
+                    <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                      {lowbedGroups.map((grp) => {
+                        const eqNames = (grp.items||[]).map(e=>(EQ_ICONS[e.type]||'📦')+' '+(e.name||e.type)).join(', ');
+                        const hasDriver = !!grp.driverName;
+                        return (
+                          <div key={grp.id} style={{background:'rgba(30,30,50,0.6)',border:'1px solid rgba(90,180,245,0.12)',borderRadius:'6px',padding:'8px 10px',display:'flex',flexDirection:'column',gap:'5px',boxSizing:'border-box'}}>
+                            {/* Top row: date + from→to */}
+                            <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+                              {grp.date && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.55)',flexShrink:0}}>{grp.date}</span>}
+                              {(grp.from || grp.to) && (
+                                <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                  {grp.from||'—'} {'\u2192'} {grp.to||'—'}
+                                </span>
+                              )}
+                              {grp.deadline && (
+                                <div style={{flexShrink:0,padding:'1px 5px',background:'#fff',border:'2px solid #c0392b',borderRadius:'3px',fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:'#c0392b',whiteSpace:'nowrap'}}>⚠ {new Date(grp.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+                              )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                            {/* Equipment */}
+                            {eqNames && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0d8f0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{eqNames}</div>}
+                            {/* Notes */}
+                            {grp.notes && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.6)',fontStyle:'italic'}}>{grp.notes}</div>}
+                            {/* Driver row */}
+                            <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
+                              {(isAdminUser || isForeman) ? (
+                                <select
+                                  value={grp.driverName || ''}
+                                  onChange={(e) => {
+                                    const newDriver = e.target.value;
+                                    const updated = lowbedGroups.map(g => g.id === grp.id ? {...g, driverName: newDriver} : g);
+                                    saveLowbedGroups(updated);
+                                  }}
+                                  style={{flex:1,maxWidth:'150px',background:'rgba(20,20,40,0.9)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'4px',color:hasDriver?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 4px',cursor:'pointer',outline:'none'}}>
+                                  <option value=''>⚠ Unassigned</option>
+                                  {CORE_LOWBED_DRIVERS.map(d => (
+                                    <option key={d.value} value={d.value}>{d.label}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:hasDriver?'#7ecb8f':'rgba(155,148,136,0.4)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'150px'}}>{grp.driverName||'⚠ Unassigned'}</div>
+                              )}
+                              <div style={{flexShrink:0,padding:'1px 7px',borderRadius:'8px',background:hasDriver?'rgba(90,180,245,0.12)':'rgba(245,197,24,0.12)',border:'1px solid '+(hasDriver?'rgba(90,180,245,0.3)':'rgba(245,197,24,0.3)'),fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:hasDriver?'#5ab4f5':'#f5c518',letterSpacing:'0.3px',whiteSpace:'nowrap'}}>{hasDriver?'Assigned':'Pending'}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   </>
                 </div>
 
