@@ -1340,6 +1340,15 @@ function App() {
       return ['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
     } catch(e) { return false; }
   })();
+  // Foreman role check for lowbed dispatch listener
+  const isForeman = (() => {
+    try {
+      const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+      const accounts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
+      const acct = accounts.find(a => (a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u);
+      return acct ? acct.role === 'foreman' : false;
+    } catch(e) { return false; }
+  })();
   const isNightmare57 = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
@@ -1500,6 +1509,7 @@ function App() {
     localStorage.setItem('dmc_lowbed_plan', JSON.stringify(newPlan));
     setLowbedPlan(newPlan);
     setPlanConflicts(detectPlanConflicts(newPlan));
+    hdFsSet('lowbed_plan', newPlan);
   };
 
   const deferMove = (conflict) => {
@@ -1841,6 +1851,18 @@ function App() {
 
   // ── Real-time sync: lowbed chip assignments + equip name map ──────────────
   useEffect(() => {
+    // Only enable the listener for admin, lowbed_driver, rental_lowbed_driver, or foreman
+    const accounts = (() => { try { return JSON.parse(localStorage.getItem('pavescope_accounts') || '[]'); } catch(e) { return []; } })();
+    const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+    const acct = accounts.find(a => (a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u);
+    const role = acct ? acct.role : null;
+    const driverTypes = acct && Array.isArray(acct.driverTypes) ? acct.driverTypes : [];
+    const isLowbedDriverRole = role === 'lowbed_driver' || (driverTypes && driverTypes.includes('lowbed'));
+    const isRentalLowbedDriverRole = role === 'rental_lowbed_driver' || (driverTypes && driverTypes.includes('rental_lowbed'));
+    const isForemanRole = role === 'foreman';
+    const isAdmin = ['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
+    if (!(isAdmin || isLowbedDriverRole || isRentalLowbedDriverRole || isForemanRole)) return;
+
     // Load lowbed_groups: merge local + remote, keeping whichever has more total items,
     // then push the winner back to Firestore so all users converge on the same data
     hdFsGet('lowbed_groups').then(remote => {
@@ -1865,17 +1887,26 @@ function App() {
         localStorage.setItem('hd_hidden_devices', JSON.stringify(remote));
       }
     });
+    // Initial load of lowbed_plan from Firestore — always prefer remote over stale localStorage
+    hdFsGet('lowbed_plan').then(remote => {
+      if (remote && remote.jobs) {
+        setLowbedPlan(remote);
+        localStorage.setItem('dmc_lowbed_plan', JSON.stringify(remote));
+      }
+    });
 
     // Poll every 8 seconds — track updatedAt to skip no-op re-renders
-    let lastLowbedAt  = 0;
-    let lastNamesAt   = 0;
-    let lastHiddenAt  = 0;
+    let lastLowbedAt     = 0;
+    let lastNamesAt      = 0;
+    let lastHiddenAt     = 0;
+    let lastLowbedPlanAt = 0;
     const poll = setInterval(async () => {
       try {
-        const [lgRes, nmRes, hdRes] = await Promise.all([
+        const [lgRes, nmRes, hdRes, lpRes] = await Promise.all([
           fetch(`${_HD_FS_BASE}/lowbed_groups?key=${_HD_FB_KEY}`),
           fetch(`${_HD_FS_BASE}/hd_equip_names?key=${_HD_FB_KEY}`),
-          fetch(`${_HD_FS_BASE}/hd_hidden_devices?key=${_HD_FB_KEY}`)
+          fetch(`${_HD_FS_BASE}/hd_hidden_devices?key=${_HD_FB_KEY}`),
+          fetch(`${_HD_FS_BASE}/lowbed_plan?key=${_HD_FB_KEY}`)
         ]);
         if (lgRes.ok) {
           const doc = await lgRes.json();
@@ -1913,6 +1944,19 @@ function App() {
               const arr = JSON.parse(raw);
               setHiddenDeviceIds(new Set(arr));
               localStorage.setItem('hd_hidden_devices', JSON.stringify(arr));
+            }
+          }
+        }
+        if (lpRes.ok) {
+          const doc = await lpRes.json();
+          const at = parseInt(doc.fields?.updatedAt?.integerValue || '0');
+          if (at > lastLowbedPlanAt) {
+            lastLowbedPlanAt = at;
+            const raw = doc.fields?.data?.stringValue;
+            if (raw) {
+              const plan = JSON.parse(raw);
+              setLowbedPlan(plan);
+              localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
             }
           }
         }

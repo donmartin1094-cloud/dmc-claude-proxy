@@ -36362,6 +36362,13 @@ async function initApp(username) {
               else if (key === 'paving_slips')       { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); }
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
               else if (key === 'daily_orders')     { dailyOrders = val; if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports(); }
+              else if (key === 'lowbed_plan') {
+                const _lbRole = getCurrentRole();
+                if (isAdmin() || ['lowbed_driver','rental_lowbed_driver','foreman'].includes(_lbRole)) {
+                  localStorage.setItem('dmc_lowbed_plan', JSON.stringify(val));
+                  try { if (typeof _homeFleetRerender === 'function') _homeFleetRerender(); } catch(e2) {}
+                }
+              }
             } catch(e) {}
           }
         });
@@ -41385,6 +41392,7 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
       plan.verifiedAt = Date.now();
       plan.verifiedBy = localStorage.getItem('dmc_u')||'';
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+      try { if (typeof fbSet === 'function') fbSet('lowbed_plan', plan); } catch(e) { console.warn('lowbed_plan fbSet failed:', e); }
       // Log every equipment piece in every move to the movement log
       try { _eqLogAddMoveEntries(plan); } catch(e) { console.warn('_eqLogAddMoveEntries failed:', e); }
 
@@ -41596,6 +41604,7 @@ Return ONLY valid JSON (no markdown fences, no explanation):
         generatedBy: localStorage.getItem('dmc_u')||''
       });
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+      try { if (typeof fbSet === 'function') fbSet('lowbed_plan', plan); } catch(e) { console.warn('lowbed_plan fbSet failed:', e); }
 
       // ── Notify admin accounts (not drivers) ──────────────────────────────
       const admins = (typeof employees!=='undefined'?employees:[])
