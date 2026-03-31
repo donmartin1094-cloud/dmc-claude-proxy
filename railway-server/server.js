@@ -46,6 +46,8 @@ function makeImap(creds) {
 // ── Per-user credential lookup (env vars → Firestore) ────────────────────────
 const getMailCredentials = async (username) => {
   if (!username) throw new Error('No username provided');
+  // If a full email was passed (e.g. dj@donmartincorp.com), strip to just the local part
+  if (username.includes('@')) username = username.split('@')[0];
   const uKey = username.toUpperCase().replace(/[^A-Z0-9]/g, '_');
 
   // 1. Environment variables (MAIL_HOST_DJ, MAIL_USER_DJ, MAIL_PASS_DJ …)
@@ -81,8 +83,9 @@ const getMailCredentials = async (username) => {
 
 // ── Mail: check if credentials are configured ────────────────────────────────
 app.get('/mail/credentials/check', async (req, res) => {
-  const { username } = req.query;
+  let { username } = req.query;
   if (!username) return res.json({ hasCredentials: false });
+  if (username.includes('@')) username = username.split('@')[0];
   try {
     const uKey = username.toUpperCase().replace(/[^A-Z0-9]/g, '_');
     if (process.env['MAIL_USER_' + uKey] && process.env['MAIL_PASS_' + uKey]) {
