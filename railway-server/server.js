@@ -178,6 +178,54 @@ app.post('/mail/test', async (req, res) => {
   }
 });
 
+// ── Mail: diagnose connection for a username ─────────────────────────────────
+app.post('/mail/diagnose', async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Missing username' });
+  let creds, client;
+  try {
+    creds = await getMailCredentials(username);
+  } catch (e) {
+    return res.json({ connected: false, error: e.message, stage: 'credentials' });
+  }
+  client = new ImapFlow({
+    host:   creds.host,
+    port:   creds.port   || 993,
+    secure: creds.secure !== false,
+    auth:   { user: creds.auth.user, pass: creds.auth.pass },
+    logger: true,          // verbose output to Railway logs
+    connectionTimeout: 15000,
+    greetingTimeout:   8000,
+    socketTimeout:     20000
+  });
+  client.on('error', err => console.error('[IMAP/diagnose] Socket error:', err.message));
+  try {
+    await client.connect();
+    const list = await client.list();
+    const tlsInfo = client.useTLS ? (client.tls || null) : null;
+    res.json({
+      connected:   true,
+      host:        creds.host,
+      port:        creds.port || 993,
+      user:        creds.auth.user,
+      folderCount: list.length,
+      folders:     list.slice(0, 10).map(f => f.path),
+      tlsInfo:     tlsInfo ? { version: tlsInfo.version, cipher: tlsInfo.cipher?.name } : null
+    });
+  } catch (e) {
+    res.json({
+      connected: false,
+      error:     e.message,
+      code:      e.code   || null,
+      host:      creds.host,
+      port:      creds.port || 993,
+      user:      creds.auth.user
+    });
+  } finally {
+    try { await client.logout(); } catch (_) {}
+  }
+});
+
 // ── Auth login ──────────────────────────────────────────────────────────────
 app.post('/auth-login', (req, res) => {
   const body = req.body || {};
