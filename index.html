@@ -1349,6 +1349,19 @@
     -webkit-tap-highlight-color:transparent;
   }
   .sched-mob-nav-today:active { background:rgba(245,197,24,0.12); }
+  /* ── Foreman toggle bar ── */
+  .sched-mob-fm-toggle {
+    display:flex; flex-shrink:0;
+    background:var(--asphalt-mid); border-bottom:1px solid var(--asphalt-light);
+  }
+  .sched-mob-fm-btn {
+    flex:1; padding:9px 4px; font-family:'DM Mono',monospace; font-size:11px; font-weight:700;
+    letter-spacing:0.8px; text-transform:uppercase; color:var(--concrete-dim);
+    background:none; border:none; border-bottom:2px solid transparent;
+    cursor:pointer; -webkit-tap-highlight-color:transparent; transition:all 0.12s;
+  }
+  .sched-mob-fm-btn.active { color:var(--white); border-bottom-color:var(--stripe); background:rgba(245,197,24,0.05); }
+  .sched-mob-fm-btn:active { opacity:0.75; }
   /* ── Monthly calendar grid ── */
   .sched-mob-cal { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
   .sched-mob-cal-dow-hdr {
@@ -1371,17 +1384,16 @@
     -webkit-tap-highlight-color:transparent; position:relative;
   }
   .sched-mob-cal-cell.empty { background:var(--asphalt); }
-  .sched-mob-cal-cell.weekend { background:#1c1c1c; }
+  .sched-mob-cal-cell.weekend { background:rgba(148,112,198,0.13); }
   .sched-mob-cal-cell.today { background:rgba(245,197,24,0.05); outline:2px solid var(--stripe); outline-offset:-2px; }
-  .sched-mob-cal-cell.holiday { background:rgba(213,64,61,0.05); }
+  .sched-mob-cal-cell.holiday { background:rgba(148,112,198,0.20); }
   .sched-mob-cal-daynum {
-    font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:0.5px;
-    color:var(--concrete-dim); line-height:1; padding:3px 4px 2px; flex-shrink:0;
+    position:absolute; top:3px; left:4px; z-index:1;
+    font-family:'Bebas Neue',sans-serif; font-size:14px; font-weight:700; letter-spacing:0.5px;
+    color:#fff; line-height:1; pointer-events:none;
   }
-  .sched-mob-cal-cell.today   .sched-mob-cal-daynum { color:var(--stripe); }
-  .sched-mob-cal-cell.holiday .sched-mob-cal-daynum { color:var(--red); }
   /* ── Split crew blocks inside each day cell ── */
-  .sched-mob-cal-crews { display:flex; flex-direction:column; flex:1; gap:1px; }
+  .sched-mob-cal-crews { display:flex; flex-direction:column; flex:1; gap:1px; min-height:0; }
   .sched-mob-cal-crew {
     flex:1; display:flex; align-items:center; justify-content:center; gap:2px;
     padding:2px 3px; min-height:24px; cursor:pointer;
@@ -1414,9 +1426,10 @@
     50% { box-shadow:inset 0 0 8px 2px rgba(255,255,255,0.25); }
   }
   .sched-mob-cal-hol-lbl {
+    position:absolute; bottom:3px; left:3px; z-index:1;
     font-family:'DM Mono',monospace; font-size:7px; letter-spacing:0.5px;
     color:var(--red); text-transform:uppercase; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; padding:0 3px;
+    white-space:nowrap; pointer-events:none;
   }
   /* ── Move-mode banner ── */
   .mob-move-banner {
@@ -12718,6 +12731,7 @@ const FOREMAN_KEY = 'pavescope_foremans';
 const DEFAULT_FOREMANS = ['Filipe Joaquim','Louie Medeiros'];
 let foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringify(DEFAULT_FOREMANS));
 function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); fbSet('foremans', foremanRoster); }
+let mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second foreman
 
 
 // ── Rental Crews ────────────────────────────────────────────────────────────
@@ -16071,15 +16085,19 @@ function renderSchedule() {
       isHolD  ? 'holiday'  : '',
     ].filter(Boolean).join(' ');
 
-    // Build crew block for each foreman slot
-    const slotDefs = [
-      { slot:'top',    foreman: foremanRoster[0]||'Filipe Joaquim' },
-      { slot:'bottom', foreman: foremanRoster[1]||'Louie Medeiros'  }
+    // Build crew block for selected foreman only
+    const allSlotDefs = [
+      { slot:'top',    foreman: foremanRoster[0]||'Filipe Joaquim', parentSlot:'top' },
+      { slot:'bottom', foreman: foremanRoster[1]||'Louie Medeiros',  parentSlot:'bottom' }
     ];
     const dayExtras = (schedData[key]?.extras) || [];
     dayExtras.forEach((ex,ei) => {
-      slotDefs.push({ slot:'extra_'+ei, foreman: ex.data?.foremanName||'Extra Crew' });
+      allSlotDefs.push({ slot:'extra_'+ei, foreman: ex.data?.foremanName||'Extra Crew', parentSlot: ex.parentSlot||'top' });
     });
+    const slotDefs = allSlotDefs.filter(({ slot, parentSlot }) =>
+      slot === mobSchedForemanFilter ||
+      (slot.startsWith('extra_') && parentSlot === mobSchedForemanFilter)
+    );
 
     const crewBlocks = slotDefs.map(({ slot, foreman }) => {
       const bdata = slot.startsWith('extra_')
@@ -16125,9 +16143,9 @@ function renderSchedule() {
       </div>`;
     }).join('');
 
-    let innerHtml = `<div class="sched-mob-cal-daynum">${dayNum}</div>`;
-    if (isHolD) innerHtml += `<div class="sched-mob-cal-hol-lbl">Holiday</div>`;
-    innerHtml += `<div class="sched-mob-cal-crews">${crewBlocks}</div>`;
+    let innerHtml = `<div class="sched-mob-cal-crews">${crewBlocks}</div>`;
+    innerHtml += `<span class="sched-mob-cal-daynum">${dayNum}</span>`;
+    if (isHolD) innerHtml += `<span class="sched-mob-cal-hol-lbl">HOL</span>`;
 
     calCells.push(`<div class="${cls}">${innerHtml}</div>`);
   });
@@ -16205,6 +16223,13 @@ function renderSchedule() {
             <div class="sched-mob-nav-today" onclick="schedMonthOffset=0;schedScrollToToday=true;renderSchedule();">Today</div>
           </div>
           <button class="sched-mob-nav-btn" onclick="schedMonthOffset++;renderSchedule();" aria-label="Next month">&#9654;</button>
+        </div>
+        <!-- Foreman toggle -->
+        <div class="sched-mob-fm-toggle">
+          <button class="sched-mob-fm-btn${mobSchedForemanFilter==='top'?' active':''}"
+            onclick="mobSchedForemanFilter='top';renderSchedule()">${foremanRoster[0]||'Filipe Joaquim'}</button>
+          <button class="sched-mob-fm-btn${mobSchedForemanFilter==='bottom'?' active':''}"
+            onclick="mobSchedForemanFilter='bottom';renderSchedule()">${foremanRoster[1]||'Louie Medeiros'}</button>
         </div>
         <!-- Monthly calendar grid -->
         <div class="sched-mob-cal">${mobileCalHtml}</div>
@@ -35943,6 +35968,7 @@ async function fbSet(docName, value) {
       // fall back to local cache if Firebase cannot be initialized right now
     }
   }
+  console.log('[fbSet] db status:', db ? 'initialized' : 'NULL — will use localStorage fallback', '| doc:', docName);
   if (!db) { localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value)); return; }
   try {
     setSyncBadge('saving');
@@ -41350,7 +41376,7 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
       </div>`;
     document.body.appendChild(ov);
 
-    window._lbVerifySend = function(adminOverride) {
+    window._lbVerifySend = async function(adminOverride) {
       // Collect driver assignments from dropdowns
       (plan.jobs||[]).forEach((job,ji) => {
         (job.moves||[]).forEach((mv,mi) => {
@@ -41392,7 +41418,15 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
       plan.verifiedAt = Date.now();
       plan.verifiedBy = localStorage.getItem('dmc_u')||'';
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
-      try { if (typeof fbSet === 'function') fbSet('lowbed_plan', plan); } catch(e) { console.warn('lowbed_plan fbSet failed:', e); }
+      console.log('[Lowbed] About to save verified plan. db:', typeof db, 'firebase:', typeof firebase);
+      try {
+        if (typeof fbSet === 'function') {
+          await fbSet('lowbed_plan', plan);
+          console.log('[Lowbed] Plan saved to Firestore successfully');
+        }
+      } catch(e) {
+        console.error('[Lowbed] Firestore write failed:', e);
+      }
       // Log every equipment piece in every move to the movement log
       try { _eqLogAddMoveEntries(plan); } catch(e) { console.warn('_eqLogAddMoveEntries failed:', e); }
 
@@ -41604,7 +41638,15 @@ Return ONLY valid JSON (no markdown fences, no explanation):
         generatedBy: localStorage.getItem('dmc_u')||''
       });
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
-      try { if (typeof fbSet === 'function') fbSet('lowbed_plan', plan); } catch(e) { console.warn('lowbed_plan fbSet failed:', e); }
+      console.log('[Lowbed] About to save generated plan. db:', typeof db, 'firebase:', typeof firebase);
+      try {
+        if (typeof fbSet === 'function') {
+          await fbSet('lowbed_plan', plan);
+          console.log('[Lowbed] Plan saved to Firestore successfully');
+        }
+      } catch(e) {
+        console.error('[Lowbed] Firestore write failed:', e);
+      }
 
       // ── Notify admin accounts (not drivers) ──────────────────────────────
       const admins = (typeof employees!=='undefined'?employees:[])

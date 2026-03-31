@@ -1947,6 +1947,7 @@ function App() {
               _prevLowbedPlanRef.current = plan;
               setLowbedPlan(plan);
               localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+              console.log('[Heimdall] Lowbed plan received from Firestore:', plan.jobs?.length, 'jobs');
             }
           }
         }
