@@ -3329,11 +3329,18 @@ Be specific, practical, and flag any uncertainties clearly.`;
                     const inProgress = manualMoves.filter(g => g.status === 'in_progress').length;
                     const pending    = manualMoves.filter(g => g.status === 'pending').length;
 
+                    const _curRoleCS = (() => { try { const u=(localStorage.getItem('dmc_u')||'').toLowerCase(); return (JSON.parse(localStorage.getItem('pavescope_accounts')||'[]').find(a=>(a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u)||{}).role||''; }catch(e){return '';} })();
+                    const canChangeStatus = isLowbedDriver || _curRoleCS === 'rental_lowbed_driver';
+                    const _DNAMES = {'nightmare57':'Eric Sylvia','ericsylvia57@gmail.com':'Eric Sylvia','blydon':'Bill Lydon','billydon@donmartincorp.com':'Bill Lydon','igiron':'Ingrid Giron','igiron@donmartincorp.com':'Ingrid Giron'};
+                    const _myUN = (localStorage.getItem('dmc_u')||'').toLowerCase();
+                    const _myFullName = _DNAMES[_myUN] || _myUN;
+
                     const resolveLoc = (val) => {
                       if (!val) return '—';
                       if (val === '__garage__') return 'Garage';
                       const job = jobList.find(j => String(j.id) === String(val) || String(j.num) === String(val));
-                      if (job) return job.num ? ('#' + job.num + (job.name ? ' — ' + job.name : '')) : (job.name || String(val));
+                      if (job) return (job.num || job.id) + (job.name ? ' — ' + job.name : '');
+                      if (/^\d{10,}$/.test(String(val))) return 'Job ' + String(val);
                       return val;
                     };
 
@@ -3449,35 +3456,62 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
                                     {/* Driver + Status */}
                                     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'flex-end'}}>
+                                      {/* DRIVER — admin assigns, driver claims/unclaims, others read-only */}
                                       <div style={{flex:1,minWidth:'120px'}}>
                                         <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>DRIVER</div>
-                                        {(isAdminUser||isForeman) ? (
+                                        {isAdminUser ? (
                                           <select value={grp.driverName||''} onChange={e=>updateGroup({driverName:e.target.value})}
                                             style={{width:'100%',background:'rgba(20,20,40,0.9)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'4px',color:grp.driverName?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
                                             <option value=''>⚠ Unassigned</option>
                                             {CORE_LOWBED_DRIVERS.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
                                           </select>
-                                        ) : isLowbedDriver && !grp.driverName ? (
-                                          <button onClick={()=>updateGroup({driverName:CORE_LOWBED_DRIVERS.find(d=>d.value.toLowerCase().includes((localStorage.getItem('dmc_u')||'').toLowerCase().replace('nightmare57','eric').replace('igiron','ingrid').replace('blydon','bill')))?.value || localStorage.getItem('dmc_u')||''})}
-                                            style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'4px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer',fontWeight:700}}>
-                                            ✋ Claim Move
-                                          </button>
-                                        ) : (
+                                        ) : canChangeStatus ? (() => {
+                                          const unclaimed = !grp.driverName || grp.driverName.toLowerCase() === 'various';
+                                          const claimedByMe = grp.driverName && grp.driverName.toLowerCase() === _myFullName.toLowerCase();
+                                          return unclaimed ? (
+                                            <button onClick={()=>updateGroup({driverName:_myFullName})}
+                                              style={{background:'rgba(90,180,245,0.1)',border:'1px solid rgba(90,180,245,0.3)',borderRadius:'4px',color:'#5ab4f5',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 10px',cursor:'pointer',fontWeight:700}}>
+                                              ✋ Claim This Move
+                                            </button>
+                                          ) : claimedByMe ? (
+                                            <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                                              <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f'}}>{grp.driverName}</span>
+                                              <button onClick={()=>updateGroup({driverName:''})}
+                                                style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 5px',cursor:'pointer'}}>
+                                                Unclaim
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'#7ecb8f'}}>{grp.driverName}</div>
+                                          );
+                                        })() : (
                                           <div style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:grp.driverName?'#7ecb8f':'rgba(155,148,136,0.4)'}}>{grp.driverName||'⚠ Unassigned'}</div>
                                         )}
                                       </div>
-                                      {(isAdminUser||isForeman) && (
-                                        <div style={{flex:1,minWidth:'120px'}}>
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>STATUS</div>
+                                      {/* STATUS — driver: pending/in_progress/complete; admin: badge + cancel only; foreman: badge only */}
+                                      <div style={{flex:1,minWidth:'120px'}}>
+                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.45)',marginBottom:'3px'}}>STATUS</div>
+                                        {canChangeStatus ? (
                                           <select value={grp.status||'pending'} onChange={e=>updateGroup({status:e.target.value})}
                                             style={{width:'100%',background:'rgba(20,20,40,0.9)',border:'1px solid '+si.border,borderRadius:'4px',color:si.color,fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none'}}>
                                             <option value='pending'>Pending</option>
                                             <option value='in_progress'>In Progress</option>
                                             <option value='complete'>Complete</option>
-                                            <option value='cancelled'>Cancelled</option>
                                           </select>
-                                        </div>
-                                      )}
+                                        ) : isAdminUser ? (
+                                          <div style={{display:'flex',alignItems:'center',gap:'5px',flexWrap:'wrap'}}>
+                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,color:si.color,fontWeight:700}}>{si.label}</div>
+                                            {grp.status !== 'cancelled' && (
+                                              <button onClick={()=>updateGroup({status:'cancelled'})}
+                                                style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'1px 6px',cursor:'pointer'}}>
+                                                Cancel
+                                              </button>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 7px',borderRadius:'8px',background:si.bg,border:'1px solid '+si.border,color:si.color,fontWeight:700,display:'inline-block'}}>{si.label}</div>
+                                        )}
+                                      </div>
                                     </div>
 
                                     {/* Notes / Deadline / Created */}
