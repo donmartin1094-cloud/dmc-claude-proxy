@@ -1714,29 +1714,53 @@ function App() {
     paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️',
     loader:'🚜', skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛',
     lowbed:'🚚', tack_truck:'🛢️', water_truck:'💧', generator:'⚡',
-    tow_truck:'🪝', wrecker:'🔩', rollback:'🛻',
+    tow_truck:'🪝', wrecker:'🔩', rollback:'🛻', mecalac:'🦯',
     trailer:'🔗', other:'📦'
   };
   const LOWBED_RULES = {
-    paver:{loadClass:'heavy'}, roller:{loadClass:'medium',canPairWith:['roller','skid_steer','compactor','generator','trailer']},
-    milling:{loadClass:'heavy'}, excavator:{loadClass:'heavy'}, loader:{loadClass:'medium',canPairWith:['skid_steer','trailer']},
-    skid_steer:{loadClass:'light',canPairWith:['skid_steer','roller','loader','compactor','generator','trailer']},
-    compactor:{loadClass:'light',canPairWith:['compactor','roller','skid_steer','generator','trailer']},
-    dump_truck:{loadClass:'skip'}, lowbed:{loadClass:'skip'}, tack_truck:{loadClass:'skip'}, water_truck:{loadClass:'skip'},
-    generator:{loadClass:'light',canPairWith:['generator','skid_steer','compactor','trailer']},
-    trailer:{loadClass:'light',canPairWith:['trailer','skid_steer','generator','compactor','roller']},
-    other:{loadClass:'light',canPairWith:['other','trailer','generator','skid_steer','roller']}
+    paver:      { loadClass:'heavy',   maxPerLoad:1, canPairWith:['roller','skid_steer','mecalac','compactor','generator'] },
+    milling:    { loadClass:'monster' },
+    excavator:  { loadClass:'monster' },
+    mecalac:    { loadClass:'medium',  maxPerLoad:2, canPairWith:['mecalac','roller','skid_steer','paver','compactor','generator','trailer','other'] },
+    roller:     { loadClass:'medium',  canPairWith:['roller','skid_steer','compactor','generator','trailer'] },
+    loader:     { loadClass:'medium',  canPairWith:['skid_steer','trailer'] },
+    skid_steer: { loadClass:'light',   canPairWith:['skid_steer','roller','loader','compactor','generator','trailer'] },
+    compactor:  { loadClass:'light',   canPairWith:['compactor','roller','skid_steer','generator','trailer'] },
+    generator:  { loadClass:'light',   canPairWith:['generator','skid_steer','compactor','trailer'] },
+    trailer:    { loadClass:'light',   canPairWith:['trailer','skid_steer','generator','compactor','roller'] },
+    other:      { loadClass:'light',   canPairWith:['other','trailer','generator','skid_steer','roller'] },
+    dump_truck: { loadClass:'skip' }, lowbed:{ loadClass:'skip' }, tack_truck:{ loadClass:'skip' }, water_truck:{ loadClass:'skip' },
   };
 
   const checkCompat = (newType, existingItems) => {
     if (!existingItems.length) return { ok: true };
     const nr = LOWBED_RULES[newType] || { loadClass:'light', canPairWith:[] };
-    if (nr.loadClass === 'heavy') return { ok: false, reason: 'This equipment requires the full lowbed — remove existing items first.' };
-    if (nr.loadClass === 'skip')  return { ok: false, reason: 'Self-propelled equipment does not go on a lowbed.' };
+    // Monster is always solo — blocks everything
+    if (nr.loadClass === 'monster') return { ok: false, reason: 'This equipment requires the full lowbed alone — remove existing items first.' };
+    if (nr.loadClass === 'skip')    return { ok: false, reason: 'Self-propelled equipment does not go on a lowbed.' };
     for (const item of existingItems) {
       const er = LOWBED_RULES[item.type] || { loadClass:'light', canPairWith:[] };
-      if (er.loadClass === 'heavy') return { ok: false, reason: item.name+' fills the full lowbed — cannot add more.' };
-      if (!(nr.canPairWith || []).includes(item.type)) return { ok: false, reason: newType+' is not compatible with '+item.type+' on the same load.' };
+      // Existing item is monster — nothing can join it
+      if (er.loadClass === 'monster') return { ok: false, reason: item.name + ' requires the full lowbed alone — cannot add more.' };
+      // Existing item is heavy (paver)
+      if (er.loadClass === 'heavy') {
+        const paverFriendly = ['roller','skid_steer','mecalac','compactor','generator'];
+        if (!paverFriendly.includes(newType)) return { ok: false, reason: 'Cannot add ' + newType + ' to a load with a paver.' };
+        continue;
+      }
+    }
+    // New item is heavy (paver)
+    if (nr.loadClass === 'heavy') {
+      const hasHeavy   = existingItems.some(i => (LOWBED_RULES[i.type]||{}).loadClass === 'heavy');
+      const hasMonster = existingItems.some(i => (LOWBED_RULES[i.type]||{}).loadClass === 'monster');
+      if (hasHeavy)   return { ok: false, reason: 'Two pavers cannot share a load — start a separate move.' };
+      if (hasMonster) return { ok: false, reason: 'Cannot add a paver to this load.' };
+      return { ok: true };
+    }
+    // Standard canPairWith check for non-heavy new items
+    for (const item of existingItems) {
+      const er = LOWBED_RULES[item.type] || { loadClass:'light', canPairWith:[] };
+      if (!(nr.canPairWith || []).includes(item.type)) return { ok: false, reason: newType + ' is not compatible with ' + item.type + ' on the same load.' };
     }
     return { ok: true };
   };
