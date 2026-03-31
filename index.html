@@ -30614,155 +30614,115 @@ function widgetEquipment() {
 
 // ── Lowbed Moves home widget ──────────────────────────────────────────────────
 function widgetLowbedMoves() {
-  // Read live plan from localStorage, fall back to mock data for preview
-  var plan = null;
-  try { plan = JSON.parse(localStorage.getItem('dmc_lowbed_plan') || 'null'); } catch(e) {}
+  // Read live manual moves from Heimdall lowbed_groups
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var manualMoves = groups.filter(function(m) { return m.manual === true; });
 
-  if (!plan || !plan.jobs || !plan.jobs.length) {
-    // ── MOCK DATA ─────────────────────────────────────────────────────────────
-    plan = {
-      status: 'verified',
-      jobs: [
-        {
-          jobName: 'Route 9 Overlay', jobNum: '2409',
-          allEquipment: [
-            { type:'paver',   name:'Case Paver'     },
-            { type:'roller',  name:'Hamm Roller'    },
-            { type:'excavator', name:'CAT 320'      }
-          ],
-          moves: [
-            {
-              status: 'in_progress',
-              assignedDriver: 'Eric',
-              equipment: [{ type:'paver', name:'Case Paver' }, { type:'roller', name:'Hamm Roller' }],
-              from: 'Garage', to: 'Route 9 Overlay',
-              deadline: new Date(Date.now() + 18 * 3600000).toISOString()
-            },
-            {
-              status: 'complete',
-              assignedDriver: 'Bill Lydon',
-              equipment: [{ type:'excavator', name:'CAT 320' }],
-              from: 'Garage', to: 'Route 9 Overlay',
-              deadline: null
-            }
-          ]
-        },
-        {
-          jobName: 'Main St Milling', jobNum: '2411',
-          allEquipment: [
-            { type:'milling_machine', name:'Wirtgen W200' },
-            { type:'roller',          name:'Bomag BW211'  }
-          ],
-          moves: [
-            {
-              status: 'pending',
-              assignedDriver: null,
-              equipment: [{ type:'milling_machine', name:'Wirtgen W200' }],
-              from: 'Route 9 Overlay', to: 'Main St Milling',
-              deadline: new Date(Date.now() + 30 * 3600000).toISOString()
-            }
-          ]
-        },
-        {
-          jobName: 'Airport Rd Base', jobNum: '2414',
-          allEquipment: [
-            { type:'grader',  name:'CAT 140M'   },
-            { type:'dozer',   name:'D6 Dozer'   }
-          ],
-          moves: [
-            {
-              status: 'in_progress',
-              assignedDriver: 'Ingrid',
-              equipment: [{ type:'grader', name:'CAT 140M' }, { type:'dozer', name:'D6 Dozer' }],
-              from: 'Main St Milling', to: 'Airport Rd Base',
-              deadline: new Date(Date.now() + 6 * 3600000).toISOString()
-            }
-          ]
-        }
-      ]
-    };
-  }
-
-  // Build aggregated move list
-  var allMoves = [];
-  (plan.jobs || []).forEach(function(job) {
-    (job.moves || []).forEach(function(mv, mi) {
-      allMoves.push({ job: job, move: mv, idx: mi + 1 });
-    });
+  // Group by destination — same logic as Heimdall
+  var toGroupMap = {};
+  var toGroupOrder = [];
+  manualMoves.forEach(function(move) {
+    var key = move.jobGroupId && move.jobGroupId.startsWith('job_')
+      ? move.jobGroupId
+      : (move.to && move.to !== '__garage__' && move.manual)
+        ? 'job_' + move.to
+        : 'single_' + move.id;
+    if (!toGroupMap[key]) { toGroupMap[key] = []; toGroupOrder.push(key); }
+    toGroupMap[key].push(move);
   });
-  var inProgress = allMoves.filter(function(m) { return m.move.status !== 'complete'; });
-  var complete   = allMoves.filter(function(m) { return m.move.status === 'complete'; }).length;
+  var jobGroups = toGroupOrder.map(function(k) { return toGroupMap[k]; });
 
-  var EQ_ICON_MAP = { paver:'🟡', roller:'🔵', excavator:'🟠', dozer:'🟤', grader:'🟣', milling_machine:'⬛', loader:'🟢' };
-
-  var statusDot = function(s) {
-    if (s === 'complete')    return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#7ecb8f;flex-shrink:0;"></span>';
-    if (s === 'in_progress') return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#5ab4f5;flex-shrink:0;"></span>';
-    return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e8a94c;flex-shrink:0;"></span>';
+  // Resolve destination label from backlog jobs
+  var resolveLabel = function(toVal) {
+    if (!toVal || toVal === '__garage__') return 'Garage';
+    var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+    var j = bl.find(function(j) { return String(j.id) === String(toVal); });
+    if (j) return (j.jobNum ? '#' + j.jobNum + ' — ' : '') + (j.jobName || toVal);
+    return toVal;
   };
 
-  var deadlineChip = function(dl) {
-    if (!dl) return '';
-    try {
-      var d = new Date(dl);
-      var now = Date.now();
-      var hoursLeft = (d - now) / 3600000;
-      var urgent = hoursLeft < 6;
-      var label = d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-      return '<span style="display:inline-flex;align-items:center;gap:3px;background:#fff;border:2px solid ' + (urgent ? '#c0392b' : '#c0392b') + ';border-radius:4px;padding:1px 6px;font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:#c0392b;white-space:nowrap;">⚠ ' + label + '</span>';
-    } catch(e) { return ''; }
+  var stColor = function(s) {
+    if (s === 'complete')    return '#4a7a4a';
+    if (s === 'in_progress') return '#f0d060';
+    return '#7ab3f0';
+  };
+  var stLabel = function(s) {
+    if (s === 'complete')    return '✓ Complete';
+    if (s === 'in_progress') return '⚡ In Progress';
+    return '⏳ Pending';
   };
 
-  var rows = inProgress.slice(0, 5).map(function(item) {
-    var mv = item.move, job = item.job;
-    var eqChips = (mv.equipment || []).slice(0, 3).map(function(eq) {
-      return '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:1px 5px;white-space:nowrap;">' +
-        (EQ_ICON_MAP[eq.type] || '📦') + ' ' + escHtml(eq.name || eq.type) +
-      '</span>';
-    }).join('');
-    var routeStr = [mv.from, mv.to].filter(Boolean).join(' → ');
-    return '<div class="home-backlog-row" style="flex-direction:column;align-items:flex-start;gap:3px;padding:8px 0;">' +
-      '<div style="display:flex;align-items:center;gap:7px;width:100%;">' +
-        statusDot(mv.status) +
-        '<span class="home-backlog-num">#' + escHtml(job.jobNum || '—') + '</span>' +
-        '<span class="home-backlog-name">' + escHtml(job.jobName || '—') + ' · Move ' + item.idx + '</span>' +
-        '<span class="home-backlog-status" style="color:' + (mv.assignedDriver ? '#7ecb8f' : 'var(--orange)') + ';background:' + (mv.assignedDriver ? 'rgba(126,203,143,0.1)' : 'rgba(232,129,58,0.1)') + ';">' +
-          (mv.assignedDriver ? escHtml(mv.assignedDriver) : '⚠ Unassigned') +
-        '</span>' +
-      '</div>' +
-      (routeStr ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-left:14px;">📍 ' + escHtml(routeStr) + '</div>' : '') +
-      (eqChips ? '<div style="display:flex;flex-wrap:wrap;gap:3px;padding-left:14px;">' + eqChips + '</div>' : '') +
-      (mv.deadline ? '<div style="padding-left:14px;">' + deadlineChip(mv.deadline) + '</div>' : '') +
-    '</div>';
-  }).join('');
+  // Summary counts across all moves
+  var totalPending  = manualMoves.filter(function(m) { return (m.status||'pending') === 'pending'; }).length;
+  var totalActive   = manualMoves.filter(function(m) { return m.status === 'in_progress'; }).length;
+  var totalComplete = manualMoves.filter(function(m) { return m.status === 'complete'; }).length;
 
-  var emptyHtml = inProgress.length === 0
-    ? '<div style="text-align:center;padding:16px 0;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">All moves complete ✓</div>'
+  var pills = (totalActive || totalPending || totalComplete)
+    ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' +
+        (totalActive   ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f0d060;font-weight:700;">⚡ ' + totalActive + ' In Progress</span>' : '') +
+        (totalPending  ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ab3f0;font-weight:700;">⏳ ' + totalPending + ' Pending</span>' : '') +
+        (totalComplete ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,122,74,0.1);border:1px solid rgba(74,122,74,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;font-weight:700;">✓ ' + totalComplete + ' Done</span>' : '') +
+      '</div>'
     : '';
 
-  // Summary pills
-  var pending    = inProgress.filter(function(m) { return m.move.status === 'pending'; }).length;
-  var active_ct  = inProgress.filter(function(m) { return m.move.status === 'in_progress'; }).length;
-  var pills = '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' +
-    (active_ct ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#5ab4f5;font-weight:700;">● ' + active_ct + ' In Transit</span>' : '') +
-    (pending  ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(232,169,76,0.1);border:1px solid rgba(232,169,76,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#e8a94c;font-weight:700;">● ' + pending + ' Pending</span>' : '') +
-    (complete ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(126,203,143,0.1);border:1px solid rgba(126,203,143,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;font-weight:700;">✓ ' + complete + ' Done</span>' : '') +
-  '</div>';
+  var bodyHtml = jobGroups.length === 0
+    ? '<div style="text-align:center;padding:16px 0;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">No active lowbed moves</div>'
+    : jobGroups.map(function(jMoves) {
+        var destLabel = resolveLabel(jMoves[0].to);
+        var jPend = jMoves.filter(function(m) { return (m.status||'pending') === 'pending'; }).length;
+        var jInP  = jMoves.filter(function(m) { return m.status === 'in_progress'; }).length;
+        var jDone = jMoves.filter(function(m) { return m.status === 'complete'; }).length;
+        var totalEq = jMoves.reduce(function(s,m) { return s + (m.items||[]).length; }, 0);
 
-  var overflow = inProgress.length > 5 ? '<div style="text-align:center;margin-top:4px;font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);">+' + (inProgress.length - 5) + ' more moves</div>' : '';
+        var statusPills =
+          '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
+          (jPend ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);color:#7ab3f0;">⏳ ' + jPend + ' pending</span>' : '') +
+          (jInP  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);color:#f0d060;">⚡ ' + jInP + ' active</span>' : '') +
+          (jDone ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(74,122,74,0.15);border:1px solid rgba(74,122,74,0.3);color:#7ecb8f;">✓ ' + jDone + ' done</span>' : '') +
+          '</div>';
+
+        var moveRows = jMoves.map(function(m, mi) {
+          var st = m.status || 'pending';
+          var sc = stColor(st);
+          var sl = stLabel(st);
+          var eqNames = (m.items||[]).map(function(it) { return it.name||it.type; }).join(', ') || '—';
+          var driver = m.driverName || '⚠ Unassigned';
+          var driverColor = m.driverName ? '#7ecb8f' : '#e8a94c';
+          var strike = st === 'complete' ? 'text-decoration:line-through;opacity:0.6;' : '';
+          return '<div style="padding:6px 10px;border-top:1px dashed rgba(123,79,166,0.25);' + strike + '">' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">' +
+              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.5);">Move ' + (mi+1) + '</span>' +
+              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;padding:1px 5px;border-radius:3px;color:' + sc + ';background:rgba(0,0,0,0.2);border:1px solid ' + sc + '33;">' + sl + '</span>' +
+              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + driverColor + ';margin-left:auto;">' + escHtml(driver) + '</span>' +
+            '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+              escHtml(eqNames) +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+        return '<div style="background:#2a1a3e;border:1px solid rgba(123,79,166,0.4);border-left:3px solid #9b6fd6;border-radius:6px;margin-bottom:8px;overflow:hidden;">' +
+          '<div style="padding:8px 10px;">' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#d8c8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(destLabel) + '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(167,139,250,0.5);margin-top:2px;">' + jMoves.length + ' load' + (jMoves.length!==1?'s':'') + ' · ' + totalEq + ' pcs</div>' +
+            statusPills +
+          '</div>' +
+          moveRows +
+        '</div>';
+      }).join('');
 
   return '<div class="home-widget">' +
     '<div class="home-widget-header">' +
       '<div class="home-widget-title">🚚 Lowbed Moves</div>' +
       '<div style="display:flex;align-items:center;gap:5px;">' +
-        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + allMoves.length + ' moves</span>' +
-        '<button onclick="switchTab(\'heimdall\')" style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;">Plan →</button>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + manualMoves.length + ' moves</span>' +
+        '<button onclick="switchTab(\'heimdall\')" style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;">Open →</button>' +
       '</div>' +
     '</div>' +
     '<div class="home-widget-body">' +
       pills +
-      '<div style="display:flex;flex-direction:column;gap:0;">' + (rows || emptyHtml) + '</div>' +
-      overflow +
+      bodyHtml +
     '</div>' +
   '</div>';
 }
@@ -36375,7 +36335,7 @@ async function initApp(username) {
               else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val)); saveAccounts(val, { skipRemote: true }); }
               else if (key === 'gcs')        { knownGCs = val; localStorage.setItem('pavescope_gcs', JSON.stringify(val)); }
               else if (key === 'fleet')      { equipmentFleet = Array.isArray(val) ? val : equipmentFleet; localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipCheckStatusChanges(); _fleetUpdateBadge(); if (activeTab === 'equipment') { var _eqv = document.getElementById('equipmentFleetView'); if(_eqv) renderEquipmentFleet(_eqv); } }
-              else if (key === 'lowbed_groups') { localStorage.setItem('dmc_lowbed_groups', JSON.stringify(val)); if (activeTab === 'equipment') { var _eqv2 = document.getElementById('equipmentFleetView'); if(_eqv2) renderEquipmentFleet(_eqv2); } }
+              else if (key === 'lowbed_groups') { localStorage.setItem('dmc_lowbed_groups', JSON.stringify(val)); if (activeTab === 'equipment') { var _eqv2 = document.getElementById('equipmentFleetView'); if(_eqv2) renderEquipmentFleet(_eqv2); } try { var _lbw = document.querySelector('[data-wid="lowbedmoves"]'); if (_lbw) { var _tmp = document.createElement('div'); _tmp.innerHTML = widgetLowbedMoves(); var _nb = _tmp.querySelector('.home-widget-body'); var _ob = _lbw.querySelector('.home-widget-body'); if (_nb && _ob) _ob.innerHTML = _nb.innerHTML; } } catch(e) {} }
               else if (key === 'hd_equip_names') { localStorage.setItem('hd_equip_names', JSON.stringify(val)); }
               else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); if (activeTab === 'reports') renderReports(); }
               // ── Keys saved to Firebase but previously missing from live listener ──
