@@ -3613,6 +3613,20 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                 const jPend   = jMoves.filter(m => (m.status||'pending')==='pending').length;
                                 const jInP    = jMoves.filter(m => m.status==='in_progress').length;
                                 const jDone   = jMoves.filter(m => m.status==='complete').length;
+                                const allPieces     = jMoves.flatMap(m => m.items || []);
+                                const arrivedPieces = jMoves.filter(m => m.status==='complete').flatMap(m => m.items || []);
+                                const pendingPcs    = allPieces.filter(p => !arrivedPieces.find(a => a.id === p.id));
+                                const EQ_TYPES = [
+                                  {key:'paver',     icon:'🚜', s:'Paver',           p:'Pavers'},
+                                  {key:'roller',    icon:'🔄', s:'Roller',          p:'Rollers'},
+                                  {key:'skid_steer',icon:'🔧', s:'Skid Steer',      p:'Skid Steers'},
+                                  {key:'excavator', icon:'⛏', s:'Excavator',       p:'Excavators'},
+                                  {key:'milling',   icon:'🏗', s:'Milling Machine', p:'Machines'},
+                                  {key:'mecalac',   icon:'🦾', s:'Mecalac',         p:'Mecalacs'},
+                                  {key:'compactor', icon:'🔨', s:'Compactor',       p:'Compactors'},
+                                  {key:'loader',    icon:'🪣', s:'Loader',          p:'Loaders'},
+                                  {key:'other',     icon:'📦', s:'Other',           p:'Other'},
+                                ];
                                 const isExpGroup = expandedMoves.has(jobGroupId);
                                 const toggleGrp  = () => setExpandedMoves(prev => { const n=new Set(prev); if(n.has(jobGroupId))n.delete(jobGroupId); else n.add(jobGroupId); return n; });
                                 return (
@@ -3636,6 +3650,17 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                         {jInP  > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(201,168,0,0.12)',border:'1px solid #c9a800',color:'#f0d060'}}>⚡ {jInP} active</span>}
                                         {jDone > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(42,90,42,0.2)',border:'1px solid #2a5a2a',color:'#4a7a4a'}}>✓ {jDone} done</span>}
                                       </div>
+                                      {allPieces.length > 0 && (
+                                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'5px'}}>
+                                          {EQ_TYPES.map(et => {
+                                            const cnt = allPieces.filter(p => p.type === et.key).length;
+                                            if (!cnt) return null;
+                                            return <span key={et.key} style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'2px 6px',borderRadius:'3px',background:'#1a1a2e',border:'1px solid #4a4a6a',color:'#9090c0'}}>{et.icon} {cnt} {cnt===1?et.s:et.p}</span>;
+                                          })}
+                                          {arrivedPieces.length > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'2px 6px',borderRadius:'3px',background:'#0d1a0d',border:'1px solid #2a5a2a',color:'#7ecb8f'}}>✅ {arrivedPieces.length} Arrived</span>}
+                                          {pendingPcs.length > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'2px 6px',borderRadius:'3px',background:'#2a2000',border:'1px solid #6a5000',color:'#c9a800'}}>⏳ {pendingPcs.length} Pending</span>}
+                                        </div>
+                                      )}
                                       {isAdminUser && jMoves.some(m=>m.isRental) && (() => {
                                         const gEst    = jMoves.reduce((s,m)=>s+(m.estimatedCost||0),0);
                                         const gActual = jMoves.filter(m=>m.actualCost!=null).reduce((s,m)=>s+(m.actualCost||0),0);
@@ -3651,6 +3676,43 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                     </div>
                                     {isExpGroup && (
                                       <div style={{borderTop:'1px solid rgba(123,79,166,0.35)'}}>
+                                        {allPieces.length > 0 && (
+                                          <div style={{padding:'10px 12px 0'}}>
+                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',marginBottom:'4px'}}>{arrivedPieces.length} of {allPieces.length} piece{allPieces.length!==1?'s':''} arrived</div>
+                                            <div style={{height:'4px',borderRadius:'2px',background:'#2a2a2a',marginBottom:'10px'}}>
+                                              <div style={{height:'100%',borderRadius:'2px',background:'#7ecb8f',width:allPieces.length?(arrivedPieces.length/allPieces.length*100)+'%':'0%'}} />
+                                            </div>
+                                            <div style={{overflowX:'auto',marginBottom:'10px'}}>
+                                              <table style={{width:'100%',minWidth:'320px',borderCollapse:'collapse',background:'#111111',border:'1px solid #2a2a2a',borderRadius:'4px',overflow:'hidden',fontFamily:"'DM Mono',monospace",fontSize:'11px'}}>
+                                                <thead>
+                                                  <tr style={{background:'#1a1a1a'}}>
+                                                    {['EQUIPMENT','TYPE','MOVE','DRIVER','STATUS'].map(h=>(
+                                                      <th key={h} style={{padding:'5px 8px',textAlign:'left',color:'rgba(155,148,136,0.5)',fontWeight:400,fontSize:'9px',letterSpacing:'1px',borderBottom:'1px solid #2a2a2a',whiteSpace:'nowrap'}}>{h}</th>
+                                                    ))}
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {jMoves.flatMap((m, mi) => (m.items||[]).map(it => {
+                                                    const st = m.status || 'pending';
+                                                    const stDot = st==='complete'    ? {sym:'✓',color:'#7ecb8f',label:'Arrived'}
+                                                                : st==='in_progress' ? {sym:'▶',color:'#7ab3f0',label:'In Transit'}
+                                                                :                      {sym:'●',color:'#c9a800',label:'Pending'};
+                                                    const typeInfo = EQ_TYPES.find(e => e.key === it.type);
+                                                    return (
+                                                      <tr key={(it.id||it.name)+'-'+mi} style={{borderBottom:'1px solid #1e1e1e'}}>
+                                                        <td style={{padding:'4px 8px',color:'#c0b8b0',whiteSpace:'nowrap'}}>{it.name||it.type}</td>
+                                                        <td style={{padding:'4px 8px',color:'rgba(155,148,136,0.6)',whiteSpace:'nowrap'}}>{typeInfo?typeInfo.icon+' '+typeInfo.s:it.type}</td>
+                                                        <td style={{padding:'4px 8px',color:'rgba(155,148,136,0.5)',whiteSpace:'nowrap'}}>Move {mi+1}</td>
+                                                        <td style={{padding:'4px 8px',color:'rgba(155,148,136,0.6)',maxWidth:'90px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.driverName||'—'}</td>
+                                                        <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}><span style={{color:stDot.color,marginRight:'4px'}}>{stDot.sym}</span><span style={{color:'rgba(155,148,136,0.5)',fontSize:'9px'}}>{stDot.label}</span></td>
+                                                      </tr>
+                                                    );
+                                                  }))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </div>
+                                        )}
                                         {jMoves.map((m, mIdx) => {
                                           const ms2 = moveSt(m);
                                           return (
