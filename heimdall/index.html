@@ -1357,6 +1357,13 @@ function App() {
       return acct ? acct.role === 'mechanic' : false;
     } catch(e) { return false; }
   })();
+  // Core in-house lowbed drivers available for move assignment and claiming
+  // Rental accounts are excluded — they are assigned manually when needed
+  const CORE_LOWBED_DRIVERS = [
+    { label: 'Ingrid Giron', value: 'Ingrid Giron' },
+    { label: 'Bill Lydon',   value: 'Bill Lydon'   },
+    { label: 'Eric Sylvia',  value: 'Eric Sylvia'  },
+  ];
   const isNightmare57 = (() => {
     try {
       const u = (localStorage.getItem('dmc_u') || '').toLowerCase();
@@ -1438,6 +1445,8 @@ function App() {
       ]
     };
   });
+  const [driverMoveAlert, setDriverMoveAlert] = useState(null); // toast when a move is assigned to logged-in driver
+  const _prevLowbedPlanRef = React.useRef(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [dispatches, setDispatches] = useState(autoDispatches);
 
@@ -1962,6 +1971,26 @@ function App() {
             const raw = doc.fields?.data?.stringValue;
             if (raw) {
               const plan = JSON.parse(raw);
+              // ── Alert logged-in lowbed driver if a move was just assigned to them ──
+              if (isLowbedDriver) {
+                const _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+                const _DN = { 'nightmare57':'Eric Sylvia','ericsylvia57@gmail.com':'Eric Sylvia','blydon':'Bill Lydon','billydon@donmartincorp.com':'Bill Lydon','igiron':'Ingrid Giron','igiron@donmartincorp.com':'Ingrid Giron' };
+                const _myName = (_DN[_u] || _u).toLowerCase();
+                const prevPlan = _prevLowbedPlanRef.current;
+                if (prevPlan) {
+                  outer: for (let _ji = 0; _ji < (plan.jobs||[]).length; _ji++) {
+                    for (let _mi = 0; _mi < (plan.jobs[_ji].moves||[]).length; _mi++) {
+                      const _mv = plan.jobs[_ji].moves[_mi];
+                      const _prev = prevPlan.jobs?.[_ji]?.moves?.[_mi];
+                      if ((_mv.assignedDriver||'').toLowerCase() === _myName && (_prev?.assignedDriver||'').toLowerCase() !== _myName) {
+                        setDriverMoveAlert(`🔔 Move ${_mi+1} for ${plan.jobs[_ji].jobName||('Job '+(_ji+1))} has been assigned to you`);
+                        break outer;
+                      }
+                    }
+                  }
+                }
+              }
+              _prevLowbedPlanRef.current = plan;
               setLowbedPlan(plan);
               localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
             }
@@ -2779,12 +2808,12 @@ Be specific, practical, and flag any uncertainties clearly.`;
               {showClaim && !isTowingDriver && (
                 <button
                   onClick={() => {
-                    const plan2 = (() => { try { return JSON.parse(localStorage.getItem('dmc_lowbed_plan')||'null'); } catch(e){ return null; }})();
+                    const plan2 = JSON.parse(JSON.stringify(lowbedPlan));
                     if (!plan2) return;
                     plan2.jobs[item.jobIdx].moves[item.moveIdx - 1].assignedDriver = driverDisplay;
                     plan2.jobs[item.jobIdx].moves[item.moveIdx - 1].status = 'assigned';
-                    localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan2));
-                    setLowbedPlan({ ...plan2 });
+                    plan2.jobs[item.jobIdx].moves[item.moveIdx - 1].claimedAt = Date.now();
+                    savePlanAndRefresh(plan2);
                   }}
                   style={{marginTop:'8px',width:'100%',padding:'6px',background:'rgba(126,203,143,0.1)',border:'1px solid rgba(126,203,143,0.35)',borderRadius:'5px',color:'#7ecb8f',fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,cursor:'pointer'}}>
                   ✋ Claim This Move
@@ -2854,6 +2883,14 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
           return (
             <div style={{padding:'16px',maxWidth:'680px',margin:'0 auto'}}>
+              {/* ── New assignment alert toast ── */}
+              {driverMoveAlert && (
+                <div style={{background:'rgba(126,203,143,0.12)',border:'1px solid rgba(126,203,143,0.45)',borderRadius:'8px',padding:'10px 14px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'10px'}}>
+                  <span style={{fontSize:'16px',flexShrink:0}}>🔔</span>
+                  <div style={{flex:1,fontFamily:"'DM Mono',monospace",fontSize:'11px',color:'#7ecb8f',fontWeight:700}}>{driverMoveAlert}</div>
+                  <button onClick={() => setDriverMoveAlert(null)} style={{background:'none',border:'none',color:'rgba(155,148,136,0.5)',cursor:'pointer',fontSize:'15px',flexShrink:0,padding:'0 2px',lineHeight:1}}>✕</button>
+                </div>
+              )}
               {/* Driver header */}
               <div style={{background: isTowingDriver ? 'rgba(232,169,76,0.06)' : 'rgba(90,180,245,0.06)',border:'1px solid '+(isTowingDriver ? 'rgba(232,169,76,0.25)' : 'rgba(90,180,245,0.2)'),borderRadius:'10px',padding:'14px 18px',marginBottom:'16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div>
@@ -3445,8 +3482,27 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                           <div style={{flex:hdMobile?undefined:1,minWidth:0,fontFamily:"'DM Mono',monospace",fontSize:hdMobile?'9px':'8px',fontWeight:hdMobile?700:400,color:'#c0d8f0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{eqNames||'—'}</div>
                                           {/* Destination line — mobile only */}
                                           {hdMobile && <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'rgba(155,148,136,0.65)'}}>{'\u2192'} {job.location||job.jobName||'—'}</div>}
-                                          {/* Driver */}
-                                          <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:mv.assignedDriver?'#7ecb8f':'rgba(155,148,136,0.4)',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:hdMobile?undefined:'110px'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
+                                          {/* Driver — select for admin/foreman, static text for others */}
+                                          {(isAdminUser || isForeman) ? (
+                                            <select
+                                              value={mv.assignedDriver || ''}
+                                              onChange={(e) => {
+                                                const newDriver = e.target.value;
+                                                const plan2 = JSON.parse(JSON.stringify(lowbedPlan));
+                                                plan2.jobs[ji].moves[mi].assignedDriver = newDriver || null;
+                                                plan2.jobs[ji].moves[mi].status = newDriver ? 'assigned' : 'pending';
+                                                if (newDriver) plan2.jobs[ji].moves[mi].assignedAt = Date.now();
+                                                savePlanAndRefresh(plan2);
+                                              }}
+                                              style={{flexShrink:0,maxWidth:hdMobile?'100%':'120px',background:'rgba(20,20,40,0.9)',border:'1px solid rgba(90,180,245,0.25)',borderRadius:'4px',color:mv.assignedDriver?'#7ecb8f':'rgba(245,197,24,0.8)',fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 4px',cursor:'pointer',outline:'none'}}>
+                                              <option value=''>⚠ Unassigned</option>
+                                              {CORE_LOWBED_DRIVERS.map(d => (
+                                                <option key={d.value} value={d.value}>{d.label}</option>
+                                              ))}
+                                            </select>
+                                          ) : (
+                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:mv.assignedDriver?'#7ecb8f':'rgba(155,148,136,0.4)',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:hdMobile?undefined:'110px'}}>{mv.assignedDriver||'⚠ Unassigned'}</div>
+                                          )}
                                           {/* Status badge */}
                                           <div style={{flexShrink:0,padding:'1px 7px',borderRadius:'8px',background:sb.bg,border:'1px solid '+sb.border,fontFamily:"'DM Mono',monospace",fontSize:'7px',fontWeight:700,color:sb.color,letterSpacing:'0.3px',whiteSpace:'nowrap'}}>{sb.label}</div>
                                           {/* Deadline */}
