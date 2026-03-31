@@ -40669,8 +40669,12 @@ function _navItemVisible(n) {
     return canSeeTab(parent);
   }
   if (n.action === 'popup' && n.section) {
+    // Mail: visible only to accounts that have a mailbox configured
+    if (n.section === 'mail') {
+      return typeof _mailAccountForCurrentUser === 'function' && !!_mailAccountForCurrentUser();
+    }
     var mapped = _sectionTab[n.section];
-    if (mapped === null) return false; // explicitly unlisted (employees, mail, etc.)
+    if (mapped === null) return false; // explicitly unlisted (employees, takeoffs, etc.)
     if (mapped === undefined) return true;
     return canSeeTab(mapped);
   }
