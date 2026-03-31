@@ -3372,11 +3372,13 @@ Be specific, practical, and flag any uncertainties clearly.`;
                   )}
                 </div>
 
-                {/* Right panel — Fleet Status for admin, Lowbed Moves for others */}
+                {/* Right panel — Fleet Status + Lowbed Moves for admin, Lowbed Moves for others */}
                 <div style={hdMobile?{width:'100%',minWidth:0,borderTop:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}:{flex:'0 0 50%',width:'50%',minWidth:0,borderLeft:'1px solid var(--asphalt-light)',overflowY:'auto',padding:'12px',boxSizing:'border-box'}}>
-                  {isAdminUser ? (
+                  {isAdminUser && (
                     <FleetWidget defaultOpen={true} onFleetChange={(active) => setFleetItems(active)} />
-                  ) : (<>
+                  )}
+                  {isAdminUser && <div style={{borderTop:'1px solid var(--asphalt-light)',marginTop:'10px',paddingTop:'10px'}} />}
+                  <>
                   <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:'14px',letterSpacing:'2px',color:'#a78bfa',marginBottom:'10px'}}>🚚 LOWBED MOVES</div>
                   {(!lowbedPlan || !lowbedPlan.jobs || lowbedPlan.jobs.length === 0) ? (
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',textAlign:'center',padding:'40px 0'}}>No active lowbed plan</div>
@@ -3459,7 +3461,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                       </div>
                     );
                   })()}
-                  </>)}
+                  </>
                 </div>
 
               </div>
