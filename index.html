@@ -26848,10 +26848,12 @@ function printForemanReport(id) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── Mail state ───────────────────────────────────────────────────────────────
-var _mailFolder   = 'INBOX';
-var _mailFolderNm = 'Inbox';
-var _mailMessages = [];
-var _mailOpenUid  = null;
+var _mailFolder          = 'INBOX';
+var _mailFolderNm        = 'Inbox';
+var _mailMessages        = [];
+var _mailOpenUid         = null;
+var _mailFolderLoading   = false;
+var _mailMessageLoading  = false;
 
 function escapeSrcdoc(html) {
   return (html || '')
@@ -26888,13 +26890,18 @@ function saveMailCreds() {
 function renderMail() {
   var wrap = document.getElementById('mailView');
   if (!wrap) return;
-  var acct = _mailAccountForCurrentUser();
-  if (!acct) {
-    wrap.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">Mail is not available for your account.</div>';
-    return;
+  try {
+    var acct = _mailAccountForCurrentUser();
+    if (!acct) {
+      wrap.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">Mail is not available for your account.</div>';
+      return;
+    }
+    if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); }
+    _mailLoadFolders();
+  } catch(err) {
+    console.error('[Mail] render crash:', err);
+    wrap.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:11px;color:#e57373;">Mail error — please refresh</div>';
   }
-  if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); }
-  _mailLoadFolders();
 }
 
 var _MAIL_ACCOUNTS = [
@@ -27082,6 +27089,7 @@ function _mailBuildApp(wrap, acct) {
 }
 
 function _mailLoadFolders() {
+  _mailFolderLoading = true;
   _mailCall('folders', {}).then(function(d) {
     var el = document.getElementById('mailFolders');
     if (!el) return;
@@ -27107,8 +27115,10 @@ function _mailLoadFolders() {
       '</div>';
     }).join('');
     // Load inbox messages
+    _mailFolderLoading = false;
     _mailLoadMessages(_mailFolder, _mailFolderNm);
   }).catch(function(err) {
+    _mailFolderLoading = false;
     var el = document.getElementById('mailFolders');
     var isAdmin = ['dj','donmartin'].includes((localStorage.getItem('dmc_u')||'').toLowerCase());
     var notConfigured = /no mail credentials|not configured/i.test(err.message || '');
@@ -27132,6 +27142,7 @@ function _mailLoadFolders() {
 }
 
 function _mailSelectFolder(path, name) {
+  if (_mailFolderLoading) return;
   _mailFolder   = path;
   _mailFolderNm = name;
   _mailOpenUid  = null;
@@ -27139,8 +27150,7 @@ function _mailSelectFolder(path, name) {
   var v = document.getElementById('mailViewer');
   if (v) v.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;">Select a message to read</div>';
   // Reload folders to update active state, then load messages
-  var c = _mailCreds(); if (!c) return;
-  _mailLoadFolders(c);
+  _mailLoadFolders();
 }
 
 function _mailLoadMessages(folder, folderName) {
@@ -27186,6 +27196,8 @@ function _mailLoadMessages(folder, folderName) {
 }
 
 function _mailOpenMessage(uid, folder) {
+  if (_mailMessageLoading) return;
+  _mailMessageLoading = true;
   _mailOpenUid = uid;
   var v = document.getElementById('mailViewer');
   if (v) v.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--concrete-dim);font-size:11px;">Loading…</div>';
@@ -27247,8 +27259,10 @@ function _mailOpenMessage(uid, folder) {
         iframe.srcdoc = msg.html;
       }
     }
+    _mailMessageLoading = false;
     if (hasAtt) { _mailRenderAttachments(msg.attachments, uid, folder); }
   }).catch(function(err) {
+    _mailMessageLoading = false;
     if (v) v.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(err.message)+'</div>';
   });
 }
