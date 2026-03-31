@@ -3670,17 +3670,25 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                         {jInP  > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(201,168,0,0.12)',border:'1px solid #c9a800',color:'#f0d060'}}>⚡ {jInP} active</span>}
                                         {jDone > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'1px 4px',borderRadius:'3px',background:'rgba(42,90,42,0.2)',border:'1px solid #2a5a2a',color:'#4a7a4a'}}>✓ {jDone} done</span>}
                                       </div>
-                                      {allPieces.length > 0 && (
-                                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'5px'}}>
-                                          {EQ_TYPES.map(et => {
-                                            const cnt = allPieces.filter(p => p.type === et.key).length;
-                                            if (!cnt) return null;
-                                            return <span key={et.key} style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'2px 6px',borderRadius:'3px',background:'#1a1a2e',border:'1px solid #4a4a6a',color:'#9090c0'}}>{et.icon} {cnt} {cnt===1?et.s:et.p}</span>;
-                                          })}
-                                          {arrivedPieces.length > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'2px 6px',borderRadius:'3px',background:'#0d1a0d',border:'1px solid #2a5a2a',color:'#7ecb8f'}}>✅ {arrivedPieces.length} Arrived</span>}
-                                          {pendingPcs.length > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',padding:'2px 6px',borderRadius:'3px',background:'#2a2000',border:'1px solid #6a5000',color:'#c9a800'}}>⏳ {pendingPcs.length} Pending</span>}
-                                        </div>
-                                      )}
+                                      {allPieces.length > 0 && (() => {
+                                        const _visMoves   = jMoves.filter(m => m.status !== 'cancelled');
+                                        const _visPieces  = _visMoves.flatMap(m => m.items || []);
+                                        const _onSitePcs  = jMoves.filter(m => m.status === 'complete').flatMap(m => m.items || []);
+                                        return (
+                                          <div style={{display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'5px'}}>
+                                            {EQ_TYPES.map(et => {
+                                              const tp = _visPieces.filter(p => p.type === et.key);
+                                              if (!tp.length) return null;
+                                              const ta = _onSitePcs.filter(p => p.type === et.key).length;
+                                              const color  = ta === tp.length ? '#4a7a4a' : ta > 0 ? '#c9a800' : '#4a6fa6';
+                                              const bg     = ta === tp.length ? 'rgba(74,122,74,0.15)' : ta > 0 ? 'rgba(201,168,0,0.12)' : 'rgba(74,111,166,0.12)';
+                                              const border = ta === tp.length ? '#2a5a2a' : ta > 0 ? '#7a6000' : '#3a5a8a';
+                                              return <span key={et.key} style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 5px',borderRadius:'3px',background:bg,border:'1px solid '+border,color,whiteSpace:'nowrap'}}>{et.icon} {et.s} x{tp.length}</span>;
+                                            })}
+                                            {_visPieces.length > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'2px 6px',borderRadius:'3px',background:_onSitePcs.length===_visPieces.length?'rgba(74,122,74,0.2)':'rgba(74,111,166,0.12)',border:'1px solid '+(_onSitePcs.length===_visPieces.length?'#2a5a2a':'#3a5a8a'),color:_onSitePcs.length===_visPieces.length?'#7ecb8f':'#7ab3f0',fontWeight:700}}>{_onSitePcs.length} / {_visPieces.length} On Site</span>}
+                                          </div>
+                                        );
+                                      })()}
                                       {isAdminUser && jMoves.some(m=>m.isRental) && (() => {
                                         const gEst    = jMoves.reduce((s,m)=>s+(m.estimatedCost||0),0);
                                         const gActual = jMoves.filter(m=>m.actualCost!=null).reduce((s,m)=>s+(m.actualCost||0),0);
@@ -3696,43 +3704,47 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                     </div>
                                     {isExpGroup && (
                                       <div style={{borderTop:'1px solid rgba(123,79,166,0.35)'}}>
-                                        {allPieces.length > 0 && (
-                                          <div style={{padding:'10px 12px 0'}}>
-                                            <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.5)',marginBottom:'4px'}}>{arrivedPieces.length} of {allPieces.length} piece{allPieces.length!==1?'s':''} arrived</div>
-                                            <div style={{height:'4px',borderRadius:'2px',background:'#2a2a2a',marginBottom:'10px'}}>
-                                              <div style={{height:'100%',borderRadius:'2px',background:'#7ecb8f',width:allPieces.length?(arrivedPieces.length/allPieces.length*100)+'%':'0%'}} />
+                                        {allPieces.length > 0 && (() => {
+                                          const _visMvs  = jMoves.filter(m => m.status !== 'cancelled');
+                                          const _visPcs  = _visMvs.flatMap(m => m.items || []);
+                                          const _donePcs = jMoves.filter(m => m.status === 'complete').flatMap(m => m.items || []);
+                                          return (
+                                            <div style={{padding:'10px 12px 8px',borderBottom:'1px solid rgba(123,79,166,0.2)'}}>
+                                              <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',letterSpacing:'2px',marginBottom:'8px'}}>EQUIPMENT TRACKER</div>
+                                              {EQ_TYPES.map(et => {
+                                                const tp = _visPcs.filter(p => p.type === et.key);
+                                                if (!tp.length) return null;
+                                                const ta = _donePcs.filter(p => p.type === et.key).length;
+                                                const pct = tp.length ? ta / tp.length : 0;
+                                                const barC = pct === 1 ? '#7ecb8f' : pct > 0 ? '#c9a800' : '#4a6fa6';
+                                                return (
+                                                  <div key={et.key} style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'5px'}}>
+                                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.5)',width:'72px',flexShrink:0,letterSpacing:'0.3px'}}>{et.p.toUpperCase()}</div>
+                                                    <div style={{width:'80px',height:'4px',borderRadius:'2px',background:'#2a2a2a',flexShrink:0}}>
+                                                      <div style={{height:'100%',borderRadius:'2px',background:barC,width:(pct*100)+'%',transition:'width 0.3s'}} />
+                                                    </div>
+                                                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',whiteSpace:'nowrap'}}>{ta} of {tp.length} on site</div>
+                                                  </div>
+                                                );
+                                              })}
+                                              <div style={{marginTop:'8px',borderTop:'1px solid rgba(255,255,255,0.05)',paddingTop:'7px'}}>
+                                                {_visMvs.flatMap((m, mi) => (m.items||[]).map((it, ii) => {
+                                                  const st = m.status || 'pending';
+                                                  const dotC  = st==='complete' ? '#7ecb8f' : st==='in_progress' ? '#c9a800' : st==='cleared' ? '#444' : '#666';
+                                                  const stLbl = st==='complete' ? 'On Site ✓' : st==='in_progress' ? 'In Transit' : st==='cleared' ? 'Cleared' : 'Pending';
+                                                  return (
+                                                    <div key={(it.id||it.name)+'-'+mi+'-'+ii} style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'3px',opacity:st==='cleared'?0.45:1}}>
+                                                      <span style={{color:dotC,fontSize:'7px',flexShrink:0}}>●</span>
+                                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:'#c0b8b0',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.name||it.type}</span>
+                                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:dotC,background:dotC+'18',border:'1px solid '+dotC+'44',borderRadius:'3px',padding:'0 4px',whiteSpace:'nowrap',flexShrink:0}}>{stLbl}</span>
+                                                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',whiteSpace:'nowrap',flexShrink:0}}>Move {mi+1}{m.driverName?' — '+m.driverName:''}</span>
+                                                    </div>
+                                                  );
+                                                }))}
+                                              </div>
                                             </div>
-                                            <div style={{overflowX:'auto',marginBottom:'10px'}}>
-                                              <table style={{width:'100%',minWidth:'320px',borderCollapse:'collapse',background:'#111111',border:'1px solid #2a2a2a',borderRadius:'4px',overflow:'hidden',fontFamily:"'DM Mono',monospace",fontSize:'11px'}}>
-                                                <thead>
-                                                  <tr style={{background:'#1a1a1a'}}>
-                                                    {['EQUIPMENT','TYPE','MOVE','DRIVER','STATUS'].map(h=>(
-                                                      <th key={h} style={{padding:'5px 8px',textAlign:'left',color:'rgba(155,148,136,0.5)',fontWeight:400,fontSize:'9px',letterSpacing:'1px',borderBottom:'1px solid #2a2a2a',whiteSpace:'nowrap'}}>{h}</th>
-                                                    ))}
-                                                  </tr>
-                                                </thead>
-                                                <tbody>
-                                                  {jMoves.flatMap((m, mi) => (m.items||[]).map(it => {
-                                                    const st = m.status || 'pending';
-                                                    const stDot = st==='complete'    ? {sym:'✓',color:'#7ecb8f',label:'Arrived'}
-                                                                : st==='in_progress' ? {sym:'▶',color:'#7ab3f0',label:'In Transit'}
-                                                                :                      {sym:'●',color:'#c9a800',label:'Pending'};
-                                                    const typeInfo = EQ_TYPES.find(e => e.key === it.type);
-                                                    return (
-                                                      <tr key={(it.id||it.name)+'-'+mi} style={{borderBottom:'1px solid #1e1e1e'}}>
-                                                        <td style={{padding:'4px 8px',color:'#c0b8b0',whiteSpace:'nowrap'}}>{it.name||it.type}</td>
-                                                        <td style={{padding:'4px 8px',color:'rgba(155,148,136,0.6)',whiteSpace:'nowrap'}}>{typeInfo?typeInfo.icon+' '+typeInfo.s:it.type}</td>
-                                                        <td style={{padding:'4px 8px',color:'rgba(155,148,136,0.5)',whiteSpace:'nowrap'}}>Move {mi+1}</td>
-                                                        <td style={{padding:'4px 8px',color:'rgba(155,148,136,0.6)',maxWidth:'90px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.driverName||'—'}</td>
-                                                        <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}><span style={{color:stDot.color,marginRight:'4px'}}>{stDot.sym}</span><span style={{color:'rgba(155,148,136,0.5)',fontSize:'9px'}}>{stDot.label}</span></td>
-                                                      </tr>
-                                                    );
-                                                  }))}
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          </div>
-                                        )}
+                                          );
+                                        })()}
                                         {jMoves.map((m, mIdx) => {
                                           const ms2 = moveSt(m);
                                           return (
