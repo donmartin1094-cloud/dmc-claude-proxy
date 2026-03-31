@@ -19,10 +19,18 @@ const SMTP_HOST = 'register-smtp-oxcs.hostingplatform.com';
 const SMTP_PORT = 587;
 
 // ── CORS ────────────────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://dmcapp.netlify.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-gps-key');
+  const origin = req.headers.origin || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  res.setHeader('Access-Control-Allow-Origin', allowed);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gps-key');
+  res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') { res.sendStatus(200); return; }
   next();
 });
