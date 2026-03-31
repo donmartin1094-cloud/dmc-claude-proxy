@@ -26866,10 +26866,10 @@ function _mailCreds() {
 async function _mailCall(path, body) {
   var c = _mailCreds();
   if (!c) throw new Error('No credentials');
-  var r = await fetch('/.netlify/functions/mail-proxy', {
+  var r = await fetch('https://dmc-claude-proxy-production.up.railway.app/mail/' + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ op: path, user: c.email, pass: c.pass }, body))
+    body: JSON.stringify(Object.assign({ user: c.email, pass: c.pass }, body))
   });
   var text = await r.text();
   var d;
@@ -26888,10 +26888,10 @@ function saveMailCreds() {
   if (!pass)  { if (stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Enter your password</span>'; return; }
   if (stat) stat.textContent = 'Checking…';
   if (btn)  { btn.disabled = true; btn.textContent = 'Checking…'; }
-  fetch('/.netlify/functions/mail-proxy', {
+  fetch('https://dmc-claude-proxy-production.up.railway.app/mail/folders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ op: 'folders', user: email.trim(), pass: pass })
+    body: JSON.stringify({ user: email.trim(), pass: pass })
   })
   .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
   .then(function(res) {
@@ -27011,10 +27011,10 @@ function _mailTestConnection() {
   if (!email) { if(stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Select an account first</span>'; return; }
   if (!pass)  { if(stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Enter password first</span>'; return; }
   if (stat) stat.textContent = 'Testing…';
-  fetch('/.netlify/functions/mail-proxy', {
+  fetch('https://dmc-claude-proxy-production.up.railway.app/mail/folders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ op: 'folders', user: email.trim(), pass: pass })
+    body: JSON.stringify({ user: email.trim(), pass: pass })
   }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
     .then(function(res) {
       if (!res.ok) throw new Error(res.d.error || 'Auth failed');
@@ -33867,7 +33867,7 @@ function _mssAIScan(b64, mimeType) {
 
   var prompt = 'You are reading a hot mix asphalt paving slip / delivery ticket.\nExtract ALL of the following fields exactly as printed on the slip.\n\nReturn ONLY valid JSON, no markdown, no backticks:\n{"plant":"plant name and location exactly as printed","loadTime":"time printed on slip e.g. 14:32","ticketNo":"ticket or slip number","truckNum":"truck number or ID","driver":"driver name if printed","mixCode":"the full tonnage/mix code line exactly as printed e.g. SP-19.0M64-28 or 19mm SP Superpave","mixType":"simplified mix type e.g. 19mm SP","tons":0,"rapPct":0,"date":"YYYY-MM-DD"}\n\ntons: net tons as a number. rapPct: RAP percentage as a number or 0 if not shown. If any field is not visible or not printed on this slip, use null for that field. Never invent values.';
 
-  fetch('/.netlify/functions/claude-proxy', {
+  fetch('https://dmc-claude-proxy-production.up.railway.app/claude', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:512, messages:[{ role:'user', content:[
       { type:'image', source:{ type:'base64', media_type:mimeType, data:b64 } },
@@ -34109,7 +34109,7 @@ function _laSlipAIScan(b64data, mimeType) {
     }]
   };
 
-  fetch('/.netlify/functions/claude-proxy', {
+  fetch('https://dmc-claude-proxy-production.up.railway.app/claude', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(body)
@@ -38184,7 +38184,7 @@ function doLogin() {
       // ── Server-side fallback: validates against cloud accounts for cross-device login ──
       // This covers cases where this client cannot read Firestore accounts directly.
       try {
-        const fnUrl = localStorage.getItem('dmc_login_fn_url') || '/.netlify/functions/auth-login';
+        const fnUrl = localStorage.getItem('dmc_login_fn_url') || 'https://dmc-claude-proxy-production.up.railway.app/auth-login';
         const res = await fetch(fnUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
