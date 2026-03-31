@@ -29,19 +29,132 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '50mb' }));
 
-// ── Helper: create IMAP client ──────────────────────────────────────────────
-function makeImap(user, pass) {
+// ── Helper: create IMAP client from credentials object ──────────────────────
+function makeImap(creds) {
   return new ImapFlow({
-    host: IMAP_HOST,
-    port: IMAP_PORT,
-    secure: true,
-    auth: { user, pass },
-    logger: false,
+    host:    creds.host,
+    port:    creds.port    || 993,
+    secure:  creds.secure  !== false,
+    auth:    { user: creds.auth.user, pass: creds.auth.pass },
+    logger:  false,
     connectionTimeout: 20000,
-    greetingTimeout: 10000,
-    socketTimeout: 30000
+    greetingTimeout:   10000,
+    socketTimeout:     30000
   });
 }
+
+// ── Per-user credential lookup (env vars → Firestore) ────────────────────────
+const getMailCredentials = async (username) => {
+  if (!username) throw new Error('No username provided');
+  const uKey = username.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+  // 1. Environment variables (MAIL_HOST_DJ, MAIL_USER_DJ, MAIL_PASS_DJ …)
+  if (process.env['MAIL_USER_' + uKey] && process.env['MAIL_PASS_' + uKey]) {
+    const host     = process.env['MAIL_HOST_' + uKey]      || IMAP_HOST;
+    const port     = parseInt(process.env['MAIL_PORT_' + uKey]      || '993');
+    const smtpHost = process.env['MAIL_SMTP_HOST_' + uKey] || host  || SMTP_HOST;
+    const smtpPort = parseInt(process.env['MAIL_SMTP_PORT_' + uKey] || '587');
+    return { host, port, secure: port === 993, smtpHost, smtpPort,
+             auth: { user: process.env['MAIL_USER_' + uKey], pass: process.env['MAIL_PASS_' + uKey] } };
+  }
+
+  // 2. Firestore — collection: mail_credentials, doc: username.toLowerCase()
+  if (!FIREBASE_API_KEY) throw new Error('No mail credentials configured for ' + username);
+  const url = `${FIRESTORE_BASE}/mail_credentials/${username.toLowerCase()}?key=${FIREBASE_API_KEY}`;
+  const r   = await fetch(url);
+  if (!r.ok) throw new Error('No mail credentials configured for ' + username);
+  const doc = await r.json();
+  if (!doc.fields) throw new Error('No mail credentials configured for ' + username);
+  const f       = doc.fields;
+  const getStr  = k => f[k]?.stringValue  || '';
+  const getInt  = (k, d) => parseInt(f[k]?.integerValue || f[k]?.doubleValue || d);
+  const getBool = (k, d) => f[k]?.booleanValue !== undefined ? f[k].booleanValue : d;
+  if (getBool('enabled', true) === false) throw new Error('Mail access disabled for ' + username);
+  const host     = getStr('host')     || IMAP_HOST;
+  const smtpHost = getStr('smtpHost') || host || SMTP_HOST;
+  return {
+    host, port: getInt('port', 993), secure: getBool('secure', true),
+    smtpHost,  smtpPort: getInt('smtpPort', 587),
+    auth: { user: getStr('user'), pass: getStr('pass') }
+  };
+};
+
+// ── Mail: check if credentials are configured ────────────────────────────────
+app.get('/mail/credentials/check', async (req, res) => {
+  const { username } = req.query;
+  if (!username) return res.json({ hasCredentials: false });
+  try {
+    const uKey = username.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    if (process.env['MAIL_USER_' + uKey] && process.env['MAIL_PASS_' + uKey]) {
+      return res.json({ hasCredentials: true, displayName: username, source: 'env' });
+    }
+    if (!FIREBASE_API_KEY) return res.json({ hasCredentials: false });
+    const url = `${FIRESTORE_BASE}/mail_credentials/${username.toLowerCase()}?key=${FIREBASE_API_KEY}`;
+    const r   = await fetch(url);
+    if (!r.ok) return res.json({ hasCredentials: false });
+    const doc = await r.json();
+    if (!doc.fields) return res.json({ hasCredentials: false });
+    const enabled     = doc.fields.enabled?.booleanValue !== false;
+    const displayName = doc.fields.displayName?.stringValue || username;
+    res.json({ hasCredentials: enabled, displayName });
+  } catch (e) {
+    res.json({ hasCredentials: false });
+  }
+});
+
+// ── Mail: save credentials (admin only) ──────────────────────────────────────
+app.post('/mail/credentials/save', async (req, res) => {
+  const { adminToken, username, host, port, smtpHost, smtpPort, user, pass, displayName } = req.body;
+  const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+  if (!ADMIN_TOKEN || adminToken !== ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
+  if (!username || !user || !pass) return res.status(400).json({ error: 'username, user, and pass are required' });
+  if (!FIREBASE_API_KEY) return res.status(500).json({ error: 'Firestore not configured on server' });
+  try {
+    const url = `${FIRESTORE_BASE}/mail_credentials/${username.toLowerCase()}?key=${FIREBASE_API_KEY}`;
+    const r   = await fetch(url, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ fields: {
+        username:    { stringValue:  username },
+        host:        { stringValue:  host     || IMAP_HOST },
+        port:        { integerValue: String(port     || 993) },
+        secure:      { booleanValue: (port || 993) === 993 },
+        smtpHost:    { stringValue:  smtpHost || host || SMTP_HOST },
+        smtpPort:    { integerValue: String(smtpPort || 587) },
+        user:        { stringValue:  user },
+        pass:        { stringValue:  pass },
+        displayName: { stringValue:  displayName || user },
+        enabled:     { booleanValue: true }
+      }})
+    });
+    if (!r.ok) { const e = await r.json().catch(()=>({})); return res.status(500).json({ error: e.error?.message || 'Firestore write failed' }); }
+    res.json({ ok: true, username });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Mail: test connection (admin only) ────────────────────────────────────────
+app.post('/mail/test', async (req, res) => {
+  const { adminToken, host, port, user, pass } = req.body;
+  const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+  if (!ADMIN_TOKEN || adminToken !== ADMIN_TOKEN) return res.status(403).json({ error: 'Unauthorized' });
+  if (!host || !user || !pass) return res.status(400).json({ error: 'host, user, and pass are required' });
+  const client = new ImapFlow({
+    host, port: port || 993, secure: (port || 993) === 993,
+    auth: { user, pass }, logger: false,
+    connectionTimeout: 15000, greetingTimeout: 8000, socketTimeout: 20000
+  });
+  try {
+    await client.connect();
+    const list = await client.list();
+    await client.logout();
+    res.json({ ok: true, folderCount: list.length });
+  } catch (e) {
+    try { await client.logout(); } catch (_) {}
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
 
 // ── Auth login ──────────────────────────────────────────────────────────────
 app.post('/auth-login', (req, res) => {
@@ -392,10 +505,12 @@ app.post('/api/plans/scan', async (req, res) => {
 
 // ── Mail: list folders ──────────────────────────────────────────────────────
 app.post('/mail/folders', async (req, res) => {
-  const { user, pass } = req.body;
-  if (!user || !pass) return res.status(400).json({ error: 'Missing credentials' });
-  const client = makeImap(user, pass);
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Missing username' });
+  let client;
   try {
+    const creds = await getMailCredentials(username);
+    client = makeImap(creds);
     await client.connect();
     const list = await client.list();
     const folders = list.map(item => ({
@@ -407,17 +522,19 @@ app.post('/mail/folders', async (req, res) => {
     await client.logout();
     res.json({ folders });
   } catch (err) {
-    try { await client.logout(); } catch(e) {}
+    try { if (client) await client.logout(); } catch(e) {}
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── Mail: list messages in a folder ────────────────────────────────────────
 app.post('/mail/inbox', async (req, res) => {
-  const { user, pass, folder = 'INBOX', limit = 50 } = req.body;
-  if (!user || !pass) return res.status(400).json({ error: 'Missing credentials' });
-  const client = makeImap(user, pass);
+  const { username, folder = 'INBOX', limit = 50 } = req.body;
+  if (!username) return res.status(400).json({ error: 'Missing username' });
+  let client;
   try {
+    const creds = await getMailCredentials(username);
+    client = makeImap(creds);
     await client.connect();
     const mb    = await client.mailboxOpen(folder);
     const total = mb.exists;
@@ -447,17 +564,19 @@ app.post('/mail/inbox', async (req, res) => {
     await client.logout();
     res.json({ messages: messages.reverse(), total });
   } catch (err) {
-    try { await client.logout(); } catch(e) {}
+    try { if (client) await client.logout(); } catch(e) {}
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── Mail: fetch full message ────────────────────────────────────────────────
 app.post('/mail/message', async (req, res) => {
-  const { user, pass, folder = 'INBOX', uid } = req.body;
-  if (!user || !pass || !uid) return res.status(400).json({ error: 'Missing params' });
-  const client = makeImap(user, pass);
+  const { username, folder = 'INBOX', uid } = req.body;
+  if (!username || !uid) return res.status(400).json({ error: 'Missing params' });
+  let client;
   try {
+    const creds = await getMailCredentials(username);
+    client = makeImap(creds);
     await client.connect();
     await client.mailboxOpen(folder, { readOnly: false });
     let result = null;
@@ -484,24 +603,25 @@ app.post('/mail/message', async (req, res) => {
           contentType: a.contentType || 'application/octet-stream'
         }))
       };
-      // Mark as read
       await client.messageFlagsAdd({ uid: parseInt(uid) }, ['\\Seen'], { uid: true });
     }
     await client.logout();
     if (!result) return res.status(404).json({ error: 'Message not found' });
     res.json(result);
   } catch (err) {
-    try { await client.logout(); } catch(e) {}
+    try { if (client) await client.logout(); } catch(e) {}
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── Mail: download attachment ───────────────────────────────────────────────
 app.post('/mail/attachment', async (req, res) => {
-  const { user, pass, folder = 'INBOX', uid, filename } = req.body;
-  if (!user || !pass || !uid || !filename) return res.status(400).json({ error: 'Missing params' });
-  const client = makeImap(user, pass);
+  const { username, folder = 'INBOX', uid, filename } = req.body;
+  if (!username || !uid || !filename) return res.status(400).json({ error: 'Missing params' });
+  let client;
   try {
+    const creds = await getMailCredentials(username);
+    client = makeImap(creds);
     await client.connect();
     await client.mailboxOpen(folder, { readOnly: true });
     let found = false;
@@ -522,33 +642,34 @@ app.post('/mail/attachment', async (req, res) => {
     if (!found) res.status(404).json({ error: 'Attachment not found' });
     await client.logout();
   } catch(err) {
-    try { await client.logout(); } catch(e) {}
+    try { if (client) await client.logout(); } catch(e) {}
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
 // ── Mail: send ──────────────────────────────────────────────────────────────
 app.post('/mail/send', async (req, res) => {
-  const { user, pass, to, cc, subject, html, text, inReplyTo, references } = req.body;
-  if (!user || !pass || !to || !subject) return res.status(400).json({ error: 'Missing params' });
+  const { username, to, cc, subject, html, text, inReplyTo, references } = req.body;
+  if (!username || !to || !subject) return res.status(400).json({ error: 'Missing params' });
   try {
+    const creds = await getMailCredentials(username);
     const transport = nodemailer.createTransport({
-      host:           SMTP_HOST,
-      port:           SMTP_PORT,
+      host:           creds.smtpHost || SMTP_HOST,
+      port:           creds.smtpPort || SMTP_PORT,
       secure:         false,
       requireTLS:     true,
-      auth:           { user, pass },
+      auth:           { user: creds.auth.user, pass: creds.auth.pass },
       connectionTimeout: 15000
     });
     await transport.sendMail({
-      from:       user,
+      from:       creds.auth.user,
       to,
-      cc:         cc         || undefined,
+      cc:         cc        || undefined,
       subject,
-      html:       html       || undefined,
-      text:       text       || undefined,
-      inReplyTo:  inReplyTo  || undefined,
-      references: references || undefined
+      html:       html      || undefined,
+      text:       text      || undefined,
+      inReplyTo:  inReplyTo || undefined,
+      references: references|| undefined
     });
     res.json({ ok: true });
   } catch (err) {
@@ -558,10 +679,12 @@ app.post('/mail/send', async (req, res) => {
 
 // ── Mail: actions (read/unread/flag/delete) ─────────────────────────────────
 app.post('/mail/action', async (req, res) => {
-  const { user, pass, folder = 'INBOX', uid, action } = req.body;
-  if (!user || !pass || !uid || !action) return res.status(400).json({ error: 'Missing params' });
-  const client = makeImap(user, pass);
+  const { username, folder = 'INBOX', uid, action } = req.body;
+  if (!username || !uid || !action) return res.status(400).json({ error: 'Missing params' });
+  let client;
   try {
+    const creds = await getMailCredentials(username);
+    client = makeImap(creds);
     await client.connect();
     await client.mailboxOpen(folder, { readOnly: false });
     const u = parseInt(uid);
@@ -571,7 +694,6 @@ app.post('/mail/action', async (req, res) => {
     if (action === 'unflag') await client.messageFlagsRemove({ uid: u }, ['\\Flagged'], { uid: true });
     if (action === 'delete') {
       let moved = false;
-      // Try to find a Trash folder
       const allFolders = await client.list();
       for (const f of allFolders) {
         const p = (f.path || '').toLowerCase();
@@ -588,7 +710,7 @@ app.post('/mail/action', async (req, res) => {
     await client.logout();
     res.json({ ok: true });
   } catch (err) {
-    try { await client.logout(); } catch(e) {}
+    try { if (client) await client.logout(); } catch(e) {}
     res.status(500).json({ error: err.message });
   }
 });

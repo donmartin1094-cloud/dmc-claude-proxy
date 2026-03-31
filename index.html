@@ -26866,17 +26866,12 @@ function _mailRailBase() {
   return u.replace(/\/+$/, '').replace(/\/claude$/i, '');
 }
 
-function _mailCreds() {
-  return JSON.parse(localStorage.getItem('DMC_MAIL_CREDS') || 'null');
-}
-
 async function _mailCall(path, body) {
-  var c = _mailCreds();
-  if (!c) throw new Error('No credentials');
+  var username = localStorage.getItem('dmc_u') || '';
   var r = await fetch('https://dmc-claude-proxy-production.up.railway.app/mail/' + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ user: c.email, pass: c.pass }, body))
+    body: JSON.stringify(Object.assign({ username: username }, body))
   });
   var text = await r.text();
   var d;
@@ -26886,45 +26881,20 @@ async function _mailCall(path, body) {
 }
 
 function saveMailCreds() {
-  var email = (document.getElementById('mailSetupEmail') || {}).value || '';
-  var pass  = (document.getElementById('mailSetupPass')  || {}).value || '';
-  var name  = (document.getElementById('mailSetupName')  || {}).value || '';
-  var stat  = document.getElementById('mailSetupStatus');
-  var btn   = document.querySelector('[onclick="saveMailCreds()"]');
-  if (!email) { if (stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Select an account first</span>'; return; }
-  if (!pass)  { if (stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Enter your password</span>'; return; }
-  if (stat) stat.textContent = 'Checking…';
-  if (btn)  { btn.disabled = true; btn.textContent = 'Checking…'; }
-  fetch('https://dmc-claude-proxy-production.up.railway.app/mail/folders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user: email.trim(), pass: pass })
-  })
-  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
-  .then(function(res) {
-    if (!res.ok) throw new Error(res.d.error || 'Auth failed');
-    localStorage.setItem('DMC_MAIL_CREDS', JSON.stringify({ email: email.trim(), pass: pass, name: name.trim() }));
-    var wrap = document.getElementById('mailView');
-    if (wrap) { wrap.innerHTML = ''; }
-    renderMail();
-  })
-  .catch(function(err) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Sign In →'; }
-    var msg = err.message || '';
-    var isAuth = /auth|password|login|credential|invalid|wrong|fail/i.test(msg);
-    if (stat) stat.innerHTML = '<span style="color:#e57373;">⚠ ' + (isAuth ? 'Wrong password — try again.' : escHtml(msg)) + '</span>';
-    var p = document.getElementById('mailSetupPass');
-    if (p) { p.value = ''; p.focus(); }
-  });
+  // Legacy shim — now handled by _mailAdminSave()
+  _mailAdminSave();
 }
 
 function renderMail() {
   var wrap = document.getElementById('mailView');
   if (!wrap) return;
-  var c = _mailCreds();
-  if (!c) { _mailShowSetup(wrap); return; }
-  if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, c); }
-  _mailLoadFolders(c);
+  var acct = _mailAccountForCurrentUser();
+  if (!acct) {
+    wrap.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">Mail is not available for your account.</div>';
+    return;
+  }
+  if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); }
+  _mailLoadFolders();
 }
 
 var _MAIL_ACCOUNTS = [
@@ -26940,108 +26910,132 @@ function _mailAccountForCurrentUser() {
   }) || null;
 }
 
-function _mailShowSetup(wrap, selectedEmail) {
-  var myAcct = _mailAccountForCurrentUser();
-  // If the logged-in user has a mapped mail account, lock to that account only
-  var acct = myAcct || _MAIL_ACCOUNTS.find(function(a){ return a.email === selectedEmail; }) || null;
-  var sel = acct ? acct.email : (selectedEmail || '');
+// Admin mail account setup modal
+function _mailShowAdminSetup() {
+  var existing = document.getElementById('_mailAdminModal');
+  if (existing) { existing.remove(); return; }
+  var token = localStorage.getItem('dmc_admin_token') || '';
+  var iStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:4px;padding:5px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;width:100%;box-sizing:border-box;';
 
-  var inputStyle = 'width:100%;box-sizing:border-box;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:12px;outline:none;';
+  var rows = _MAIL_ACCOUNTS.map(function(a) {
+    var u = a.username;
+    return '<tr id="_mailAdminRow_'+escHtml(u)+'" style="border-bottom:1px solid var(--asphalt-light);">'+
+      '<td style="padding:8px 6px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);white-space:nowrap;">'+escHtml(a.name)+'</td>'+
+      '<td style="padding:4px 6px;"><input id="_mau_'+escHtml(u)+'" value="'+escHtml(a.email)+'" placeholder="user@domain.com" style="'+iStyle+'"/></td>'+
+      '<td style="padding:4px 6px;"><input id="_map_'+escHtml(u)+'" type="password" placeholder="password" style="'+iStyle+'"/></td>'+
+      '<td style="padding:4px 6px;"><input id="_mah_'+escHtml(u)+'" value="mail.donmartincorp.com" placeholder="imap host" style="'+iStyle+'"/></td>'+
+      '<td style="padding:4px 6px;"><input id="_mapt_'+escHtml(u)+'" value="993" style="'+iStyle+';width:52px;"/></td>'+
+      '<td style="padding:4px 6px;white-space:nowrap;display:flex;gap:4px;">'+
+        '<button onclick="_mailAdminTestRow(\''+escHtml(u)+'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:4px;padding:4px 8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">Test</button>'+
+        '<button onclick="_mailAdminSaveRow(\''+escHtml(u)+'\')" style="background:var(--stripe);border:none;border-radius:4px;padding:4px 10px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;cursor:pointer;">Save</button>'+
+        '<span id="_mastat_'+escHtml(u)+'" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);align-self:center;"></span>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
 
-  // Build account picker only if the current user doesn't have a fixed account
-  var pickerHtml = '';
-  if (!myAcct) {
-    var accountBtns = _MAIL_ACCOUNTS.map(function(a) {
-      var active = sel === a.email;
-      return '<button onclick="_mailSelectAccount(\''+a.email+'\')"'+
-        ' style="flex:1;padding:12px 8px;border-radius:var(--radius);cursor:pointer;text-align:center;'+
-        (active ? 'background:var(--stripe);border:2px solid var(--stripe);color:var(--asphalt);' : 'background:var(--asphalt-mid);border:2px solid var(--asphalt-light);color:var(--white);')+
-        'font-family:\'DM Sans\',sans-serif;transition:all 0.15s;">'+
-        '<div style="font-weight:700;font-size:13px;">'+escHtml(a.name)+'</div>'+
-        '<div style="font-size:9px;margin-top:3px;opacity:0.75;">'+escHtml(a.email)+'</div>'+
-      '</button>';
-    }).join('');
-    pickerHtml = '<div style="display:flex;gap:10px;">'+accountBtns+'</div>';
-  } else {
-    // Show locked account badge
-    pickerHtml =
-      '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:10px;">'+
-        '<div style="width:34px;height:34px;border-radius:50%;background:var(--stripe);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--asphalt);font-size:14px;">'+
-          escHtml(acct.name.charAt(0))+
-        '</div>'+
-        '<div>'+
-          '<div style="font-weight:700;font-size:13px;color:var(--white);">'+escHtml(acct.name)+'</div>'+
-          '<div style="font-size:9px;color:var(--concrete-dim);">'+escHtml(acct.email)+'</div>'+
-        '</div>'+
-      '</div>';
-  }
-
-  wrap.innerHTML =
-    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px;background:var(--asphalt-mid);">'+
-      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:46px;letter-spacing:6px;color:var(--white);line-height:1;">✉️ Mail</div>'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--concrete-dim);margin-top:-12px;">donmartincorp.com</div>'+
-      '<div style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:24px 28px;max-width:440px;width:100%;display:flex;flex-direction:column;gap:14px;">'+
-        '<div style="font-size:14px;font-weight:700;color:var(--white);">'+(myAcct ? 'Sign in to your email' : 'Select account')+'</div>'+
-        pickerHtml+
-        (sel ?
-          '<input id="mailSetupPass" type="password" placeholder="Password"'+
-            ' style="'+inputStyle+'"'+
-            ' onkeydown="if(event.key===\'Enter\')saveMailCreds()"/>'+
-          '<div style="display:flex;gap:8px;">'+
-            '<button onclick="_mailTestConnection()"'+
-              ' style="flex:1;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;cursor:pointer;">'+
-              'Test Connection'+
-            '</button>'+
-            '<button onclick="saveMailCreds()"'+
-              ' style="flex:2;background:var(--stripe);border:none;border-radius:var(--radius);padding:9px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;letter-spacing:.8px;cursor:pointer;">'+
-              'Sign In →'+
-            '</button>'+
-          '</div>'
-        : '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Choose an account above to continue.</div>')+
-        '<div id="mailSetupStatus" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);line-height:1.6;min-height:14px;"></div>'+
-        '<input type="hidden" id="mailSetupEmail" value="'+escHtml(sel)+'"/>'+
-        '<input type="hidden" id="mailSetupName"  value="'+escHtml(acct ? acct.name : '')+'"/>'+
+  var modal = document.createElement('div');
+  modal.id = '_mailAdminModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:12px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px;" onclick="event.stopPropagation()">'+
+      '<div style="display:flex;align-items:center;gap:12px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:2px;color:var(--stripe);">📧 Mail Account Setup</div>'+
+        '<div style="flex:1;"></div>'+
+        '<button onclick="document.getElementById(\'_mailAdminModal\').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;">✕</button>'+
+      '</div>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);line-height:1.6;">'+
+        'Credentials are stored in Railway env vars (MAIL_USER_DJ, MAIL_PASS_DJ, etc.) or in Firestore.<br/>'+
+        'Enter ADMIN_TOKEN to save to Firestore. Env vars take priority and require a Railway redeploy.'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<label style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);white-space:nowrap;">ADMIN TOKEN</label>'+
+        '<input id="_mailAdminToken" type="password" value="'+escHtml(token)+'" placeholder="Enter Railway ADMIN_TOKEN" style="'+iStyle+';flex:1;max-width:280px;"/>'+
+        '<button onclick="localStorage.setItem(\'dmc_admin_token\',(document.getElementById(\'_mailAdminToken\')||{}).value||\'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:4px;padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">Store</button>'+
+      '</div>'+
+      '<div style="overflow-x:auto;">'+
+        '<table style="width:100%;border-collapse:collapse;">'+
+          '<thead><tr style="border-bottom:1px solid var(--asphalt-light);">'+
+            '<th style="padding:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:left;">USER</th>'+
+            '<th style="padding:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:left;">EMAIL ADDRESS</th>'+
+            '<th style="padding:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:left;">PASSWORD</th>'+
+            '<th style="padding:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:left;">IMAP HOST</th>'+
+            '<th style="padding:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:left;">PORT</th>'+
+            '<th style="padding:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:left;"></th>'+
+          '</tr></thead>'+
+          '<tbody>'+rows+'</tbody>'+
+        '</table>'+
       '</div>'+
     '</div>';
-  setTimeout(function(){ var p = document.getElementById('mailSetupPass'); if(p) p.focus(); }, 50);
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
-function _mailSelectAccount(email) {
-  var wrap = document.getElementById('mailView');
-  if (wrap) _mailShowSetup(wrap, email);
+function _mailAdminRow(username) {
+  return {
+    user:    (document.getElementById('_mau_'+username)  || {}).value || '',
+    pass:    (document.getElementById('_map_'+username)  || {}).value || '',
+    host:    (document.getElementById('_mah_'+username)  || {}).value || '',
+    port:    parseInt((document.getElementById('_mapt_'+username) || {}).value || '993'),
+    token:   (document.getElementById('_mailAdminToken') || {}).value || localStorage.getItem('dmc_admin_token') || ''
+  };
+}
+
+function _mailAdminSetStat(username, html) {
+  var el = document.getElementById('_mastat_'+username);
+  if (el) el.innerHTML = html;
+}
+
+function _mailAdminTestRow(username) {
+  var r = _mailAdminRow(username);
+  if (!r.user || !r.pass) { _mailAdminSetStat(username, '<span style="color:#e57373;">⚠ Fill email+pass</span>'); return; }
+  if (!r.token) { _mailAdminSetStat(username, '<span style="color:#e57373;">⚠ Enter admin token</span>'); return; }
+  _mailAdminSetStat(username, 'Testing…');
+  fetch('https://dmc-claude-proxy-production.up.railway.app/mail/test', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminToken: r.token, host: r.host, port: r.port, user: r.user, pass: r.pass })
+  }).then(function(res){ return res.json(); }).then(function(d) {
+    if (d.ok) _mailAdminSetStat(username, '<span style="color:#7ecb8f;">✓ '+d.folderCount+' folders</span>');
+    else _mailAdminSetStat(username, '<span style="color:#e57373;">✗ '+escHtml(d.error||'failed')+'</span>');
+  }).catch(function(e){ _mailAdminSetStat(username, '<span style="color:#e57373;">✗ '+escHtml(e.message)+'</span>'); });
+}
+
+function _mailAdminSaveRow(username) {
+  var r = _mailAdminRow(username);
+  var acct = _MAIL_ACCOUNTS.find(function(a){ return a.username === username; }) || {};
+  if (!r.user || !r.pass) { _mailAdminSetStat(username, '<span style="color:#e57373;">⚠ Fill email+pass</span>'); return; }
+  if (!r.token) { _mailAdminSetStat(username, '<span style="color:#e57373;">⚠ Enter admin token</span>'); return; }
+  _mailAdminSetStat(username, 'Saving…');
+  fetch('https://dmc-claude-proxy-production.up.railway.app/mail/credentials/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminToken: r.token, username: username, host: r.host, port: r.port, user: r.user, pass: r.pass, displayName: acct.name || username })
+  }).then(function(res){ return res.json(); }).then(function(d) {
+    if (d.ok) {
+      _mailAdminSetStat(username, '<span style="color:#7ecb8f;">✓ Saved</span>');
+      localStorage.setItem('dmc_admin_token', r.token);
+    } else {
+      _mailAdminSetStat(username, '<span style="color:#e57373;">✗ '+escHtml(d.error||'failed')+'</span>');
+    }
+  }).catch(function(e){ _mailAdminSetStat(username, '<span style="color:#e57373;">✗ '+escHtml(e.message)+'</span>'); });
+}
+
+function _mailAdminSave() {
+  // Called by legacy saveMailCreds shim — no-op in new flow
 }
 
 function _mailTestConnection() {
-  var email = (document.getElementById('mailSetupEmail')||{}).value || '';
-  var pass  = (document.getElementById('mailSetupPass') ||{}).value || '';
-  var stat  = document.getElementById('mailSetupStatus');
-  if (!email) { if(stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Select an account first</span>'; return; }
-  if (!pass)  { if(stat) stat.innerHTML = '<span style="color:#e57373;">⚠ Enter password first</span>'; return; }
-  if (stat) stat.textContent = 'Testing…';
-  fetch('https://dmc-claude-proxy-production.up.railway.app/mail/folders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user: email.trim(), pass: pass })
-  }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
-    .then(function(res) {
-      if (!res.ok) throw new Error(res.d.error || 'Auth failed');
-      var fCount = (res.d.folders || []).length;
-      if (stat) stat.innerHTML = '<span style="color:#81c784;">✓ Connected — '+fCount+' folders found. Click Sign In.</span>';
-    })
-    .catch(function(err) {
-      if (stat) stat.innerHTML = '<span style="color:#e57373;">⚠ '+escHtml(err.message)+'</span>';
-    });
+  // Called from admin setup panel — reads fields from the row being tested
+  // Actual test is dispatched per-row by _mailAdminTestRow(username)
 }
 
-function _mailBuildApp(wrap, c) {
-  var initials = (c.name || c.email).substring(0,2).toUpperCase();
+function _mailBuildApp(wrap, acct) {
+  var isAdmin = ['dj','donmartin'].includes((localStorage.getItem('dmc_u')||'').toLowerCase());
   wrap.innerHTML =
     '<div id="mailApp" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">'+
 
       // Header
       '<div style="flex-shrink:0;background:var(--asphalt-mid);border-bottom:1px solid var(--asphalt-light);padding:7px 16px;display:flex;align-items:center;gap:10px;">'+
         '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:3px;color:var(--white);">✉️ Mail</div>'+
-        '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">'+escHtml(c.email)+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">'+escHtml(acct.email)+'</div>'+
         '<div style="flex:1;"></div>'+
         '<span id="mailStatus" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);"></span>'+
         '<button onclick="openMailCompose({})"'+
@@ -27052,10 +27046,12 @@ function _mailBuildApp(wrap, c) {
           ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
           '↻'+
         '</button>'+
-        '<button onclick="localStorage.removeItem(\'DMC_MAIL_CREDS\');document.getElementById(\'mailView\').innerHTML=\'\';renderMail();"'+
-          ' style="background:none;border:1px solid rgba(229,115,115,0.5);border-radius:var(--radius);padding:5px 12px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;cursor:pointer;letter-spacing:.5px;" title="Sign out of mail">'+
-          '⎋ Sign Out'+
-        '</button>'+
+        (isAdmin
+          ? '<button onclick="_mailShowAdminSetup()"'+
+              ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Configure mail accounts">'+
+              '⚙ Accounts'+
+            '</button>'
+          : '')+
       '</div>'+
 
       // 3-panel body
@@ -27085,7 +27081,7 @@ function _mailBuildApp(wrap, c) {
     '</div>';
 }
 
-function _mailLoadFolders(c) {
+function _mailLoadFolders() {
   _mailCall('folders', {}).then(function(d) {
     var el = document.getElementById('mailFolders');
     if (!el) return;
@@ -27114,9 +27110,24 @@ function _mailLoadFolders(c) {
     _mailLoadMessages(_mailFolder, _mailFolderNm);
   }).catch(function(err) {
     var el = document.getElementById('mailFolders');
-    if (el) el.innerHTML = '<div style="padding:12px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:9px;line-height:1.6;">'+escHtml(err.message)+'</div>';
+    var isAdmin = ['dj','donmartin'].includes((localStorage.getItem('dmc_u')||'').toLowerCase());
+    var notConfigured = /no mail credentials|not configured/i.test(err.message || '');
+    if (el) {
+      if (notConfigured && isAdmin) {
+        el.innerHTML =
+          '<div style="padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;line-height:1.8;color:var(--concrete-dim);">'+
+            'No credentials<br/>configured.'+
+            '<div style="margin-top:8px;"><button onclick="_mailShowAdminSetup()"'+
+              ' style="background:var(--stripe);border:none;border-radius:var(--radius);padding:5px 10px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;cursor:pointer;">'+
+              '⚙ Set Up'+
+            '</button></div>'+
+          '</div>';
+      } else {
+        el.innerHTML = '<div style="padding:12px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:9px;line-height:1.6;">'+escHtml(err.message)+'</div>';
+      }
+    }
     var s = document.getElementById('mailStatus');
-    if (s) s.textContent = '⚠ Connection failed';
+    if (s) s.textContent = notConfigured ? '⚠ Not configured' : '⚠ Connection failed';
   });
 }
 
@@ -27306,8 +27317,7 @@ function _mailFmtSize(bytes) {
 function _mailRenderAttachments(attachments, uid, folder) {
   var bar = document.getElementById('mailAttachmentBar');
   if (!bar) return;
-  var c = _mailCreds();
-  if (!c) return;
+  var username = localStorage.getItem('dmc_u') || '';
   var LARGE = 5 * 1024 * 1024;
 
   attachments.forEach(function(att) {
@@ -27324,7 +27334,7 @@ function _mailRenderAttachments(attachments, uid, folder) {
         fetch(_mailRailBase() + '/mail/attachment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user: c.email, pass: c.pass, folder: folder, uid: uid, filename: att.filename })
+          body: JSON.stringify({ username: username, folder: folder, uid: uid, filename: att.filename })
         }).then(function(r) {
           if (!r.ok) return;
           return r.blob();
@@ -27359,7 +27369,7 @@ function _mailRenderAttachments(attachments, uid, folder) {
         fetch(_mailRailBase() + '/mail/attachment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user: c.email, pass: c.pass, folder: folder, uid: uid, filename: filename })
+          body: JSON.stringify({ username: username, folder: folder, uid: uid, filename: filename })
         }).then(function(r) {
           if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'HTTP ' + r.status); });
           return r.blob();
@@ -27392,8 +27402,6 @@ function _mailRenderAttachments(attachments, uid, folder) {
 function openMailCompose(opts) {
   var existing = document.getElementById('mailComposeModal');
   if (existing) existing.remove();
-  var c = _mailCreds();
-  if (!c) return;
   opts = opts || {};
   var modal = document.createElement('div');
   modal.id  = 'mailComposeModal';
