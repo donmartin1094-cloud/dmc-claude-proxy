@@ -35968,7 +35968,7 @@ async function fbSet(docName, value) {
       // fall back to local cache if Firebase cannot be initialized right now
     }
   }
-  console.log('[fbSet] db status:', db ? 'initialized' : 'NULL — will use localStorage fallback', '| doc:', docName);
+  console.log('[fbSet] db:', db ? 'ready' : 'null', '| doc:', docName);
   if (!db) { localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value)); return; }
   try {
     setSyncBadge('saving');
