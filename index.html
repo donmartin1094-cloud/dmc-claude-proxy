@@ -37834,15 +37834,16 @@ function doLogin() {
           firebaseAuthOk = true;
         } catch(fbErr) {
           const code = fbErr?.code || '';
+          console.warn('[Login] Firebase auth failed:', code, fbErr.message);
           if (code === 'auth/too-many-requests') {
             err.textContent = 'Too many attempts. Please wait and try again.';
             err.classList.add('show');
             return;
           }
-          // For any other failure (wrong-password, invalid-credential, user-not-found, etc.)
-          // always fall through to the accounts doc fallback — the password may have been
-          // updated in Firestore without being synced to Firebase Auth yet.
-          console.warn('Firebase Auth failed (' + code + '), trying accounts fallback:', fbErr.message);
+          if (code === 'auth/network-request-failed') {
+            console.warn('[Login] Firebase network error — trying fallbacks');
+          }
+          // For any other failure fall through to accounts doc / hardcoded / server fallbacks
         }
       }
 
@@ -37925,19 +37926,15 @@ function doLogin() {
         console.warn('Server login fallback unavailable:', e?.message || e);
       }
 
-      // Nothing worked
-      if (!loginEmail && !input.includes('@')) {
-        err.textContent = 'Username not found or has no linked email mapping. Try logging in with email or sync accounts from an admin device.';
-      } else {
-        err.textContent = 'Incorrect username/email or password.';
-      }
+      // Nothing worked — all 4 layers failed
+      err.textContent = 'Incorrect username or password. If the problem persists, check your connection and try again.';
       err.classList.add('show');
       document.getElementById('loginPass').value = '';
       document.getElementById('loginPass').focus();
 
     } catch(e) {
-      console.warn('Login flow error:', e);
-      err.textContent = 'Login error: ' + (e?.message || 'unknown error');
+      console.warn('[Login] flow error:', e);
+      err.textContent = 'Unable to sign in. Please check your connection and try again.';
       err.classList.add('show');
       document.getElementById('loginPass').value='';
       document.getElementById('loginPass').focus();
