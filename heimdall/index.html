@@ -1896,6 +1896,21 @@ function App() {
     const isAdmin = ['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u);
     if (!(isAdmin || isLowbedDriverRole || isRentalLowbedDriverRole || isForemanRole || isMechanicRole)) return;
 
+    // Backfill jobGroupId for moves created before the field existed.
+    // Groups manual moves by destination (to field); non-manual moves get a solo ID.
+    // In-memory only — does not write back to Firestore.
+    const backfillJobGroupIds = (moves) => {
+      const toGroupMap = {};
+      return moves.map(move => {
+        if (move.jobGroupId) return move;
+        const key = move.to || move.id;
+        if (!toGroupMap[key]) {
+          toGroupMap[key] = move.manual ? 'job_' + key : 'single_' + move.id;
+        }
+        return { ...move, jobGroupId: toGroupMap[key] };
+      });
+    };
+
     // Load lowbed_groups: merge local + remote, keeping whichever has more total items,
     // then push the winner back to Firestore so all users converge on the same data
     hdFsGet('lowbed_groups').then(remote => {
@@ -1903,7 +1918,7 @@ function App() {
       const remoteArr = Array.isArray(remote) ? remote : [];
       const countItems = arr => arr.reduce((n, g) => n + (g.items ? g.items.length : 0), 0);
       const winner = countItems(remoteArr) >= countItems(localRaw) ? remoteArr : localRaw;
-      setLowbedGroups(winner);
+      setLowbedGroups(backfillJobGroupIds(winner));
       localStorage.setItem('dmc_lowbed_groups', JSON.stringify(winner));
       // If local had more data, push it up so other devices get it too
       if (countItems(localRaw) > countItems(remoteArr)) hdFsSet('lowbed_groups', winner);
@@ -1939,7 +1954,7 @@ function App() {
             const raw = doc.fields?.data?.stringValue;
             if (raw) {
               const groups = JSON.parse(raw);
-              setLowbedGroups(groups);
+              setLowbedGroups(backfillJobGroupIds(groups));
               localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
             }
           }
@@ -3461,11 +3476,20 @@ Be specific, practical, and flag any uncertainties clearly.`;
                             const groupedItems = [];
                             const seenJobGroups = new Set();
                             manualMoves.forEach(move => {
-                              const jgid = move.jobGroupId || '';
-                              if (jgid.startsWith('job_')) {
+                              const jgid = move.jobGroupId && move.jobGroupId.startsWith('job_')
+                                ? move.jobGroupId
+                                : (move.to && move.to !== '__garage__' && move.manual)
+                                  ? 'job_' + move.to
+                                  : null;
+                              if (jgid) {
                                 if (!seenJobGroups.has(jgid)) {
                                   seenJobGroups.add(jgid);
-                                  groupedItems.push({ type: 'job_group', jobGroupId: jgid, moves: manualMoves.filter(m => m.jobGroupId === jgid) });
+                                  groupedItems.push({ type: 'job_group', jobGroupId: jgid, moves: manualMoves.filter(m => {
+                                    const mjgid = m.jobGroupId && m.jobGroupId.startsWith('job_')
+                                      ? m.jobGroupId
+                                      : (m.to && m.to !== '__garage__' && m.manual) ? 'job_' + m.to : null;
+                                    return mjgid === jgid;
+                                  }) });
                                 }
                               } else {
                                 groupedItems.push({ type: 'single', move });
