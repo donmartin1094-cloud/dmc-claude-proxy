@@ -72,9 +72,10 @@ const getMailCredentials = async (username) => {
   if (process.env['MAIL_USER_' + uKey] && process.env['MAIL_PASS_' + uKey]) {
     const host     = process.env['MAIL_HOST_' + uKey]      || IMAP_HOST;
     const port     = parseInt(process.env['MAIL_PORT_' + uKey]      || '993');
-    const smtpHost = process.env['MAIL_SMTP_HOST_' + uKey] || host  || SMTP_HOST;
-    const smtpPort = parseInt(process.env['MAIL_SMTP_PORT_' + uKey] || '587');
-    return { host, port, secure: port === 993, smtpHost, smtpPort,
+    const smtpHost   = process.env['MAIL_SMTP_HOST_' + uKey] || host  || SMTP_HOST;
+    const smtpPort   = parseInt(process.env['MAIL_SMTP_PORT_' + uKey] || '587');
+    const smtpSecure = process.env['MAIL_SMTP_SECURE_' + uKey] === 'true' || smtpPort === 465;
+    return { host, port, secure: port === 993, smtpHost, smtpPort, smtpSecure,
              auth: { user: process.env['MAIL_USER_' + uKey], pass: process.env['MAIL_PASS_' + uKey] } };
   }
 
@@ -741,12 +742,14 @@ app.post('/mail/send', async (req, res) => {
     console.log('[Send] credentials found, connecting SMTP...');
     console.log('[Send] SMTP host:', creds.smtpHost, 'port:', creds.smtpPort);
     const transport = nodemailer.createTransport({
-      host:           creds.smtpHost || SMTP_HOST,
-      port:           creds.smtpPort || SMTP_PORT,
-      secure:         false,
-      requireTLS:     true,
-      auth:           { user: creds.auth.user, pass: creds.auth.pass },
-      connectionTimeout: 15000
+      host:              creds.smtpHost || SMTP_HOST,
+      port:              creds.smtpPort || 465,
+      secure:            creds.smtpSecure !== undefined ? creds.smtpSecure : (creds.smtpPort || 465) === 465,
+      auth:              { user: creds.auth.user, pass: creds.auth.pass },
+      connectionTimeout: 20000,
+      greetingTimeout:   15000,
+      socketTimeout:     20000,
+      tls:               { rejectUnauthorized: false }
     });
     await transport.sendMail({
       from:       creds.auth.user,
