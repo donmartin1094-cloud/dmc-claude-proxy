@@ -30451,6 +30451,7 @@ function saveFleet() {
     var fleetForCloud = JSON.parse(JSON.stringify(equipmentFleet));
     fleetForCloud.forEach(function(eq) {
       if (eq.profilePhoto && eq.profilePhoto.startsWith('data:')) delete eq.profilePhoto;
+      if (eq.photos) eq.photos = eq.photos.filter(function(p){ return p.url && !p.url.startsWith('data:'); });
     });
     fbSet('fleet', fleetForCloud).catch(function(e) {
       console.warn('[Fleet] Firebase sync failed:', e && e.message);
@@ -32128,8 +32129,11 @@ function _fleetDetailHTML(eq) {
   var maintRows = maintLogs.length ? maintLogs.map(function(l) {
     var dt = l.date ? new Date(l.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
     var typeLabel = (FLEET_MAINT_TYPES.find(function(t){ return t.key===l.type; })||{label:l.type||'Maintenance'}).label;
-    return '<div style="display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'+
-      '<div style="min-width:86px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);padding-top:2px;">'+escHtml(dt)+'</div>'+
+    return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'+
+      (l.photoUrl
+        ? '<img src="'+escHtml(l.photoUrl)+'" style="width:38px;height:38px;border-radius:5px;object-fit:cover;border:1px solid var(--asphalt-light);flex-shrink:0;margin-top:1px;" />'
+        : '<div style="width:38px;flex-shrink:0;"></div>')+
+      '<div style="min-width:78px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);padding-top:2px;">'+escHtml(dt)+'</div>'+
       '<div style="flex:1;">'+
         '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:600;color:var(--stripe);">'+escHtml(typeLabel)+'</div>'+
         '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete);margin-top:1px;">'+escHtml(l.description||'—')+'</div>'+
@@ -32216,6 +32220,34 @@ function _fleetDetailHTML(eq) {
       // Notes
       (eq.notes ? '<div style="margin-bottom:20px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:12px 14px;font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--concrete);">'+escHtml(eq.notes)+'</div>' : '')+
 
+      // ── Photo Gallery ───────────────────────────────────────────────────────────
+      (function() {
+        var photos = eq.photos || [];
+        var thumbs = photos.map(function(p, i) {
+          var isPrimary = (p.url === eq.profilePhoto);
+          return '<div style="position:relative;flex-shrink:0;">'+
+            '<img src="'+escHtml(p.url)+'" style="width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid '+(isPrimary?'var(--stripe)':'var(--asphalt-light)')+';display:block;" />'+
+            (isPrimary ? '<span style="position:absolute;top:-4px;left:-4px;background:var(--stripe);color:#000;font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;border-radius:3px;padding:1px 4px;line-height:1.4;">PRIMARY</span>' : '')+
+            '<div style="display:flex;gap:3px;margin-top:3px;justify-content:center;">'+
+              (!isPrimary ? '<button onclick="_fleetSetPrimaryPhoto(\''+eq.id+'\','+i+')" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.35);border-radius:3px;padding:1px 5px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:7px;cursor:pointer;" title="Set as primary">★</button>' : '')+
+              '<button onclick="_fleetDeletePhoto(\''+eq.id+'\','+i+')" style="background:rgba(217,79,61,0.08);border:1px solid rgba(217,79,61,0.3);border-radius:3px;padding:1px 5px;color:var(--red);font-family:\'DM Mono\',monospace;font-size:7px;cursor:pointer;" title="Delete photo">✕</button>'+
+            '</div>'+
+          '</div>';
+        }).join('');
+        return '<div style="margin-bottom:24px;">'+
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--stripe);">Photos ('+(photos.length)+')</div>'+
+            '<span style="flex:1;"></span>'+
+            '<label style="background:rgba(126,203,143,0.08);border:1px dashed rgba(126,203,143,0.4);border-radius:var(--radius);padding:4px 12px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+              '📷 Add Photo'+
+              '<input type="file" accept="image/*" capture="environment" multiple style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
+            '</label>'+
+          '</div>'+
+          (photos.length
+            ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">'+thumbs+'</div>'
+            : '<div style="color:var(--concrete-dim);font-size:11px;font-family:\'DM Mono\',monospace;padding:6px 0;">No photos yet. Use the camera button above or add one via the maintenance log.</div>')+
+        '</div>';
+      })()+
 
       // ── Compliance Documents section ────────────────────────────────────────────
       (function() {
@@ -32563,17 +32595,48 @@ function _fleetProfilePhotoUpload(eqId, inputEl) {
   if (idx < 0) return;
   var eq = equipmentFleet[idx];
   if (!storage) { alert('Firebase Storage is required. Please try again when online.'); return; }
-  uploadFileToStorage(file, 'equipment_photos/' + eqId).then(function(result) {
-    if (eq.profilePhotoPath && eq.profilePhotoPath !== result.path) {
-      try { deleteFileFromStorage(eq.profilePhotoPath); } catch(e){}
+  uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
+    eq.photos = eq.photos || [];
+    eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString() });
+    // Set as profile photo if none exists yet
+    if (!eq.profilePhoto) {
+      eq.profilePhoto = result.url;
+      eq.profilePhotoPath = result.path;
     }
-    eq.profilePhoto = result.url;
-    eq.profilePhotoPath = result.path;
     saveFleet();
     _fleetRefreshDetail(eqId);
   }).catch(function(err) {
     alert('Photo upload failed: ' + err.message);
   });
+}
+
+function _fleetDeletePhoto(eqId, photoIdx) {
+  var eq = equipmentFleet.find(function(e){ return e.id===eqId; });
+  if (!eq || !eq.photos || !eq.photos[photoIdx]) return;
+  var photo = eq.photos[photoIdx];
+  if (photo.path) { try { deleteFileFromStorage(photo.path); } catch(e){} }
+  var wasProfile = (eq.profilePhoto === photo.url);
+  eq.photos.splice(photoIdx, 1);
+  if (wasProfile) {
+    if (eq.photos.length) {
+      eq.profilePhoto = eq.photos[0].url;
+      eq.profilePhotoPath = eq.photos[0].path;
+    } else {
+      eq.profilePhoto = '';
+      eq.profilePhotoPath = '';
+    }
+  }
+  saveFleet();
+  _fleetRefreshDetail(eqId);
+}
+
+function _fleetSetPrimaryPhoto(eqId, photoIdx) {
+  var eq = equipmentFleet.find(function(e){ return e.id===eqId; });
+  if (!eq || !eq.photos || !eq.photos[photoIdx]) return;
+  eq.profilePhoto = eq.photos[photoIdx].url;
+  eq.profilePhotoPath = eq.photos[photoIdx].path;
+  saveFleet();
+  _fleetRefreshDetail(eqId);
 }
 
 // ── Log Maintenance form ──────────────────────────────────────────────────────
@@ -32698,10 +32761,13 @@ function _fleetSubmitMaintenance(id) {
   _fleetRefreshDetail(id);
 
   if (photoFile && storage) {
-    uploadFileToStorage(photoFile, 'equipment_photos/' + id).then(function(result) {
+    uploadFileToStorage(photoFile, 'equipment_photos/' + id + '/' + logEntry.id).then(function(result) {
       logEntry.photoUrl = result.url;
       logEntry.photoPath = result.path;
-      if (wantsProfile) {
+      // Add to eq.photos gallery
+      eq.photos = eq.photos || [];
+      eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), source: 'maintenance', maintLogId: logEntry.id });
+      if (wantsProfile || !eq.profilePhoto) {
         eq.profilePhoto = result.url;
         eq.profilePhotoPath = result.path;
       }
