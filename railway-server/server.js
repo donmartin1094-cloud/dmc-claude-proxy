@@ -742,9 +742,9 @@ app.post('/mail/send', async (req, res) => {
     console.log('[Send] credentials found, connecting SMTP...');
     console.log('[Send] SMTP host:', creds.smtpHost, 'port:', creds.smtpPort);
     const transport = nodemailer.createTransport({
-      host:              creds.smtpHost || SMTP_HOST,
-      port:              creds.smtpPort || 465,
-      secure:            creds.smtpSecure !== undefined ? creds.smtpSecure : (creds.smtpPort || 465) === 465,
+      host:              creds.smtpHost || 'register-smtp-oxcs.hostingplatform.com',
+      port:              465,
+      secure:            true,
       auth:              { user: creds.auth.user, pass: creds.auth.pass },
       connectionTimeout: 20000,
       greetingTimeout:   15000,
