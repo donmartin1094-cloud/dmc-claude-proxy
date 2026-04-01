@@ -23506,8 +23506,8 @@ function _sendLookaheadToCheckedForemen() {
   var employees = [];
   try { employees = JSON.parse(localStorage.getItem('pavescope_employees') || '[]'); } catch(e) {}
 
-  var proxyBase = '';
-  try { proxyBase = (localStorage.getItem('dmc_claude_proxy_url') || '').replace('/claude', ''); } catch(e) {}
+  var proxyBase = 'https://dmc-claude-proxy-production.up.railway.app';
+  try { var _stored = localStorage.getItem('dmc_claude_proxy_url'); if (_stored) proxyBase = _stored.replace('/claude', ''); } catch(e) {}
 
   var mailUser = localStorage.getItem('dmc_mail_user') || '';
   var mailPass = localStorage.getItem('dmc_mail_pass') || '';
@@ -23534,7 +23534,7 @@ function _sendLookaheadToCheckedForemen() {
     fetch(proxyBase + '/mail/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: mailUser, pass: mailPass, to: email, subject: subject, html: tableHtml })
+      body: JSON.stringify({ username: localStorage.getItem('dmc_u') || '', to: email, subject: subject, html: tableHtml })
     }).then(function(res) {
       if (res.ok) { sent++; _rptToast('\u2705 Sent to ' + name, 'success'); }
       else { failed++; _rptToast('\u274C Failed: ' + name, 'error'); }
