@@ -23531,7 +23531,7 @@ function _sendLookaheadToCheckedForemen() {
       _rptToast('\u274C No email found for ' + name, 'error');
       return;
     }
-    fetch(proxyBase + '/mail/send', {
+    fetch('/.netlify/functions/mail-send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: localStorage.getItem('dmc_u') || '', to: email, subject: subject, html: tableHtml })
