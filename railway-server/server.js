@@ -729,46 +729,39 @@ app.post('/mail/attachment', async (req, res) => {
 
 // ── Mail: send ──────────────────────────────────────────────────────────────
 app.post('/mail/send', async (req, res) => {
-  console.log('[Send] route hit, username:', req.body?.username, 'to:', req.body?.to);
-  const { username, to, cc, subject, html, text, inReplyTo, references } = req.body;
-  if (!username || !to || !subject) {
-    console.log('[Send] missing params — username:', !!username, 'to:', !!to, 'subject:', !!subject);
+  console.log('[Send] route hit, to:', req.body?.to);
+  const { user, pass, to, cc, subject, html, text, inReplyTo, references } = req.body;
+  if (!user || !pass || !to || !subject) {
     return res.status(400).json({ error: 'Missing params' });
   }
   try {
-    console.log('[Send] getting credentials for:', username);
-    const creds = await getMailCredentials(username);
-    console.log('[Send] sending via Resend...');
-    const resendRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + process.env.RESEND_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: creds.auth.user,
-        to: Array.isArray(to) ? to : [to],
-        cc: cc ? (Array.isArray(cc) ? cc : [cc]) : undefined,
-        subject,
-        html: html || undefined,
-        text: text || undefined,
-        reply_to: creds.auth.user,
-        headers: {
-          ...(inReplyTo  ? { 'In-Reply-To': inReplyTo  } : {}),
-          ...(references ? { 'References':  references } : {})
-        }
-      })
+    const uKey = user.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    const smtpHost = process.env['MAIL_SMTP_HOST_' + uKey] || 'register-smtp-oxcs.hostingplatform.com';
+    const smtpPort = parseInt(process.env['MAIL_SMTP_PORT_' + uKey] || '587');
+    console.log('[Send] connecting SMTP:', smtpHost, smtpPort);
+    const nodemailer = require('nodemailer');
+    const transport = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      requireTLS: smtpPort === 587,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 20000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
     });
-    const resendData = await resendRes.json();
-    if (!resendRes.ok) {
-      console.error('[Send] Resend error:', resendData);
-      throw new Error(resendData.message || JSON.stringify(resendData));
-    }
-    console.log('[Send] email sent successfully via Resend, id:', resendData.id);
-    res.json({ ok: true, id: resendData.id });
+    await transport.sendMail({
+      from: user,
+      to, cc, subject, html, text,
+      ...(inReplyTo  ? { inReplyTo  } : {}),
+      ...(references ? { references } : {})
+    });
+    console.log('[Send] email sent successfully');
+    res.json({ ok: true });
   } catch (err) {
-    console.error('[Send] error:', err.message);
-    res.status(500).json({ error: err.message });
+    console.error('[Send] error:', err.message, err.code);
+    res.status(500).json({ error: err.message, code: err.code });
   }
 });
 

@@ -23531,10 +23531,10 @@ function _sendLookaheadToCheckedForemen() {
       _rptToast('\u274C No email found for ' + name, 'error');
       return;
     }
-    fetch('/.netlify/functions/mail-send', {
+    fetch(proxyBase + '/mail/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: localStorage.getItem('dmc_u') || '', to: email, subject: subject, html: tableHtml })
+      body: JSON.stringify({ user: mailUser, pass: mailPass, to: email, subject: subject, html: tableHtml })
     }).then(function(res) {
       if (res.ok) { sent++; _rptToast('\u2705 Sent to ' + name, 'success'); }
       else { failed++; _rptToast('\u274C Failed: ' + name, 'error'); }
@@ -26896,6 +26896,8 @@ function renderMail() {
       wrap.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">Mail is not available for your account.</div>';
       return;
     }
+    // Cache mail user for outbound send — password must be set separately via localStorage.setItem('dmc_mail_pass',...)
+    if (acct.email) localStorage.setItem('dmc_mail_user', acct.email);
     if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); }
     _mailLoadFolders();
   } catch(err) {
