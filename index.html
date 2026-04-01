@@ -30442,21 +30442,28 @@ function _buildCertUtilization(backlogJobId, weekEnding) {
 }
 
 const FLEET_KEY = 'dmc_fleet';
-var equipmentFleet = JSON.parse(localStorage.getItem(FLEET_KEY) || '[]');
+var equipmentFleet = (function() {
+  var _raw = JSON.parse(localStorage.getItem(FLEET_KEY) || '[]');
+  return _raw.map(function(eq) {
+    if (!eq.photos) eq.photos = [];
+    if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') &&
+        !eq.photos.find(function(p){ return p.url === eq.profilePhoto; })) {
+      eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath || '', addedAt: eq.createdAt || new Date().toISOString(), isPrimary: true });
+    }
+    return eq;
+  });
+})();
 
 function saveFleet() {
-  localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet));
-  if (typeof fbSet === 'function') {
-    // Strip base64 data URLs before pushing to Firestore — they exceed the 1 MB document limit
-    var fleetForCloud = JSON.parse(JSON.stringify(equipmentFleet));
-    fleetForCloud.forEach(function(eq) {
-      if (eq.profilePhoto && eq.profilePhoto.startsWith('data:')) delete eq.profilePhoto;
-      if (eq.photos) eq.photos = eq.photos.filter(function(p){ return p.url && !p.url.startsWith('data:'); });
-    });
-    fbSet('fleet', fleetForCloud).catch(function(e) {
-      console.warn('[Fleet] Firebase sync failed:', e && e.message);
-    });
-  }
+  // Only strip base64 data URLs, keep Firebase Storage URLs
+  var slim = equipmentFleet.map(function(eq) {
+    var e = Object.assign({}, eq);
+    if (e.profilePhoto && e.profilePhoto.startsWith('data:')) { e.profilePhoto = null; e.profilePhotoPath = null; }
+    if (e.photos) e.photos = e.photos.filter(function(p){ return p.url && !p.url.startsWith('data:'); });
+    return e;
+  });
+  localStorage.setItem(FLEET_KEY, JSON.stringify(slim));
+  try { if (typeof fbSet === 'function') fbSet('fleet', slim); } catch(e) {}
   _fleetUpdateBadge();
 }
 
@@ -32597,12 +32604,10 @@ function _fleetProfilePhotoUpload(eqId, inputEl) {
   if (!storage) { alert('Firebase Storage is required. Please try again when online.'); return; }
   uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
     eq.photos = eq.photos || [];
-    eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString() });
-    // Set as profile photo if none exists yet
-    if (!eq.profilePhoto) {
-      eq.profilePhoto = result.url;
-      eq.profilePhotoPath = result.path;
-    }
+    eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: eq.photos.length === 0 });
+    // Always set profilePhoto from the primary photo
+    var primary = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0];
+    if (primary) { eq.profilePhoto = primary.url; eq.profilePhotoPath = primary.path; }
     saveFleet();
     _fleetRefreshDetail(eqId);
   }).catch(function(err) {
@@ -36835,7 +36840,7 @@ async function fbLoadAll() {
         else if (key === 'gc_profiles') { localStorage.setItem('pavescope_fb_gc_profiles', JSON.stringify(val)); }
         else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val)); }
         else if (key === 'gcs')        { knownGCs = val; }
-        else if (key === 'fleet')      { equipmentFleet = Array.isArray(val) ? val : equipmentFleet; localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot(); }
+        else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot(); }
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
       } catch(e) {}
     });
