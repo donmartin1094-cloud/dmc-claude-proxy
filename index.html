@@ -32165,7 +32165,7 @@ function _fleetDetailHTML(eq) {
             : '<div style="width:90px;height:90px;border-radius:12px;background:var(--asphalt);border:2px dashed var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--concrete-dim);">\ud83d\udcf7</div>')+
           '<label style="position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:var(--stripe);border:2px solid var(--asphalt-mid);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;">'+
             '\ud83d\udcf7'+
-            '<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
+            '<input type="file" accept="image/*" style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
           '</label>'+
         '</div>'+
         // Left: name + status
@@ -32240,7 +32240,7 @@ function _fleetDetailHTML(eq) {
             '<span style="flex:1;"></span>'+
             '<label style="background:rgba(126,203,143,0.08);border:1px dashed rgba(126,203,143,0.4);border-radius:var(--radius);padding:4px 12px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
               '📷 Add Photo'+
-              '<input type="file" accept="image/*" capture="environment" multiple style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
+              '<input type="file" accept="image/*" multiple style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
             '</label>'+
           '</div>'+
           (photos.length
@@ -32700,7 +32700,7 @@ function openLogMaintenanceForm(id) {
           '<div id="_fleetMaintPhotoZone" style="border:1px dashed var(--asphalt-light);border-radius:var(--radius);padding:14px;text-align:center;">'+
             '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;">'+
               '\ud83d\udcf7 Take / Choose Photo'+
-              '<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="_fleetMaintPhotoChange(this)">'+
+              '<input type="file" accept="image/*" style="display:none;" onchange="_fleetMaintPhotoChange(this)">'+
             '</label>'+
           '</div>'+
           '<div id="_fleetMaintPhotoPreview" style="display:none;align-items:center;gap:10px;margin-top:6px;">'+
