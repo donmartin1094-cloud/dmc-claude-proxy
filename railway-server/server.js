@@ -729,10 +729,17 @@ app.post('/mail/attachment', async (req, res) => {
 
 // ── Mail: send ──────────────────────────────────────────────────────────────
 app.post('/mail/send', async (req, res) => {
+  console.log('[Send] route hit, username:', req.body?.username, 'to:', req.body?.to);
   const { username, to, cc, subject, html, text, inReplyTo, references } = req.body;
-  if (!username || !to || !subject) return res.status(400).json({ error: 'Missing params' });
+  if (!username || !to || !subject) {
+    console.log('[Send] missing params — username:', !!username, 'to:', !!to, 'subject:', !!subject);
+    return res.status(400).json({ error: 'Missing params' });
+  }
   try {
+    console.log('[Send] getting credentials for:', username);
     const creds = await getMailCredentials(username);
+    console.log('[Send] credentials found, connecting SMTP...');
+    console.log('[Send] SMTP host:', creds.smtpHost, 'port:', creds.smtpPort);
     const transport = nodemailer.createTransport({
       host:           creds.smtpHost || SMTP_HOST,
       port:           creds.smtpPort || SMTP_PORT,
@@ -751,8 +758,10 @@ app.post('/mail/send', async (req, res) => {
       inReplyTo:  inReplyTo || undefined,
       references: references|| undefined
     });
+    console.log('[Send] email sent successfully');
     res.json({ ok: true });
   } catch (err) {
+    console.error('[Send] error:', err.message, err.code);
     res.status(500).json({ error: err.message });
   }
 });
