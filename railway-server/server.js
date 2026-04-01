@@ -9,7 +9,6 @@ const FIREBASE_API_KEY   = process.env.FIREBASE_API_KEY;
 const FIRESTORE_BASE     = 'https://firestore.googleapis.com/v1/projects/dmc-estimate-assistant-bffd6/databases/(default)/documents';
 
 const { ImapFlow }     = require('imapflow');
-const nodemailer       = require('nodemailer');
 const { simpleParser } = require('mailparser');
 
 // ── Global error guards — prevent IMAP socket errors from crashing Node ──────
@@ -739,32 +738,36 @@ app.post('/mail/send', async (req, res) => {
   try {
     console.log('[Send] getting credentials for:', username);
     const creds = await getMailCredentials(username);
-    console.log('[Send] credentials found, connecting SMTP...');
-    console.log('[Send] SMTP host:', creds.smtpHost, 'port:', creds.smtpPort);
-    const transport = nodemailer.createTransport({
-      host:              creds.smtpHost || 'register-smtp-oxcs.hostingplatform.com',
-      port:              465,
-      secure:            true,
-      auth:              { user: creds.auth.user, pass: creds.auth.pass },
-      connectionTimeout: 20000,
-      greetingTimeout:   15000,
-      socketTimeout:     20000,
-      tls:               { rejectUnauthorized: false }
+    console.log('[Send] sending via Resend...');
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + process.env.RESEND_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: creds.auth.user,
+        to: Array.isArray(to) ? to : [to],
+        cc: cc ? (Array.isArray(cc) ? cc : [cc]) : undefined,
+        subject,
+        html: html || undefined,
+        text: text || undefined,
+        reply_to: creds.auth.user,
+        headers: {
+          ...(inReplyTo  ? { 'In-Reply-To': inReplyTo  } : {}),
+          ...(references ? { 'References':  references } : {})
+        }
+      })
     });
-    await transport.sendMail({
-      from:       creds.auth.user,
-      to,
-      cc:         cc        || undefined,
-      subject,
-      html:       html      || undefined,
-      text:       text      || undefined,
-      inReplyTo:  inReplyTo || undefined,
-      references: references|| undefined
-    });
-    console.log('[Send] email sent successfully');
-    res.json({ ok: true });
+    const resendData = await resendRes.json();
+    if (!resendRes.ok) {
+      console.error('[Send] Resend error:', resendData);
+      throw new Error(resendData.message || JSON.stringify(resendData));
+    }
+    console.log('[Send] email sent successfully via Resend, id:', resendData.id);
+    res.json({ ok: true, id: resendData.id });
   } catch (err) {
-    console.error('[Send] error:', err.message, err.code);
+    console.error('[Send] error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -891,4 +894,5 @@ app.get('/gps/devices', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`DMC proxy running on port ${PORT}`);
+  console.log('[Resend] API key set:', !!process.env.RESEND_API_KEY);
 });
