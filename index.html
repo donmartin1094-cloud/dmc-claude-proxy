@@ -33561,7 +33561,7 @@ function _aiaRenderLA() {
 // ── Slip Panel (right side of LA tab) ────────────────────────────────────────
 function _laRenderSlipPanel() {
   _slipsLoad();
-  var s = _aiaState;
+  var s = _aiaState || {};
   var isAdmin = false;
   try {
     var _u = (localStorage.getItem('dmc_u') || '').toLowerCase().trim();
@@ -33594,7 +33594,7 @@ function _laRenderSlipPanel() {
   var fmtT = function(n) { return (parseFloat(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}); };
 
   // Mix type options for the upload modal
-  var mixOpts = (s.la.rows||[]).map(function(r){ return r.mixType; });
+  var mixOpts = (s.la && s.la.rows||[]).map(function(r){ return r.mixType; });
   // Add common defaults if no rows defined
   if (!mixOpts.length) mixOpts = ['SBC 37.5','SIC 19.0','SIC 12.5','SIC 9.5','FC 9.5','MC 19.0'];
 
