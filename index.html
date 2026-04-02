@@ -22082,14 +22082,14 @@ function _jfRenderTab(job, tab) {
                 ${sl.mixCode?`<div style="font-family:'DM Mono',monospace;font-size:8px;color:#5ab4f5;margin-top:1px;">${escHtml(sl.mixCode)}</div>`:''}
                 <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);margin-top:2px;">${[sl.loadTime?'⏱ '+sl.loadTime:'',sl.ticketNo?'#'+sl.ticketNo:'',sl.truckNum?'Truck '+sl.truckNum:'',sl.driver?'👤 '+sl.driver:'',sl.plant,sl.autoScanned?'🤖 AI Scanned':''].filter(Boolean).join(' · ')}</div>
               </div>
-              ${isSlipAdmin?`<button onclick="_laDeleteSlip('${sl.id}')" style="background:none;border:none;color:#e87373;font-size:14px;cursor:pointer;padding:2px 6px;flex-shrink:0;" title="Delete slip">🗑</button>`:''}
+              ${isSlipAdmin?`<button onclick="_laDeleteSlip('${sl.id}')" style="background:none;border:none;color:#e87373;font-size:16px;cursor:pointer;padding:8px 10px;flex-shrink:0;min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;" title="Delete slip">🗑</button>`:''}
             </div>`).join('');
           return `<div style="border:1px solid ${isToday?'rgba(245,197,24,0.25)':'var(--asphalt-light)'};border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
             <div onclick="(function(){var b=document.getElementById('${grpId}');if(b)b.style.display=b.style.display==='none'?'block':'none';})()" style="background:${isToday?'rgba(245,197,24,0.08)':'var(--asphalt)'};padding:9px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
               <span style="font-family:'DM Mono',monospace;font-size:11px;color:${isToday?'var(--stripe)':'var(--white)'};font-weight:700;flex:1;">${isToday?'⬤ ':''}📅 ${escHtml(fmtDL(dateKey))}</span>
               <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--stripe);font-weight:700;">${fmtT(dayTons)}T</span>
               <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">(${daySlips.length} slip${daySlips.length!==1?'s':''})</span>
-              ${isSlipAdmin?`<button onclick="event.stopPropagation();_laDeleteAllSlipsForDate('${dateKey}','${job.id}')" style="background:none;border:none;color:#666;font-size:11px;cursor:pointer;padding:2px 6px;" title="Delete all slips for this date">🗑 Clear day</button>`:''}
+              ${isSlipAdmin?`<button onclick="event.stopPropagation();_laDeleteAllSlipsForDate('${dateKey}','${job.id}')" style="background:none;border:none;color:#666;font-size:11px;cursor:pointer;padding:6px 10px;min-height:32px;" title="Delete all slips for this date">🗑 Clear day</button>`:''}
               <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);">▾</span>
             </div>
             <div id="${grpId}" style="display:${isToday?'block':'none'};">
@@ -33779,6 +33779,16 @@ function _laDeleteSlip(slipId) {
   _slipsSave();
   var tc = document.getElementById('aiaTabContent');
   if (tc) tc.innerHTML = _aiaRenderLA();
+  // Refresh job folder slip tab if open
+  try {
+    var jfBody = document.getElementById('jfBody');
+    if (jfBody && _jfActiveTab === 'slips') {
+      var jfBtn = document.querySelector('.jf-tab.active');
+      var jfJobId = jfBtn ? (jfBtn.getAttribute('onclick')||'').match(/'([^']+)'/)?.[1] : null;
+      var jfJob = jfJobId ? (backlogJobs||[]).find(function(j){ return j.id===jfJobId; }) : null;
+      if (jfJob) jfBody.innerHTML = _jfRenderTab(jfJob, 'slips');
+    }
+  } catch(e) {}
   var t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.96);border:1px solid rgba(217,79,61,0.3);border-radius:var(--radius);padding:10px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:#e87373;z-index:10001;pointer-events:none;';
   t.textContent='\u2713 Slip #'+(slip.ticketNo||slip.id)+' deleted';
