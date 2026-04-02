@@ -13944,7 +13944,21 @@ let takeoffFolders = [];
 function _toFoldersLoad() { try { takeoffFolders = JSON.parse(localStorage.getItem(TAKEOFFS_KEY)||'[]'); } catch(e) { takeoffFolders=[]; } }
 function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); }
 _toFoldersLoad();
-function _slipsLoad() { try { pavingSlips = JSON.parse(localStorage.getItem(SLIPS_KEY) || '[]'); } catch(e) { pavingSlips = []; } }
+function _slipsMigrate(arr) {
+  return (Array.isArray(arr) ? arr : []).map(function(slip) {
+    return Object.assign({
+      loadNumber: slip.ticketNo || '',
+      handwrittenNotes: '',
+      manualNote: '',
+      photoUrl: null,
+      photoPath: null,
+      driver: '',
+      loadTime: '',
+      mixCode: slip.mixType || ''
+    }, slip);
+  });
+}
+function _slipsLoad() { try { pavingSlips = _slipsMigrate(JSON.parse(localStorage.getItem(SLIPS_KEY) || '[]')); } catch(e) { pavingSlips = []; } }
 function _slipsSave() {
   // Strip large photoUrl from localStorage copy (store only in Firebase / by URL ref)
   var slim = pavingSlips.map(function(s){ var o = Object.assign({}, s); if ((o.photoUrl||'').startsWith('data:')) delete o.photoUrl; return o; });
@@ -33548,7 +33562,7 @@ function _aiaRenderLA() {
 function _laRenderSlipPanel() {
   _slipsLoad();
   var s = _aiaState;
-  var isAdmin = (function(){ var u=(localStorage.getItem('dmc_u')||'').toLowerCase().trim(); return ['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u); })();
+  var isAdmin = (function(){ var u=(localStorage.getItem('dmc_u')||'').toLowerCase().trim(); var uBase=u.includes('@')?u.split('@')[0]:u; return ['dj','donmartin'].includes(uBase); })();
 
   // Match slips to this job (by backlogJobId, jobNum, or jobName)
   var jobSlips = pavingSlips.filter(function(sl) {
@@ -33616,11 +33630,14 @@ function _laRenderSlipPanel() {
               rapBadge+scanBadge+
             '</div>'+
             '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);margin-top:1px;">'+
-              (sl.ticketNo?'Ticket #'+escHtml(sl.ticketNo):'')+(sl.truckNum?' &nbsp;·&nbsp; Truck '+escHtml(sl.truckNum):'')+(sl.plant?' &nbsp;·&nbsp; '+escHtml(sl.plant):'')+
+              (isAdmin
+                ? (sl.date?'<span onclick="_slipInlineEdit(\''+sl.id+'\',\'date\',\''+escHtml(sl.date)+'\',this)" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;" title="Click to edit date">'+escHtml(sl.date)+'</span>&nbsp;·&nbsp; ':'<span onclick="_slipInlineEdit(\''+sl.id+'\',\'date\',\'\',this)" style="cursor:pointer;color:rgba(217,79,61,0.7);" title="Click to set date">no date</span>&nbsp;·&nbsp; ')+'<span onclick="_slipInlineEdit(\''+sl.id+'\',\'ticketNo\',\''+escHtml(sl.ticketNo||'')+'\',this)" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;" title="Click to edit ticket #">'+(sl.ticketNo?'Ticket #'+escHtml(sl.ticketNo):'<span style="color:rgba(217,79,61,0.7);">no ticket#</span>')+'</span>'+(sl.truckNum?' &nbsp;·&nbsp; Truck '+escHtml(sl.truckNum):'')+(sl.plant?' &nbsp;·&nbsp; '+escHtml(sl.plant):'')
+                : (sl.ticketNo?'Ticket #'+escHtml(sl.ticketNo):'')+(sl.truckNum?' &nbsp;·&nbsp; Truck '+escHtml(sl.truckNum):'')+(sl.plant?' &nbsp;·&nbsp; '+escHtml(sl.plant):''))+
             '</div>'+
             hwLine+
             noteInput+
           '</div>'+
+          (isAdmin?'<button onclick="_laRescanSlip(\''+sl.id+'\')" '+(sl.photoUrl?'title="Re-scan this slip"':'title="No photo available to re-scan" style="opacity:0.3;cursor:default;" disabled')+' style="background:none;border:none;color:#5ab4f5;font-size:13px;cursor:pointer;padding:2px 3px;flex-shrink:0;">\ud83d\udd04</button>':'')+
           (isAdmin?'<button onclick="_laDeleteSlip(\''+sl.id+'\')" style="background:none;border:none;color:#e87373;font-size:14px;cursor:pointer;padding:2px 4px;flex-shrink:0;" title="Delete slip">&#128465;</button>':'')+
         '</div>';
       }).join('');
@@ -33655,6 +33672,7 @@ function _laRenderSlipPanel() {
       '<span style="background:rgba(245,197,24,0.15);color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:8px;padding:1px 7px;border-radius:10px;font-weight:700;">'+jobSlips.length+'</span>'+
       '<div style="flex:1;"></div>'+
       '<button onclick="_laResortSlips()" style="background:transparent;border:1px solid #444;border-radius:var(--radius);color:#aaa;font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;" onmouseover="this.style.borderColor=\'#7ecb8f\';this.style.color=\'#7ecb8f\'" onmouseout="this.style.borderColor=\'#444\';this.style.color=\'#aaa\'">&#8597; Sort by Load #</button>'+
+      (isAdmin && jobSlips.some(function(sl){return !!sl.photoUrl;})?'<button onclick="_laRescanAllSlips()" style="background:rgba(90,180,245,0.08);border:1px solid rgba(90,180,245,0.3);border-radius:var(--radius);color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">&#129302; Re-scan All</button>':'')+
       (isAdmin && s.backlogJobId?'<button onclick="_laDeleteAllSlipsForCurrentJob()" style="background:transparent;border:1px solid rgba(217,79,61,0.3);border-radius:var(--radius);color:rgba(217,79,61,0.7);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">&#128465; Clear All</button>':'')+
       '<button onclick="_laUploadSlipModal(null)" style="background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.3);border-radius:var(--radius);color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 12px;cursor:pointer;font-weight:700;">+ Add Slip</button>'+
       '<button onclick="_laScanSlipFromPhoto()" style="background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.3);border-radius:var(--radius);color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 12px;cursor:pointer;font-weight:700;">&#129302; Scan Slip</button>'+
@@ -33834,6 +33852,128 @@ function _laDeleteAllSlips(jobId, jobName) {
 function _laResortSlips() {
   var tc = document.getElementById('aiaTabContent');
   if (tc) tc.innerHTML = _aiaRenderLA();
+}
+
+function _slipSaveField(slipId, field, val) {
+  _slipsLoad();
+  var slip = pavingSlips.find(function(s){ return s.id===slipId; });
+  if (!slip) return;
+  slip[field] = val;
+  if (field === 'ticketNo') slip.loadNumber = val;
+  if (field === 'loadNumber') slip.ticketNo = val;
+  _slipsSave();
+}
+
+function _slipInlineEdit(slipId, field, currentVal, labelEl) {
+  var inp = document.createElement('input');
+  inp.value = currentVal;
+  inp.type = field === 'date' ? 'date' : 'text';
+  inp.style.cssText = 'background:rgba(255,255,255,0.06);border:1px solid rgba(245,197,24,0.4);border-radius:3px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:8px;padding:1px 5px;width:'+(field==='date'?'100px':'80px')+';outline:none;';
+  labelEl.replaceWith(inp);
+  inp.focus();
+  if (inp.type !== 'date') inp.select();
+  inp.onblur = function() {
+    _slipSaveField(slipId, field, inp.value);
+    var tc = document.getElementById('aiaTabContent');
+    if (tc) tc.innerHTML = _aiaRenderLA();
+  };
+  inp.onkeydown = function(e) {
+    if (e.key === 'Enter') inp.blur();
+    if (e.key === 'Escape') { var tc=document.getElementById('aiaTabContent'); if(tc) tc.innerHTML=_aiaRenderLA(); }
+  };
+}
+
+var _SLIP_SCAN_PROMPT = 'This is a paving plant ticket / delivery slip. Extract the following fields if visible. Respond ONLY with a JSON object, no markdown:\n{"mixType":"","tons":0,"rapPct":0,"ticketNo":"","truckNum":"","plant":"","date":"","handwrittenNotes":null}\nmixType: the asphalt mix designation (e.g. SBC 37.5, SIC 19.0). tons: net tons. rapPct: RAP percentage (0 if not shown). ticketNo: ticket/receipt number. truckNum: truck number or ID. plant: plant name or location. date: date in YYYY-MM-DD format. handwrittenNotes: any handwritten text visible on the slip — notes, corrections, initials, quantities written by hand. Transcribe exactly as written, or null if none visible.';
+
+function _laRescanSlipById(slipId) {
+  return new Promise(function(resolve, reject) {
+    var slip = pavingSlips.find(function(s){ return s.id===slipId; });
+    if (!slip || !slip.photoUrl) { reject(new Error('No photo')); return; }
+    var imgSrc = slip.photoUrl.startsWith('data:')
+      ? { type:'base64', media_type: slip.photoUrl.split(';')[0].split(':')[1], data: slip.photoUrl.split(',')[1] }
+      : { type:'url', url: slip.photoUrl };
+    var body = {
+      model: 'claude-haiku-4-5-20251001', max_tokens: 512,
+      messages: [{ role:'user', content: [
+        { type:'image', source: imgSrc },
+        { type:'text',  text: _SLIP_SCAN_PROMPT }
+      ]}]
+    };
+    fetch('https://dmc-claude-proxy-production.up.railway.app/claude', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    }).then(function(r){ return r.json(); }).then(function(data) {
+      var text = (data.content && data.content[0] && data.content[0].text) || '';
+      try {
+        var p = JSON.parse(text.replace(/```json|```/g,'').trim());
+        if (p.date)               slip.date             = p.date;
+        if (p.mixType)            { slip.mixType = p.mixType; slip.mixCode = p.mixType; }
+        if (p.tons > 0)           slip.tons             = p.tons;
+        if (p.ticketNo)           { slip.ticketNo = p.ticketNo; slip.loadNumber = p.ticketNo; }
+        if (p.truckNum)           slip.truckNum         = p.truckNum;
+        if (p.plant)              slip.plant            = p.plant;
+        if (p.rapPct > 0)         slip.rapPct           = p.rapPct;
+        if (p.handwrittenNotes)   slip.handwrittenNotes = p.handwrittenNotes;
+        slip.autoScanned = true;
+        resolve(slip);
+      } catch(e) { reject(e); }
+    }).catch(reject);
+  });
+}
+
+function _laRescanSlip(slipId) {
+  var u = (localStorage.getItem('dmc_u')||'').toLowerCase().trim();
+  if (!['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u)) return;
+  _slipsLoad();
+  var slip = pavingSlips.find(function(s){ return s.id===slipId; });
+  if (!slip || !slip.photoUrl) { alert('No photo available to re-scan.'); return; }
+  _laRescanSlipById(slipId).then(function() {
+    _slipsSave();
+    var tc = document.getElementById('aiaTabContent');
+    if (tc) tc.innerHTML = _aiaRenderLA();
+  }).catch(function(e) { alert('Re-scan failed: '+(e&&e.message||'unknown error')); });
+}
+
+function _laRescanAllSlips() {
+  var u = (localStorage.getItem('dmc_u')||'').toLowerCase().trim();
+  if (!['dj','dj@donmartincorp.com','donmartin','donmartin@donmartincorp.com'].includes(u)) return;
+  var s = _aiaState || {};
+  _slipsLoad();
+  var photoSlips = pavingSlips.filter(function(sl) {
+    if (!sl.photoUrl) return false;
+    if (s.backlogJobId && sl.jobId === s.backlogJobId) return true;
+    if (s.dmcJobNo     && sl.jobNum === s.dmcJobNo)    return true;
+    if (s.projectName  && sl.jobName && sl.jobName.toLowerCase() === s.projectName.toLowerCase()) return true;
+    return false;
+  });
+  if (!photoSlips.length) { alert('No slips with photos found for this job.'); return; }
+  if (!confirm('Re-scan all '+photoSlips.length+' slips that have photos?\nThis will update extracted data but keep manual notes. Continue?')) return;
+  var prog = document.createElement('div');
+  prog.id = '_slipRescanProg';
+  prog.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10001;display:flex;align-items:center;justify-content:center;';
+  prog.innerHTML = '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:24px 32px;min-width:280px;text-align:center;">'+
+    '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);margin-bottom:12px;">&#129302; Re-scanning slips\u2026</div>'+
+    '<div id="_slipRescanStatus" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Preparing\u2026</div>'+
+  '</div>';
+  document.body.appendChild(prog);
+  var i=0, done=0, failed=0;
+  function _next() {
+    if (i >= photoSlips.length) {
+      _slipsSave();
+      document.getElementById('_slipRescanProg')?.remove();
+      var tc = document.getElementById('aiaTabContent');
+      if (tc) tc.innerHTML = _aiaRenderLA();
+      var t=document.createElement('div');
+      t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.96);border:1px solid rgba(126,203,143,0.35);border-radius:var(--radius);padding:10px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:#7ecb8f;z-index:10001;pointer-events:none;';
+      t.textContent='\u2713 Re-scanned '+done+' slip'+(done!==1?'s':'')+(failed?' ('+failed+' failed)':'');
+      document.body.appendChild(t); setTimeout(function(){t.remove();},3500);
+      return;
+    }
+    var sl = photoSlips[i++];
+    var st = document.getElementById('_slipRescanStatus');
+    if (st) st.textContent = 'Re-scanning slip '+i+' of '+photoSlips.length+'\u2026';
+    _laRescanSlipById(sl.id).then(function(){ done++; setTimeout(_next, 600); }).catch(function(){ failed++; setTimeout(_next, 600); });
+  }
+  _next();
 }
 
 // Tonnage tracker — renders a stats card for a job's paving slips
@@ -34450,6 +34590,7 @@ function _laSlipSave() {
 // Open the job slip folder view from anywhere (backlog, etc.)
 function _slipsJobView(jobId, jobName) {
   _slipsLoad();
+  var isAdmin = (function(){ var u=(localStorage.getItem('dmc_u')||'').toLowerCase().trim(); var uBase=u.includes('@')?u.split('@')[0]:u; return ['dj','donmartin'].includes(uBase); })();
   var slips = pavingSlips.filter(function(sl){ return sl.jobId === jobId || (jobName && sl.jobName && sl.jobName.toLowerCase() === jobName.toLowerCase()); });
 
   document.getElementById('slipsJobModal')?.remove();
@@ -34483,6 +34624,7 @@ function _slipsJobView(jobId, jobName) {
               '</div>'+
               (sl.handwrittenNotes?'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#c9a800;font-style:italic;margin-top:2px;">&#9999; '+escHtml(sl.handwrittenNotes)+'</div>':'')+
             '</div>'+
+            (isAdmin?'<button onclick="_laDeleteSlip(\''+sl.id+'\')" style="background:none;border:none;color:#666;cursor:pointer;font-size:13px;padding:2px 4px;margin-left:4px;flex-shrink:0;" title="Delete slip">&#128465;</button>':'')+
           '</div>';
         }).join('');
         var mixSumm = Object.keys(byMix).map(function(m){return '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);">'+escHtml(m)+' <strong style="color:var(--stripe);">'+(byMix[m].toLocaleString('en-US',{maximumFractionDigits:2}))+'T</strong></span>'; }).join(' &nbsp; ');
@@ -36943,7 +37085,7 @@ async function fbLoadAll() {
                 else if (key === 'truck_pricing') { truckPricing = { ...truckPricing, ...val }; }
                 else if (key === 'aia_reqs') { aiaReqs = Array.isArray(val) ? val : aiaReqs; }
                 else if (key === 'bills_in_progress') { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); }
-                else if (key === 'paving_slips')      { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
+                else if (key === 'paving_slips')      { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
                 else if (key === 'sched_queue')  { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
         else if (key === 'plants')      { plantsList = val; }
         else if (key === 'holidays')    { holidays = new Set(Array.isArray(val) ? val : []); localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays])); }
@@ -37292,7 +37434,7 @@ async function initApp(username) {
               else if (key === 'theme')            { pendingTheme = val; applyThemeVars(val); localStorage.setItem(THEME_KEY, JSON.stringify(val)); }
               else if (key === 'aia_reqs')            { aiaReqs = Array.isArray(val) ? val : aiaReqs; if (activeTab === 'apMix') renderInvoiceTracker(); }
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker(); }
-              else if (key === 'paving_slips')       { pavingSlips = Array.isArray(val) ? val : pavingSlips; localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
+              else if (key === 'paving_slips')       { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
               else if (key === 'daily_orders')     { dailyOrders = val; if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports(); }
               else if (key === 'lowbed_plan') {
