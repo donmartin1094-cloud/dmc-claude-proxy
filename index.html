@@ -33562,7 +33562,13 @@ function _aiaRenderLA() {
 function _laRenderSlipPanel() {
   _slipsLoad();
   var s = _aiaState;
-  var isAdmin = (function(){ var u=(localStorage.getItem('dmc_u')||'').toLowerCase().trim(); var uBase=u.includes('@')?u.split('@')[0]:u; return ['dj','donmartin'].includes(uBase); })();
+  var isAdmin = false;
+  try {
+    var _u = (localStorage.getItem('dmc_u') || '').toLowerCase().trim();
+    var _uBase = _u.indexOf('@') > -1 ? _u.split('@')[0] : _u;
+    isAdmin = (_uBase === 'dj' || _uBase === 'donmartin');
+    console.log('[SlipAdmin] u:', _u, 'base:', _uBase, 'isAdmin:', isAdmin);
+  } catch(e) {}
 
   // Match slips to this job (by backlogJobId, jobNum, or jobName)
   var jobSlips = pavingSlips.filter(function(sl) {
@@ -34590,7 +34596,13 @@ function _laSlipSave() {
 // Open the job slip folder view from anywhere (backlog, etc.)
 function _slipsJobView(jobId, jobName) {
   _slipsLoad();
-  var isAdmin = (function(){ var u=(localStorage.getItem('dmc_u')||'').toLowerCase().trim(); var uBase=u.includes('@')?u.split('@')[0]:u; return ['dj','donmartin'].includes(uBase); })();
+  var isAdmin = false;
+  try {
+    var _u = (localStorage.getItem('dmc_u') || '').toLowerCase().trim();
+    var _uBase = _u.indexOf('@') > -1 ? _u.split('@')[0] : _u;
+    isAdmin = (_uBase === 'dj' || _uBase === 'donmartin');
+    console.log('[SlipAdmin] u:', _u, 'base:', _uBase, 'isAdmin:', isAdmin);
+  } catch(e) {}
   var slips = pavingSlips.filter(function(sl){ return sl.jobId === jobId || (jobName && sl.jobName && sl.jobName.toLowerCase() === jobName.toLowerCase()); });
 
   document.getElementById('slipsJobModal')?.remove();
