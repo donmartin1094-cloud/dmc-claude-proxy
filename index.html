@@ -33578,6 +33578,7 @@ function _laRenderSlipPanel() {
     return false;
   });
 
+  console.log('[SlipRow] isAdmin:', isAdmin, 'slip count:', jobSlips.length);
   // Group by date
   var byDate = {};
   jobSlips.forEach(function(sl) {
