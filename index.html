@@ -19527,9 +19527,16 @@ function buildDailyOrder(dateKey, slot) {
   }
 
   // ── Build and save primary order (right col = same-supplier second stop) ────
-  var html = isAmrize
-    ? buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields)
-    : buildDMCOrderHTML(fields, orderDate, foreman, secondFields);
+  console.log('[Order] isAmrize result:', _isAmrizePlant(fields.plant), 'plant:', fields.plant);
+  console.log('[Order] about to choose builder...');
+  var html;
+  if (isAmrize) {
+    console.log('[Order] CHOSE AMRIZE builder');
+    html = buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields);
+  } else {
+    console.log('[Order] CHOSE DMC builder');
+    html = buildDMCOrderHTML(fields, orderDate, foreman, secondFields);
+  }
   var fileName = (foreman + '.' + d + '.' + gc + ' ' + proj + nightSuffix)
     .replace(/[/\\:*?"<>|]/g, '').substring(0, 100) + '.html';
   _saveOneOrder(html, fileName, primaryPlant, fields, jobNameFull, gc, proj, 0);
