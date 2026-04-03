@@ -13967,6 +13967,63 @@ function _slipsSave() {
 }
 _slipsLoad();
 
+function _normalizeMixType(mixCode, mixType, jobId) {
+  if (!mixCode) return mixType;
+  var key = mixCode.trim().toLowerCase();
+  var existing = pavingSlips.find(function(s) {
+    return (s.jobId === jobId || s.jobNum === jobId)
+      && s.mixCode && s.mixCode.trim().toLowerCase() === key
+      && s.mixType && s.mixType.trim() !== '';
+  });
+  return existing ? existing.mixType : mixType;
+}
+
+function _laNormalizeMixTypes(jobId) {
+  _slipsLoad();
+  var jobSlips = pavingSlips.filter(function(s) {
+    return s.jobId === jobId || s.jobNum === jobId;
+  });
+  var codeGroups = {};
+  jobSlips.forEach(function(s) {
+    if (!s.mixCode) return;
+    var key = s.mixCode.trim().toLowerCase();
+    if (!codeGroups[key]) codeGroups[key] = [];
+    codeGroups[key].push(s);
+  });
+  var updatedCount = 0;
+  Object.keys(codeGroups).forEach(function(key) {
+    var group = codeGroups[key];
+    var typeCounts = {};
+    group.forEach(function(s) {
+      if (!s.mixType) return;
+      var t = s.mixType.trim();
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    });
+    var mostCommon = Object.keys(typeCounts).sort(function(a,b){ return typeCounts[b]-typeCounts[a]; })[0];
+    if (!mostCommon) return;
+    group.forEach(function(s) {
+      if (s.mixType !== mostCommon) {
+        var idx = pavingSlips.findIndex(function(p){ return p.id===s.id; });
+        if (idx > -1) { pavingSlips[idx].mixType = mostCommon; updatedCount++; }
+      }
+    });
+  });
+  _slipsSave();
+  // Refresh job folder slip tab if open
+  try {
+    var jfBody = document.getElementById('jfBody');
+    if (jfBody && _jfActiveTab === 'slips') {
+      var jfBtn = document.querySelector('.jf-tab.active');
+      var jfJobId = jfBtn ? (jfBtn.getAttribute('onclick')||'').match(/'([^']+)'/)?.[1] : null;
+      var jfJob = jfJobId ? (backlogJobs||[]).find(function(j){ return j.id===jfJobId; }) : null;
+      if (jfJob) jfBody.innerHTML = _jfRenderTab(jfJob, 'slips');
+    }
+  } catch(e) {}
+  // Refresh LA panel
+  try { var tc=document.getElementById('aiaTabContent'); if(tc) tc.innerHTML=_aiaRenderLA(); } catch(e) {}
+  try { pushNotif('success','Mix Types Normalized', updatedCount+' slips updated to consistent mix type names.'); } catch(e) {}
+}
+
 const AA_KEY = 'pavescope_awarding_authorities';
 // Shape: [{ id, name, website, notifTitle, notifMsg }]
 let awardingAuthorities = JSON.parse(localStorage.getItem(AA_KEY) || '[]');
@@ -33683,6 +33740,7 @@ function _laRenderSlipPanel() {
       '<div style="flex:1;"></div>'+
       '<button onclick="_laResortSlips()" style="background:transparent;border:1px solid #444;border-radius:var(--radius);color:#aaa;font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;" onmouseover="this.style.borderColor=\'#7ecb8f\';this.style.color=\'#7ecb8f\'" onmouseout="this.style.borderColor=\'#444\';this.style.color=\'#aaa\'">&#8597; Sort by Load #</button>'+
       (isAdmin && jobSlips.some(function(sl){return !!sl.photoUrl;})?'<button onclick="_laRescanAllSlips()" style="background:rgba(90,180,245,0.08);border:1px solid rgba(90,180,245,0.3);border-radius:var(--radius);color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">&#129302; Re-scan All</button>':'')+
+      (isAdmin && s.backlogJobId?'<button onclick="_laNormalizeMixTypes(\''+s.backlogJobId+'\')" style="background:rgba(155,148,136,0.08);border:1px solid rgba(155,148,136,0.3);border-radius:var(--radius);color:#9b9488;font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">&#128295; Normalize Mix</button>':'')+
       (isAdmin && s.backlogJobId?'<button onclick="_laDeleteAllSlipsForCurrentJob()" style="background:transparent;border:1px solid rgba(217,79,61,0.3);border-radius:var(--radius);color:rgba(217,79,61,0.7);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">&#128465; Clear All</button>':'')+
       '<button onclick="_laUploadSlipModal(null)" style="background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.3);border-radius:var(--radius);color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 12px;cursor:pointer;font-weight:700;">+ Add Slip</button>'+
       '<button onclick="_laScanSlipFromPhoto()" style="background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.3);border-radius:var(--radius);color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 12px;cursor:pointer;font-weight:700;">&#129302; Scan Slip</button>'+
@@ -33897,6 +33955,22 @@ function _slipSaveField(slipId, field, val) {
   if (field === 'ticketNo') slip.loadNumber = val;
   if (field === 'loadNumber') slip.ticketNo = val;
   _slipsSave();
+  // Offer to apply new mixType to all slips with same mixCode
+  if (field === 'mixType' && slip.mixCode) {
+    var mixKey = slip.mixCode.trim().toLowerCase();
+    var sameCode = pavingSlips.filter(function(s) {
+      return s.id !== slipId
+        && s.mixCode && s.mixCode.trim().toLowerCase() === mixKey
+        && s.mixType !== val;
+    });
+    if (sameCode.length > 0 && confirm(sameCode.length+' other slip'+(sameCode.length!==1?'s':'')+' have the same mix code with different names. Update them all to "'+val+'"?')) {
+      sameCode.forEach(function(s) {
+        var idx = pavingSlips.findIndex(function(p){ return p.id===s.id; });
+        if (idx > -1) pavingSlips[idx].mixType = val;
+      });
+      _slipsSave();
+    }
+  }
 }
 
 function _slipInlineEdit(slipId, field, currentVal, labelEl) {
@@ -34563,6 +34637,7 @@ function _laSlipSave() {
       reqId:            s.editId || null,
       date:             date,
       mixType:          mixType,
+      mixCode:          mixType,
       tons:             tons,
       rapPct:           rapPct,
       plant:            plant,
@@ -34576,6 +34651,7 @@ function _laSlipSave() {
       handwrittenNotes: _hwNotes,
       createdAt:        Date.now()
     };
+    slip.mixType = _normalizeMixType(slip.mixCode, slip.mixType, slip.jobId || slip.jobNum);
     pavingSlips.unshift(slip);
     _slipsSave();
 
