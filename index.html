@@ -18874,6 +18874,7 @@ function downloadBlob(blob, fileName) {
 }
 
 function generateDailyOrder(dateKey, slot, event) {
+  console.log('[Order] generateDailyOrder called', dateKey, slot);
   if (event) event.stopPropagation();
   buildDailyOrder(dateKey, slot);
 }
@@ -19400,6 +19401,7 @@ function _showLookaheadToast(supplier, dateRange) {
 }
 
 function buildDailyOrder(dateKey, slot) {
+  console.log('[Order] buildDailyOrder called, dateKey:', dateKey, 'slot:', slot);
   var bdata;
   if (slot.startsWith('extra_')) {
     var _idx = parseInt(slot.replace('extra_', ''));
@@ -19408,6 +19410,9 @@ function buildDailyOrder(dateKey, slot) {
     bdata = (schedData[dateKey]||{})[slot] || { type:'blank', fields:{} };
   }
   var fields = bdata.fields || {};
+  console.log('[Order] fields:', JSON.stringify(fields).slice(0,200));
+  console.log('[Order] plant value:', fields && fields.plant);
+  console.log('[Order] calling _isAmrizePlant:', typeof _isAmrizePlant);
   var foreman = slot === 'top' ? 'Filipe Joaquim'
     : slot === 'bottom' ? 'Louie Medeiros'
     : (slot.startsWith('extra_') ? (schedData[dateKey]?.extras?.[parseInt(slot.replace('extra_',''))]?.foreman || 'Extra Crew') : 'Louie Medeiros');
