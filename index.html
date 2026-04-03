@@ -19504,6 +19504,11 @@ function buildDailyOrder(dateKey, slot) {
         dailyOrders.unshift(order);
         if (dailyOrders.length > 200) dailyOrders = dailyOrders.slice(0, 200);
         localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders));
+        try {
+          if (typeof fbSet === 'function') {
+            fbSet('daily_orders', dailyOrders.map(function(o){ return Object.assign({}, o, {blob64: undefined}); }));
+          }
+        } catch(e) { console.warn('[DailyOrder] Firestore sync failed:', e); }
         if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
         showDailyOrderToast(order.orderType, order.fileName);
 
@@ -36811,9 +36816,15 @@ function downloadDailyOrder(id) {
 
 function deleteDailyOrder(id) {
   if (!confirm('Delete this daily order?')) return;
-  dailyOrders = dailyOrders.filter(o => o.id !== id);
-  localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(o => ({...o, blob64: undefined}))));
-  try { if (db) fbSet('daily_orders', dailyOrders.map(o => ({...o, blob64: undefined}))); } catch(e) {}
+  dailyOrders = dailyOrders.filter(function(o){ return o.id !== id; });
+  // Record delete time to prevent onSnapshot restoration
+  localStorage.setItem('_doLastDelete', Date.now().toString());
+  localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(
+    dailyOrders.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })
+  ));
+  try {
+    if (db) fbSet('daily_orders', dailyOrders.map(function(o){ return Object.assign({}, o, {blob64: undefined}); }));
+  } catch(e) {}
   var cv = document.getElementById('_doCardView');
   if (cv) { cv.innerHTML = ''; _renderDailyOrderCards(cv); }
   else renderReports();
@@ -37607,7 +37618,24 @@ async function initApp(username) {
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker(); }
               else if (key === 'paving_slips')       { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
-              else if (key === 'daily_orders')     { dailyOrders = val; if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports(); }
+              else if (key === 'daily_orders') {
+                if (Array.isArray(val)) {
+                  var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
+                  var incomingIds = new Set(val.map(function(o){ return o.id; }));
+                  var lastDeleteTime = parseInt(localStorage.getItem('_doLastDelete') || '0');
+                  var merged = val.filter(function(o) {
+                    if (localIds.has(o.id)) return true;
+                    var createdAt = parseInt(o.id) || 0;
+                    return createdAt > lastDeleteTime;
+                  });
+                  dailyOrders.forEach(function(o) {
+                    if (!incomingIds.has(o.id)) merged.push(o);
+                  });
+                  dailyOrders = merged;
+                  localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })));
+                  if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
+                }
+              }
               else if (key === 'lowbed_plan') {
                 const _lbRole = getCurrentRole();
                 if (isAdmin() || ['lowbed_driver','rental_lowbed_driver','foreman'].includes(_lbRole)) {
