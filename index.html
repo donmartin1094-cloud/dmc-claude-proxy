@@ -6976,7 +6976,7 @@ function widgetToday() {
       jobName: f.jobName || '',
       jobNum:  f.jobNum  || '',
       crew:    rowLabel,
-      loc:     f.location || f.contact || '',
+      loc:     f.location || (function(){ try { var _jn=f.jobName||'',_jk=f.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); return (_mj&&_mj.location)||''; } catch(e){ return ''; } })(),
       equip:   f.equipment || '',
       notes:   f.notes || '',
       day:     dayKey
@@ -12002,6 +12002,7 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const BLOCK_FIELDS = [
   { key:'jobName',   label:'Job Name:' },
   { key:'jobNum',    label:'Job #:' },
+  { key:'location',  label:'Town/State:' },
   { key:'plant',     label:'Plant:' },
   { key:'material',  label:'Material:', type:'material' },
   { key:'equipment', label:'Equipment:', type:'equipment' },
@@ -18460,6 +18461,8 @@ function _oChk(on) { return on ? '&#9746;' : '&#9744;'; }
 // secondFields: if provided, fills the right column with second-stop data (same supplier, different plant)
 function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
   var v = function(k) { return fields[k] || ''; };
+  var jobLocation = v('location');
+  if (!jobLocation) { try { var _jn=fields.jobName||'',_jk=fields.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); if(_mj&&_mj.location) jobLocation=_mj.location; } catch(e){} }
   var jn = v('jobName'), gc = '', proj = '';
   if (jn.indexOf(' \u2014 ') >= 0) { gc = jn.split(' \u2014 ')[0]; proj = jn.split(' \u2014 ').slice(1).join(' \u2014 '); }
   else { proj = jn; }
@@ -18508,7 +18511,7 @@ function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
     R(F('DMC JOB NUMBER:',      v('jobNum')),            F('DMC JOB NUMBER:', has2 ? v2('jobNum') : '')),
     R(F('GENERAL CONTRACTOR:',  gc),                     F('GENERAL CONTRACTOR:', has2 ? gc2 : '')),
     R(F('PROJECT NAME:',        proj),                   F('PROJECT NAME:', has2 ? proj2 : '')),
-    R(F('PROJECT ADDRESS:',     v('location')||''),      F('PROJECT ADDRESS:', has2 ? v2('location')||'' : '')),
+    R(F('PROJECT ADDRESS:',     jobLocation||''),         F('PROJECT ADDRESS:', has2 ? v2('location')||'' : '')),
     S('MATERIALS INFORMATION:'),
     R('<div class="fr"><span class="lb">TYPE OF WORK:</span><span class="ml">MACHINE WORK: &#9746;</span><span class="ml">HAND WORK: &#9744;</span></div>',
       '<div class="fr"><span class="lb">TYPE OF WORK:</span><span class="ml">MACHINE WORK: '+(has2?'&#9746;':'&#9744;')+'</span><span class="ml">HAND WORK: &#9744;</span></div>'),
@@ -18547,6 +18550,8 @@ function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
 // secondFields: if provided, fills the right column with second-stop data (same supplier, different plant)
 function buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields) {
   var v = function(k) { return fields[k] || ''; };
+  var jobLocation = v('location');
+  if (!jobLocation) { try { var _jn=fields.jobName||'',_jk=fields.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); if(_mj&&_mj.location) jobLocation=_mj.location; } catch(e){} }
   var jn = v('jobName'), gc = '', proj = '';
   if (jn.indexOf(' \u2014 ') >= 0) { gc = jn.split(' \u2014 ')[0]; proj = jn.split(' \u2014 ').slice(1).join(' \u2014 '); }
   else { proj = jn; }
@@ -18607,7 +18612,7 @@ function buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields) {
     R(F('Job No./Purchase Order No.:', v('jobNum')),                    F('Job No./Purchase Order No.:', has2 ? v2('jobNum') : '')),
     R(F('General Contractor:',        gc),                              F('General Contractor:', has2 ? gc2 : '')),
     R(F('Job Name:',                  proj),                            F('Job Name:', has2 ? proj2 : '')),
-    R(F('Job City/State:',            v('location')||v('contact')||''), F('Job City/State:', has2 ? v2('location')||v2('contact')||'' : '')),
+    R(F('Job City/State:',            jobLocation||''),                  F('Job City/State:', has2 ? v2('location')||'' : '')),
     S('B. Materials:'),
     R('<div class="fr"><span class="lb">Type of Work:</span><span class="ml">&#9744; Machine</span><span class="ml">&#9744; Hand</span></div>',
       '<div class="fr"><span class="lb">Type of Work:</span><span class="ml">&#9744; Machine</span><span class="ml">&#9744; Hand</span></div>'),
