@@ -19432,6 +19432,7 @@ function buildDailyOrder(dateKey, slot) {
   var nightSuffix = isNight ? '.Night Work' : '';
   var primaryPlant = v('plant');
   var isAmrize = _isAmrizePlant(primaryPlant);
+  console.log('[Amrize] plant check:', JSON.stringify(primaryPlant), '→', isAmrize, '| hardcoded test:', _isAmrizePlant('Amrize - Dennis'));
 
   // ── Find second stops for this slot (extras with matching parentSlot) ──────
   // Second stops only apply to top/bottom foreman slots, not to independent extras
