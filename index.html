@@ -33918,7 +33918,7 @@ function _slipInlineEdit(slipId, field, currentVal, labelEl) {
   };
 }
 
-var _SLIP_SCAN_PROMPT = 'This is a paving plant ticket / delivery slip. Extract the following fields if visible. Respond ONLY with a JSON object, no markdown:\n{"mixType":"","tons":0,"rapPct":0,"ticketNo":"","truckNum":"","plant":"","date":"","handwrittenNotes":null}\nmixType: the asphalt mix designation (e.g. SBC 37.5, SIC 19.0). tons: net tons. rapPct: RAP percentage (0 if not shown). ticketNo: ticket/receipt number. truckNum: truck number or ID. plant: plant name or location. date: date in YYYY-MM-DD format. handwrittenNotes: any handwritten text visible on the slip — notes, corrections, initials, quantities written by hand. Transcribe exactly as written, or null if none visible.';
+var _SLIP_SCAN_PROMPT = 'This is a paving plant ticket / delivery slip. Extract the following fields if visible. Respond ONLY with a JSON object, no markdown:\n{"mixType":"","tons":0,"rapPct":0,"ticketNo":"","loadNumber":null,"truckNum":"","plant":"","date":"","handwrittenNotes":null}\nmixType: the asphalt mix designation (e.g. SBC 37.5, SIC 19.0). tons: net tons. rapPct: RAP percentage (0 if not shown). ticketNo: ticket/receipt number. loadNumber: LOAD NUMBER — this is printed in the BOTTOM RIGHT corner of the slip, separate from the ticket number. Look specifically in the bottom right area for a number labeled "Load", "Load No", "Load #", "Load Number", or a standalone sequential number in that corner (e.g. 1, 2, 3 or 001, 002, 003). Do NOT confuse with the ticket number which is usually larger and at the top. Return null if not found in the bottom right corner. truckNum: truck number or ID. plant: plant name or location. date: date in YYYY-MM-DD format. handwrittenNotes: any handwritten text visible on the slip — notes, corrections, initials, quantities written by hand. Transcribe exactly as written, or null if none visible.';
 
 function _laRescanSlipById(slipId) {
   return new Promise(function(resolve, reject) {
@@ -34423,6 +34423,7 @@ function _laUploadSlipModal(prefillDate) {
         '<div><label class="form-label">Tons</label><input id="lsTons" class="form-input" type="number" step="0.01" min="0" placeholder="0.00"/></div>'+
         '<div><label class="form-label">RAP %</label><input id="lsRap" class="form-input" type="number" step="0.1" min="0" max="100" placeholder="0"/></div>'+
         '<div><label class="form-label">Ticket #</label><input id="lsTicket" class="form-input" type="text" placeholder="e.g. 48291"/></div>'+
+        '<div><label class="form-label">LOAD # <span style="color:#666;font-size:9px;">(bottom right corner)</span></label><input id="lsLoadNum" class="form-input" type="text" placeholder="e.g. 1, 2, 003"/></div>'+
         '<div><label class="form-label">Truck #</label><input id="lsTruck" class="form-input" type="text" placeholder="e.g. 08"/></div>'+
         '<div style="grid-column:span 2;"><label class="form-label">Plant / Supplier</label><input id="lsPlant" class="form-input" type="text" placeholder="e.g. Aggregate Industries — Chelmsford"/></div>'+
         '<div style="grid-column:span 2;"><label class="form-label">Notes</label><input id="lsNotes" class="form-input" type="text" placeholder="Optional notes"/></div>'+
@@ -34479,7 +34480,7 @@ function _laSlipAIScan(b64data, mimeType) {
       role: 'user',
       content: [
         { type:'image', source:{ type:'base64', media_type: mimeType, data: b64data } },
-        { type:'text',  text: 'This is a paving plant ticket / delivery slip. Extract the following fields if visible. Respond ONLY with a JSON object, no markdown:\n{"mixType":"","tons":0,"rapPct":0,"ticketNo":"","truckNum":"","plant":"","date":"","handwrittenNotes":null}\nmixType: the asphalt mix designation (e.g. SBC 37.5, SIC 19.0). tons: net tons. rapPct: RAP percentage (0 if not shown). ticketNo: ticket/receipt number. truckNum: truck number or ID. plant: plant name or location. date: date in YYYY-MM-DD format. handwrittenNotes: any handwritten text visible on the slip — notes, corrections, initials, quantities written by hand. Transcribe exactly as written, or null if none visible.' }
+        { type:'text',  text: _SLIP_SCAN_PROMPT }
       ]
     }]
   };
@@ -34498,6 +34499,7 @@ function _laSlipAIScan(b64data, mimeType) {
       if (parsed.tons>0)   { var t=document.getElementById('lsTons');   if(t) t.value=parsed.tons; }
       if (parsed.rapPct>0) { var rp=document.getElementById('lsRap');   if(rp) rp.value=parsed.rapPct; }
       if (parsed.ticketNo) { var tk=document.getElementById('lsTicket');if(tk) tk.value=parsed.ticketNo; }
+      if (parsed.loadNumber) { var ln=document.getElementById('lsLoadNum');if(ln) ln.value=parsed.loadNumber; }
       if (parsed.truckNum) { var tr=document.getElementById('lsTruck'); if(tr) tr.value=parsed.truckNum; }
       if (parsed.plant)    { var pl=document.getElementById('lsPlant'); if(pl) pl.value=parsed.plant; }
       statusEl.innerHTML='&#10003; AI extracted ticket data — verify and adjust as needed.';
@@ -34532,8 +34534,9 @@ function _laSlipSave() {
   var mixType = (document.getElementById('lsMix')   ||{}).value || '';
   var tons    = parseFloat((document.getElementById('lsTons')  ||{}).value) || 0;
   var rapPct  = parseFloat((document.getElementById('lsRap')   ||{}).value) || 0;
-  var ticket  = (document.getElementById('lsTicket')||{}).value || '';
-  var truck   = (document.getElementById('lsTruck') ||{}).value || '';
+  var ticket  = (document.getElementById('lsTicket') ||{}).value || '';
+  var loadNum = (document.getElementById('lsLoadNum')||{}).value || '';
+  var truck   = (document.getElementById('lsTruck')  ||{}).value || '';
   var plant   = (document.getElementById('lsPlant') ||{}).value || '';
   var notes   = (document.getElementById('lsNotes') ||{}).value || '';
 
@@ -34565,6 +34568,7 @@ function _laSlipSave() {
       plant:            plant,
       truckNum:         truck,
       ticketNo:         ticket,
+      loadNumber:       loadNum || ticket,
       photoUrl:         photoUrl,
       photoPath:        photoPath,
       autoScanned:      !!_photo,
