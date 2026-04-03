@@ -18457,6 +18457,16 @@ function _oUl(v) { return '<span class="ul">' + _oEsc(v) + '</span>'; }
 function _oSul(v) { return '<span class="ul s">' + _oEsc(v) + '</span>'; }
 function _oChk(on) { return on ? '&#9746;' : '&#9744;'; }
 
+// ── Truck list builder ─────────────────────────────────────────────────────────
+function _buildTruckLines(trk) {
+  var lines = [];
+  (trk.dmcTrucks||[]).forEach(function(t){ if(t) lines.push(t); });
+  (trk.brokerTrucks||[]).forEach(function(t){ if(t) lines.push(t); });
+  (trk.supplierTrucks||[]).forEach(function(t){ if(t) lines.push(t); });
+  if (!lines.length && trk.truckList && trk.truckList.length) return trk.truckList;
+  return lines;
+}
+
 // ── DMC Order HTML Form ────────────────────────────────────────────────────────
 // secondFields: if provided, fills the right column with second-stop data (same supplier, different plant)
 function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
@@ -18471,7 +18481,7 @@ function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
   mats = mats.slice(0,4);
   var trk = {}; try { trk = JSON.parse(v('trucking')); } catch(e) {}
   var ops = v('operators') ? v('operators').split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
-  var tlist = (trk.truckList && trk.truckList.length) ? trk.truckList : ops;
+  var tlist = (function(){ var l=_buildTruckLines(trk); return l.length?l:ops; })();
 
   // Second-stop data (right column)
   var has2 = !!(secondFields);
@@ -18484,7 +18494,7 @@ function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
   mats2 = mats2.slice(0,4);
   var trk2 = {}; if (has2) { try { trk2 = JSON.parse(v2('trucking')); } catch(e) {} }
   var ops2 = (has2 && v2('operators')) ? v2('operators').split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
-  var tlist2 = (trk2.truckList && trk2.truckList.length) ? trk2.truckList : ops2;
+  var tlist2 = (function(){ var l=_buildTruckLines(trk2); return l.length?l:ops2; })();
 
   // Each <tr> holds both the filled (left) and right sides — guarantees row alignment
   function R(lH, rH) { return '<tr><td class="tc">'+lH+'</td><td class="dv"></td><td class="tc">'+rH+'</td></tr>'; }
@@ -18528,9 +18538,14 @@ function buildDMCOrderHTML(fields, orderDate, foreman, secondFields) {
     R('<div class="fr"><span class="lb">NUMBER OF TRUCKS:</span><span class="ul s">'+_oEsc(trk.trucks||trk.numTrucks||'')+'</span><span class="ml lb">LOAD TIME:</span><span class="ul s">'+_oEsc(trk.loadTime||'')+'</span></div>',
       '<div class="fr"><span class="lb">NUMBER OF TRUCKS:</span><span class="ul s">'+_oEsc(has2?(trk2.trucks||trk2.numTrucks||''):'')+'</span><span class="ml lb">LOAD TIME:</span><span class="ul s">'+_oEsc(has2?(trk2.loadTime||''):'')+'</span></div>'),
     R(F('SPACING:', trk.spacing||''),                    F('SPACING:', has2 ? trk2.spacing||'' : '')),
-    '<tr><td colspan="3" class="bl">SPECIAL NOTES / DIRECTIONS &amp; TRUCK LIST</td></tr>',
+    '<tr><td colspan="3" class="bl">SPECIAL NOTES / DIRECTIONS</td></tr>',
+    R('<div style="height:19px;border-bottom:1px solid #000;margin-bottom:6px;"></div>','<div style="height:19px;border-bottom:1px solid #000;margin-bottom:6px;"></div>'),
+    R('<div style="height:19px;border-bottom:1px solid #000;margin-bottom:6px;"></div>','<div style="height:19px;border-bottom:1px solid #000;margin-bottom:6px;"></div>'),
+    R('<div style="height:19px;border-bottom:1px solid #000;margin-bottom:6px;"></div>','<div style="height:19px;border-bottom:1px solid #000;margin-bottom:6px;"></div>'),
+    '<tr><td colspan="3" class="bl">TRUCK LIST</td></tr>',
     R(T(0,true,tlist),T(0,has2,tlist2)), R(T(1,true,tlist),T(1,has2,tlist2)), R(T(2,true,tlist),T(2,has2,tlist2)),
     R(T(3,true,tlist),T(3,has2,tlist2)), R(T(4,true,tlist),T(4,has2,tlist2)),
+    R(T(5,true,tlist),T(5,has2,tlist2)), R(T(6,true,tlist),T(6,has2,tlist2)),
   ].join('');
 
   var css='@page{size:letter portrait;margin:.55in .5in}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:9pt;color:#000;background:#fff}@media print{.np{display:none!important}}.pb{position:fixed;top:10px;right:10px;z-index:999;background:#1a6b3c;color:#fff;border:none;border-radius:6px;padding:9px 18px;font-size:13px;font-weight:bold;cursor:pointer}.hdr{text-align:center;padding-bottom:12px;margin-bottom:10px;border-bottom:2px solid #ccc}.cn{font-size:17pt;font-weight:900;font-family:"Arial Black",Arial,sans-serif;letter-spacing:1px;margin-top:4px}.cs{font-size:8pt;letter-spacing:3px;color:#666;margin-top:2px}table.form{width:100%;border-collapse:collapse;table-layout:fixed}col.c1,col.c2{width:47.5%}col.cdv{width:5%}td.tc{vertical-align:bottom;padding:0}td.dv{border-left:1px dashed #ccc}td.sh{font-size:9pt;font-weight:bold;text-decoration:underline;color:#1a6b3c;padding:10px 0 4px;text-transform:uppercase;vertical-align:bottom}td.bl{font-size:8.5pt;font-weight:bold;padding:8px 0 4px;border-top:1px solid #ddd;vertical-align:bottom}.fr{display:flex;align-items:flex-end;padding-bottom:6px;gap:3px}.lb{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0}.ml{margin-left:7px;font-size:8pt;white-space:nowrap;flex-shrink:0}.ul{flex:1;border-bottom:1px solid #000;min-width:20px;font-size:8.5pt;padding-bottom:1px}.ul.s{flex:0 0 46px;min-width:0}.nr{display:flex;align-items:flex-end;padding-bottom:6px;gap:4px}.nm{font-size:8pt;font-weight:bold;width:16px;flex-shrink:0}body::before{content:\'\';position:fixed;top:50%;left:50%;width:280px;height:240px;transform:translate(-50%,-60%);background:url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 52 44\'%3E%3Cpolygon points=\'3,0 49,22 3,44\' fill=\'none\' stroke=\'%23c00\' stroke-width=\'3.5\'/%3E%3Cpolygon points=\'11,5 41,22 11,39\' fill=\'none\' stroke=\'%23c00\' stroke-width=\'2\'/%3E%3C/svg%3E") center/contain no-repeat;opacity:0.05;pointer-events:none;z-index:-1}';
@@ -18573,6 +18588,10 @@ function buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields) {
   while (mats2.length < 4) mats2.push({name:'',tons:''});
   mats2 = mats2.slice(0,4);
   var trk2 = {}; if (has2) { try { trk2 = JSON.parse(v2('trucking')); } catch(e) {} }
+  var ops = v('operators') ? v('operators').split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var tlist = (function(){ var l=_buildTruckLines(trk); return l.length?l:ops; })();
+  var ops2 = (has2 && v2('operators')) ? v2('operators').split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var tlist2 = (function(){ var l=_buildTruckLines(trk2); return l.length?l:ops2; })();
 
   function R(lH, rH) { return '<tr><td class="tc">'+lH+'</td><td class="dv"></td><td class="tc">'+rH+'</td></tr>'; }
   function S(t)       { return '<tr><td colspan="3" class="sh">'+t+'</td></tr>'; }
@@ -18580,6 +18599,9 @@ function buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields) {
   function M(i, src, srcMats) {
     var m = src ? srcMats[i] : {name:'',tons:''};
     return '<div class="fr"><span class="lb">Tons:</span><span class="ul s">'+_oEsc(m.tons)+'</span><span class="ml lb">Mix Type:</span><span class="ul">'+_oEsc(m.name)+'</span></div>';
+  }
+  function T(i, src, srcList) {
+    return '<div style="display:flex;align-items:flex-end;padding-bottom:6px;gap:4px;"><span style="font-size:8pt;font-weight:bold;width:16px;flex-shrink:0;">'+(i+1)+')</span><span class="ul">'+_oEsc(src?(srcList[i]||''):'')+'</span></div>';
   }
 
   // Top info: table with 2 aligned columns, 3 rows
@@ -18595,10 +18617,12 @@ function buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields) {
     +'<td class="tf"><div class="tr2"><span class="tl">Phone Number:</span><span class="tv">781.834.0071</span></div></td>'
     +'</tr></tbody></table>';
 
-  // Note rows: when two stops, split into two side-by-side note sections; otherwise full-width
+  // Note rows (3 blank lines): when two stops, split into two side-by-side note sections; otherwise full-width
   var noteRows = has2
-    ? [1,2,3,4,5].map(function(){ return '<tr><td class="nl"></td><td class="dv"></td><td class="nl"></td></tr>'; }).join('')
-    : [1,2,3,4,5].map(function(){ return '<tr><td colspan="3" class="nl"></td></tr>'; }).join('');
+    ? [1,2,3].map(function(){ return '<tr><td class="nl"></td><td class="dv"></td><td class="nl"></td></tr>'; }).join('')
+    : [1,2,3].map(function(){ return '<tr><td colspan="3" class="nl"></td></tr>'; }).join('');
+  // Truck list rows (7 numbered)
+  var amrizeTruckRows = [0,1,2,3,4,5,6].map(function(i){ return R(T(i,true,tlist),T(i,has2,tlist2)); }).join('');
 
   // Column header when two stops present
   var colHdrRow = has2
@@ -18629,6 +18653,8 @@ function buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields) {
     R(F('Spacing:', trk.spacing||''), F('Spacing:', has2 ? trk2.spacing||'' : '')),
     S('Special Notes / Directions:'),
     noteRows,
+    '<tr><td colspan="3" class="sh" style="border-top:1px solid #ddd;">Truck List:</td></tr>',
+    amrizeTruckRows,
   ].join('');
 
   var css='@page{size:letter portrait;margin:.55in .5in}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:9pt;color:#000;background:#fff}@media print{.np{display:none!important}}.pb{position:fixed;top:10px;right:10px;z-index:999;background:#1a5c8a;color:#fff;border:none;border-radius:6px;padding:9px 18px;font-size:13px;font-weight:bold;cursor:pointer}.hdr{text-align:center;padding-bottom:8px;margin-bottom:6px}.an{font-size:14pt;font-weight:900;font-family:"Arial Black",Arial,sans-serif;letter-spacing:2px;color:#1a5c8a}.as{font-size:7.5pt;letter-spacing:1px;color:#555;margin-top:1px}.ft{font-size:11.5pt;font-weight:bold;text-align:center;text-decoration:underline;margin-bottom:8px;letter-spacing:.4px}table.tbl{width:100%;border-collapse:collapse;border-bottom:1px solid #aaa;margin-bottom:8px}td.tf{vertical-align:bottom;padding:0}.tr2{display:flex;align-items:flex-end;padding-bottom:4px;gap:3px}.tl{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0}.tv{flex:1;border-bottom:1px solid #000;font-size:8.5pt;padding-bottom:1px;min-width:20px}table.form{width:100%;border-collapse:collapse;table-layout:fixed}col.c1,col.c2{width:47.5%}col.cdv{width:5%}td.tc{vertical-align:bottom;padding:0}td.dv{border-left:1px dashed #ccc}td.sh{font-size:9pt;font-weight:bold;text-decoration:underline;padding:10px 0 4px;vertical-align:bottom}td.nl{height:19px;border-bottom:1px solid #000;padding:0}.fr{display:flex;align-items:flex-end;padding-bottom:6px;gap:3px}.lb{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0}.ml{margin-left:7px;font-size:8pt;white-space:nowrap;flex-shrink:0}.ul{flex:1;border-bottom:1px solid #000;min-width:20px;font-size:8.5pt;padding-bottom:1px}.ul.s{flex:0 0 46px;min-width:0}.foot{text-align:center;font-size:7.5pt;font-weight:bold;border-top:1px solid #000;padding-top:7px;margin-top:14px}';
