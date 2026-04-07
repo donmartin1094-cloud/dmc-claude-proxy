@@ -2318,7 +2318,7 @@
 <div id="collapsedNavStrip">
   <button class="coll-nav-scroll-arrow" onclick="scrollCollapsedNav(-160)" title="Scroll left">‹</button>
   <div id="collNavScroll" style="flex:1;overflow-x:auto;overflow-y:hidden;display:flex;align-items:center;gap:3px;padding:0 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-    <button class="coll-nav-btn" id="collNavHome" onclick="goHome()">🏠 Home</button>
+    <button class="coll-nav-btn" onclick="goHome()">🏠 Home</button>
     <div style="width:1px;background:var(--asphalt-light);align-self:stretch;margin:6px 2px;flex-shrink:0;"></div>
     <button class="coll-nav-btn" id="collNavAr" onclick="toggleArSubNav(event)">🧾 AR <span id="collNavArArrow" style="font-size:8px;opacity:0.6;">▾</span></button>
     <div class="coll-nav-sub-cascade" id="collNavArSub">
@@ -16396,9 +16396,6 @@ function renderSchedule() {
     queueZone.addEventListener('drop', queueDrop);
   }
 
-  // Align queue zone to Home/Heimdall nav button boundaries
-  setTimeout(alignQueueToNav, 0);
-
   // Paint weather overlays — fires async in background after DOM settles
   setTimeout(wxPaintAllBlocks, 80);
 
@@ -17638,25 +17635,6 @@ function queueDragLeave(e) {
   if (!e.currentTarget.contains(e.relatedTarget)) {
     document.getElementById('queueDropZone')?.classList.remove('drag-over');
   }
-}
-
-// Align queue zone left/right to match Home and Heimdall nav buttons
-function alignQueueToNav() {
-  var homeBtn = document.getElementById('collNavHome');
-  var heimdallBtn = document.getElementById('collNavHeimdall');
-  var queueZone = document.getElementById('queueDropZone');
-  if (!homeBtn || !heimdallBtn || !queueZone) return;
-  var homeRect = homeBtn.getBoundingClientRect();
-  var heimdallRect = heimdallBtn.getBoundingClientRect();
-  var rowRect = queueZone.parentElement.getBoundingClientRect();
-  var leftOffset = Math.max(0, homeRect.left - rowRect.left);
-  var zoneWidth = heimdallRect.left - homeRect.left;
-  queueZone.style.marginLeft = leftOffset + 'px';
-  queueZone.style.width = zoneWidth + 'px';
-}
-if (!window._queueNavAlignBound) {
-  window.addEventListener('resize', alignQueueToNav);
-  window._queueNavAlignBound = true;
 }
 
 function queueDrop(e) {
