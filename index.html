@@ -800,7 +800,7 @@
   .sched-queue-strip::-webkit-scrollbar { height:4px; }
   .sched-queue-strip::-webkit-scrollbar-track { background:transparent; }
   .sched-queue-strip::-webkit-scrollbar-thumb { background:#333; border-radius:2px; }
-  .sched-queue-empty-text { font-family:'DM Mono',monospace; font-size:11px; color:#333; width:100%; text-align:center; pointer-events:none; }
+  .sched-queue-empty-text { font-family:'DM Mono',monospace; font-size:11px; color:#666; width:100%; text-align:center; pointer-events:none; }
   /* Queue tooltip */
   .qmc-tooltip { position:fixed; z-index:5500; background:var(--asphalt-mid); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); padding:10px 14px; min-width:200px; max-width:280px; box-shadow:0 8px 28px rgba(0,0,0,0.65); pointer-events:none; font-family:'DM Sans',sans-serif; font-size:11px; color:var(--concrete); line-height:1.5; }
   .qmc-tooltip-title { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:1px; color:var(--white); margin-bottom:6px; }
@@ -16343,10 +16343,8 @@ function renderSchedule() {
         </div>
 
         <!-- ── Full-width queue strip ───────────────────────────────────── -->
-        <div id="queueDropZone" class="sched-hdr-queue-row"
-          ondragover="queueDragOver(event)"
-          ondragleave="queueDragLeave(event)"
-          ondrop="queueDrop(event)">
+        <div id="queueDropZone" class="sched-hdr-queue-row">
+          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:#555;padding:0 10px;flex-shrink:0;white-space:nowrap;">📦 QUEUE</span>
           <div id="schedQueueStrip" class="sched-queue-strip">
             <span class="sched-queue-empty-text">Drop jobs here to queue</span>
           </div>
@@ -16388,6 +16386,13 @@ function renderSchedule() {
   wrap.querySelectorAll('.sched-field-input').forEach(autoResize);
   // Refresh queue list
   renderQueueList();
+  // Re-attach queue drop zone handlers (element is recreated on every render)
+  var queueZone = document.getElementById('queueDropZone');
+  if (queueZone) {
+    queueZone.addEventListener('dragover', queueDragOver);
+    queueZone.addEventListener('dragleave', queueDragLeave);
+    queueZone.addEventListener('drop', queueDrop);
+  }
 
   // Paint weather overlays — fires async in background after DOM settles
   setTimeout(wxPaintAllBlocks, 80);
@@ -17618,7 +17623,6 @@ document.addEventListener('mousemove', function(e) {
 
 // ── Drag FROM schedule TO queue ──────────────────────────────────────────────
 function queueDragOver(e) {
-  if (!schedBlockDragSrc) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   document.getElementById('queueDropZone')?.classList.add('drag-over');
