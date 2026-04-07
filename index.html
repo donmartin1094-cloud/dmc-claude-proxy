@@ -1283,7 +1283,7 @@
   .sched-hdr-new { display:flex; flex-direction:column; gap:0; padding:0; position:relative; }
   .sched-hdr-row1 {
     display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
-    padding:8px 16px 8px 0; min-height:0; overflow:hidden; gap:0;
+    padding:8px 16px 8px 0; min-height:0; overflow:visible; gap:0;
   }
   /* Queue row — lives in the left 1fr grid cell of sched-hdr-row1 */
   .sched-hdr-queue-row {
@@ -1293,7 +1293,7 @@
     width:100%;
     align-self:stretch;
     background:var(--asphalt-mid);
-    border:1px dashed #c8b8ff;
+    border:2px dashed #c8b8ff;
     padding:0 8px 0 0;
     box-sizing:border-box;
     overflow-x:auto;
