@@ -796,11 +796,11 @@
   .qmc-del { position:absolute; top:4px; right:5px; background:none; border:none; cursor:pointer; color:#444; font-size:10px; padding:2px 4px; line-height:1; transition:color 0.1s; }
   .qmc-del:hover { color:#ff5555; }
   /* Queue strip — full-width horizontal row */
-  .sched-queue-strip { display:flex; flex-direction:row; flex-wrap:nowrap; gap:8px; align-items:center; overflow-x:auto; scrollbar-width:thin; scrollbar-color:#333 transparent; flex:1; min-width:0; padding:8px 12px; min-height:74px; }
+  .sched-queue-strip { display:flex; flex-direction:row; align-items:center; flex:1; gap:8px; overflow-x:auto; padding:4px 0; min-height:48px; scrollbar-width:thin; scrollbar-color:#333 transparent; }
   .sched-queue-strip::-webkit-scrollbar { height:4px; }
   .sched-queue-strip::-webkit-scrollbar-track { background:transparent; }
   .sched-queue-strip::-webkit-scrollbar-thumb { background:#333; border-radius:2px; }
-  .sched-queue-empty-text { font-family:'DM Mono',monospace; font-size:11px; color:#666; width:100%; text-align:center; pointer-events:none; }
+  .sched-queue-empty-text { color:#555; font-family:'DM Mono',monospace; font-size:10px; white-space:nowrap; padding:0 8px; pointer-events:none; }
   /* Queue tooltip */
   .qmc-tooltip { position:fixed; z-index:5500; background:var(--asphalt-mid); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); padding:10px 14px; min-width:200px; max-width:280px; box-shadow:0 8px 28px rgba(0,0,0,0.65); pointer-events:none; font-family:'DM Sans',sans-serif; font-size:11px; color:var(--concrete); line-height:1.5; }
   .qmc-tooltip-title { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:1px; color:var(--white); margin-bottom:6px; }
@@ -1287,10 +1287,18 @@
   }
   /* Queue row — full-width strip above schedule grid */
   .sched-hdr-queue-row {
-    display:flex; align-items:center; width:100%;
-    min-height:90px; background:#111;
-    border-top:1px solid #1e1e1e; border-bottom:1px solid #1e1e1e;
-    transition:background 0.15s, border-color 0.15s; overflow:hidden;
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    width:100%;
+    min-height:56px;
+    background:#0d0d0d;
+    border-top:1px solid #222;
+    border-bottom:1px solid #222;
+    padding:0 8px;
+    box-sizing:border-box;
+    overflow-x:auto;
+    flex-shrink:0;
   }
   .sched-hdr-queue-row.drag-over { background:rgba(245,197,24,0.06); border-color:rgba(245,197,24,0.3); }
   .sched-hdr-right { display:flex; align-items:center; gap:6px; flex-shrink:0; flex-wrap:nowrap; justify-content:flex-end; }
@@ -1300,8 +1308,6 @@
     display:flex; flex-direction:column; align-items:flex-end; gap:4px;
   }
   .sched-legend { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
-  /* Hide legacy queue row (no longer used) */
-  .sched-hdr-queue-row { display:none !important; }
   .sched-hdr-toggle-row {
     display:flex; align-items:center; gap:0; padding:3px 12px;
     background:var(--asphalt-mid); border-bottom:2px solid var(--asphalt-light);
@@ -16388,6 +16394,7 @@ function renderSchedule() {
   renderQueueList();
   // Re-attach queue drop zone handlers (element is recreated on every render)
   var queueZone = document.getElementById('queueDropZone');
+  console.log('[Queue] attaching drop handlers to:', document.getElementById('queueDropZone'));
   if (queueZone) {
     queueZone.addEventListener('dragover', queueDragOver);
     queueZone.addEventListener('dragleave', queueDragLeave);
@@ -17623,6 +17630,7 @@ document.addEventListener('mousemove', function(e) {
 
 // ── Drag FROM schedule TO queue ──────────────────────────────────────────────
 function queueDragOver(e) {
+  console.log('[Drag] dragover on queue zone');
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   document.getElementById('queueDropZone')?.classList.add('drag-over');
@@ -17635,6 +17643,7 @@ function queueDragLeave(e) {
 }
 
 function queueDrop(e) {
+  console.log('[Drag] drop on queue zone, src:', schedBlockDragSrc);
   e.preventDefault();
   document.getElementById('queueDropZone')?.classList.remove('drag-over');
   if (!schedBlockDragSrc) return;
@@ -18087,6 +18096,7 @@ function openSlideBackModal(run, destKey, slot, affectedMoves) {
 let schedBlockDragSrc = null; // { key, slot, run, ghost }
 
 function schedBlockDragStart(e, fromKey, fromSlot) {
+  console.log('[Drag] dragstart fired, src:', schedBlockDragSrc);
   const run = detectRun(fromKey, fromSlot);
   schedBlockDragSrc = { key: fromKey, slot: fromSlot, run };
   e.dataTransfer.effectAllowed = 'move';
