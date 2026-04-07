@@ -17645,12 +17645,19 @@ function alignQueueToNav() {
   var homeBtn = document.getElementById('collNavHome');
   var heimdallBtn = document.getElementById('collNavHeimdall');
   var queueZone = document.getElementById('queueDropZone');
-  if (!homeBtn || !heimdallBtn || !queueZone) return;
+  if (!queueZone) return;
+  // Reset inline styles so CSS grid sizing takes over as fallback
+  queueZone.style.marginLeft = '';
+  queueZone.style.width = '';
+  if (!homeBtn || !heimdallBtn) return;
   var homeRect = homeBtn.getBoundingClientRect();
   var heimdallRect = heimdallBtn.getBoundingClientRect();
+  // Nav strip is hidden (display:none) — getBoundingClientRect returns zeros, skip
+  if (homeRect.width === 0 || heimdallRect.width === 0) return;
   var rowRect = queueZone.parentElement.getBoundingClientRect();
   var leftOffset = Math.max(0, homeRect.left - rowRect.left);
   var zoneWidth = heimdallRect.left - homeRect.left;
+  if (zoneWidth <= 0) return;
   queueZone.style.marginLeft = leftOffset + 'px';
   queueZone.style.width = zoneWidth + 'px';
 }
