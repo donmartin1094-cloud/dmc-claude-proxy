@@ -19821,6 +19821,7 @@ async function captureLookaheadAndSave(supplier, dateRange) {
 }
 
 function buildLookaheadHTML(supplier, dateRange) {
+  console.log('[Lookahead] function called');
   const today = new Date(); today.setHours(0,0,0,0);
   const DAY_NAMES_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -19986,6 +19987,9 @@ function buildLookaheadHTML(supplier, dateRange) {
       });
     });
   });
+  console.log('[Lookahead] days count:', days.length);
+  console.log('[Lookahead] schedData keys sample:', Object.keys(schedData).slice(0,3));
+  console.log('[Lookahead] dk(days[0]):', days.length ? dk(days[0].d) : 'no days');
   console.log('[Lookahead] plantTonnage:', JSON.stringify(plantTonnage));
 
   const plantTonnageHtml = Object.keys(plantTonnage).sort().map(plant => {
