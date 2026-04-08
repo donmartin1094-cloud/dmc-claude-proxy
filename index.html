@@ -19992,7 +19992,7 @@ function buildLookaheadHTML(supplier, dateRange) {
   console.log('[Lookahead] dk(days[0]):', days.length ? dk(days[0].d) : 'no days');
   console.log('[Lookahead] plantTonnage:', JSON.stringify(plantTonnage));
 
-  const plantTonnageHtml = Object.keys(plantTonnage).sort().map(plant => {
+  const plantTonnageHtml = Object.keys(plantTonnage).filter(plant => Object.keys(plantTonnage[plant]).length > 0).sort().map(plant => {
     const matLines = Object.keys(plantTonnage[plant]).sort().map(mat => {
       const t = plantTonnage[plant][mat];
       return `<div style="display:flex;justify-content:space-between;padding:2px 0 2px 12px;border-left:2px solid #2a5a2a;">
@@ -20015,6 +20015,7 @@ function buildLookaheadHTML(supplier, dateRange) {
         </div>
       </div>` : '';
 
+  console.log('[Lookahead] tonnageSectionHtml length:', tonnageSectionHtml.length);
   return `<!DOCTYPE html>
 <html>
 <head>
