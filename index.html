@@ -19957,6 +19957,59 @@ function buildLookaheadHTML(supplier, dateRange) {
   const week1 = days.slice(0, 7);
   const week2 = days.slice(7, 14);
 
+  // ── Per-plant tonnage breakdown ──────────────────────────────────────────
+  const plantTonnage = {};
+  days.forEach(({ key }) => {
+    const daySource = sourceData[key] || {};
+    // primary slots
+    ['top','bottom'].forEach(slot => {
+      const { fields, type } = getBlockData(key, slot);
+      if (type === 'blank' && !Object.values(fields).some(v => v && String(v).trim())) return;
+      const plant = (fields.plant || '').trim(); if (!plant) return;
+      if (!plantTonnage[plant]) plantTonnage[plant] = {};
+      parseMaterialField(fields.material || '').forEach(m => {
+        const tons = parseFloat(m.tons || 0); if (tons <= 0) return;
+        const mat = (m.name || 'Unknown Mix').trim();
+        plantTonnage[plant][mat] = (plantTonnage[plant][mat] || 0) + tons;
+      });
+    });
+    // extra slots
+    (sourceData[key]?.extras || []).forEach((_, i) => {
+      const { fields, type } = getBlockData(key, `extra_${i}`);
+      if (type === 'blank' && !Object.values(fields).some(v => v && String(v).trim())) return;
+      const plant = (fields.plant || '').trim(); if (!plant) return;
+      if (!plantTonnage[plant]) plantTonnage[plant] = {};
+      parseMaterialField(fields.material || '').forEach(m => {
+        const tons = parseFloat(m.tons || 0); if (tons <= 0) return;
+        const mat = (m.name || 'Unknown Mix').trim();
+        plantTonnage[plant][mat] = (plantTonnage[plant][mat] || 0) + tons;
+      });
+    });
+  });
+
+  const plantTonnageHtml = Object.keys(plantTonnage).sort().map(plant => {
+    const matLines = Object.keys(plantTonnage[plant]).sort().map(mat => {
+      const t = plantTonnage[plant][mat];
+      return `<div style="display:flex;justify-content:space-between;padding:2px 0 2px 12px;border-left:2px solid #2a5a2a;">
+        <span style="color:#aaa;font-size:10px;">${mat}</span>
+        <span style="color:#7ecb8f;font-weight:700;font-size:10px;">${t.toLocaleString()}T</span>
+      </div>`;
+    }).join('');
+    const plantTotal = Object.values(plantTonnage[plant]).reduce((s, t) => s + t, 0);
+    return `<div style="margin-bottom:10px;">
+      <div style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#fff;margin-bottom:4px;">🏭 ${plant}<span style="float:right;color:#7ecb8f;">${plantTotal.toLocaleString()}T total</span></div>
+      ${matLines}
+    </div>`;
+  }).join('');
+
+  const tonnageSectionHtml = Object.keys(plantTonnage).length > 0
+    ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #333;">
+        <div style="background:#1a1a1a;border-radius:5px;padding:10px 12px;">
+          <div style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#7ecb8f;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">📊 Tonnage by Plant</div>
+          ${plantTonnageHtml}
+        </div>
+      </div>` : '';
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -20008,6 +20061,7 @@ function buildLookaheadHTML(supplier, dateRange) {
         <span>${t.label}</span>
       </span>`).join('')}
     </div>
+    ${tonnageSectionHtml}
     <div style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#cc0000;margin-top:8px;padding-top:6px;border-top:1px solid #333;">
       * All Tonnages are approximate and Schedule is subject to change.
     </div>
