@@ -19986,6 +19986,7 @@ function buildLookaheadHTML(supplier, dateRange) {
       });
     });
   });
+  console.log('[Lookahead] plantTonnage:', JSON.stringify(plantTonnage));
 
   const plantTonnageHtml = Object.keys(plantTonnage).sort().map(plant => {
     const matLines = Object.keys(plantTonnage[plant]).sort().map(mat => {
