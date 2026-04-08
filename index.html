@@ -19944,8 +19944,10 @@ function buildLookaheadHTML(supplier, dateRange) {
             </div>
             <div style="padding:5px;">
               ${blockCardHTML(key, 'top', 'Filipe Joaquim')}
+              ${extras.map((_,i)=>i).filter(i=>extras[i]?.parentSlot==='top').map(i=>blockCardHTML(key,`extra_${i}`,extras[i]?.foreman||'Extra Crew')).join('')}
               ${blockCardHTML(key, 'bottom', 'Louie Medeiros')}
-              ${extras.map((_,i) => blockCardHTML(key, `extra_${i}`, extras[i]?.foreman || 'Extra Crew')).join('')}
+              ${extras.map((_,i)=>i).filter(i=>extras[i]?.parentSlot==='bottom').map(i=>blockCardHTML(key,`extra_${i}`,extras[i]?.foreman||'Extra Crew')).join('')}
+              ${extras.map((_,i)=>i).filter(i=>!extras[i]?.parentSlot).map(i=>blockCardHTML(key,`extra_${i}`,extras[i]?.foreman||'Extra Crew')).join('')}
             </div>
           </div>`;
       }).join('')}
