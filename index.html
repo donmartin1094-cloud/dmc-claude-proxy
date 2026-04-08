@@ -19699,10 +19699,10 @@ function confirmLookahead() {
 
   const today = new Date();
   today.setHours(0,0,0,0);
-  const end = new Date(today);
-  end.setDate(today.getDate() + 13);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const end = new Date(today); end.setDate(today.getDate() + 14);
   const fmt = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  const dateRange = `${fmt(today)} — ${fmt(end)}`;
+  const dateRange = `${fmt(tomorrow)} — ${fmt(end)}`;
 
   modal.innerHTML = `
     <div class="modal" style="max-width:480px;">
@@ -19829,9 +19829,9 @@ function buildLookaheadHTML(supplier, dateRange) {
   // Use draft data if in edit mode, otherwise use published schedData
   const sourceData = (schedEditMode && schedDraft) ? schedDraft : schedData;
 
-  // Collect all 14 days
+  // Collect 14 days starting from tomorrow
   const days = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = 1; i <= 14; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     days.push({ d, key: dk(d), isWeekend: d.getDay()===0||d.getDay()===6 });
@@ -19967,6 +19967,7 @@ function buildLookaheadHTML(supplier, dateRange) {
       const { fields, type } = getBlockData(key, slot);
       if (type === 'blank' && !Object.values(fields).some(v => v && String(v).trim())) return;
       const plant = (fields.plant || '').trim(); if (!plant) return;
+      if (!plantMatchesSupplier(plant)) return;
       if (!plantTonnage[plant]) plantTonnage[plant] = {};
       parseMaterialField(fields.material || '').forEach(m => {
         const tons = parseFloat(m.tons || 0); if (tons <= 0) return;
@@ -19979,6 +19980,7 @@ function buildLookaheadHTML(supplier, dateRange) {
       const { fields, type } = getBlockData(key, `extra_${i}`);
       if (type === 'blank' && !Object.values(fields).some(v => v && String(v).trim())) return;
       const plant = (fields.plant || '').trim(); if (!plant) return;
+      if (!plantMatchesSupplier(plant)) return;
       if (!plantTonnage[plant]) plantTonnage[plant] = {};
       parseMaterialField(fields.material || '').forEach(m => {
         const tons = parseFloat(m.tons || 0); if (tons <= 0) return;
