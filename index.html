@@ -30942,69 +30942,60 @@ function widgetEquipment() {
 
 // ── Lowbed Moves home widget ──────────────────────────────────────────────────
 function widgetLowbedMoves() {
+  // Read live manual moves from Heimdall lowbed_groups
   var groups = [];
   try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
   var manualMoves = groups.filter(function(m) { return m.manual === true; });
 
-  // Admin check
-  var isAdmin = ['dj','donmartin'].includes(
-    (localStorage.getItem('dmc_u') || '').toLowerCase().split('@')[0]
-  );
-
-  // Group by destination
-  var toGroupMap = {}, toGroupOrder = [];
+  // Group by destination — same logic as Heimdall
+  var toGroupMap = {};
+  var toGroupOrder = [];
   manualMoves.forEach(function(move) {
     var key = move.jobGroupId && move.jobGroupId.startsWith('job_')
       ? move.jobGroupId
       : (move.to && move.to !== '__garage__' && move.manual)
-        ? 'job_' + move.to : 'single_' + move.id;
+        ? 'job_' + move.to
+        : 'single_' + move.id;
     if (!toGroupMap[key]) { toGroupMap[key] = []; toGroupOrder.push(key); }
     toGroupMap[key].push(move);
   });
   var jobGroups = toGroupOrder.map(function(k) { return toGroupMap[k]; });
 
-  // Resolve destination label
+  // Resolve destination label from backlog jobs
   var resolveLabel = function(toVal) {
     if (!toVal || toVal === '__garage__') return 'Garage';
     var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
-    var j = bl.find(function(x) { return String(x.id) === String(toVal); });
+    var j = bl.find(function(j) { return String(j.id) === String(toVal); });
     if (j) return (j.jobNum ? '#' + j.jobNum + ' — ' : '') + (j.jobName || toVal);
     return toVal;
   };
 
-  // Styled status chip
-  var statusChip = function(status) {
-    var map = {
-      'pending':     { label: 'Pending',    color: '#7ab3f0' },
-      'in_progress': { label: 'In Transit', color: '#f0d060' },
-      'complete':    { label: 'On Site',    color: '#7ecb8f' },
-      'cancelled':   { label: 'Cancelled',  color: '#e87373' }
-    };
-    var s = map[status] || map['pending'];
-    return '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + s.color + '20;border:1px solid ' + s.color + ';color:' + s.color + ';font-family:\'DM Mono\',monospace;font-weight:700;">' + s.label + '</span>';
+  var stColor = function(s) {
+    if (s === 'complete')    return '#4a7a4a';
+    if (s === 'in_progress') return '#f0d060';
+    return '#7ab3f0';
+  };
+  var stLabel = function(s) {
+    if (s === 'complete')    return '✓ Complete';
+    if (s === 'in_progress') return '⚡ In Progress';
+    return '⏳ Pending';
   };
 
-  // Summary counts
+  // Summary counts across all moves
   var totalPending  = manualMoves.filter(function(m) { return (m.status||'pending') === 'pending'; }).length;
   var totalActive   = manualMoves.filter(function(m) { return m.status === 'in_progress'; }).length;
   var totalComplete = manualMoves.filter(function(m) { return m.status === 'complete'; }).length;
 
-  // Total rental cost (admin only)
-  var totalRental = manualMoves.reduce(function(s, m) { return s + (m.isRental ? (m.estimatedCost || 0) : 0); }, 0);
-  var rentalSummary = (isAdmin && totalRental > 0)
-    ? '<div style="margin-bottom:8px;"><span style="font-size:9px;padding:2px 8px;border-radius:3px;background:#c9a80020;border:1px solid #c9a800;color:#c9a800;font-family:\'DM Mono\',monospace;font-weight:700;">💰 Rental Est: $' + totalRental.toLocaleString() + '</span></div>'
-    : '';
-
   var pills = (totalActive || totalPending || totalComplete)
     ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' +
-        (totalActive   ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f0d060;font-weight:700;">⚡ ' + totalActive + ' In Transit</span>' : '') +
+        (totalActive   ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f0d060;font-weight:700;">⚡ ' + totalActive + ' In Progress</span>' : '') +
         (totalPending  ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ab3f0;font-weight:700;">⏳ ' + totalPending + ' Pending</span>' : '') +
-        (totalComplete ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,122,74,0.1);border:1px solid rgba(74,122,74,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;font-weight:700;">✓ ' + totalComplete + ' On Site</span>' : '') +
+        (totalComplete ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,122,74,0.1);border:1px solid rgba(74,122,74,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;font-weight:700;">✓ ' + totalComplete + ' Done</span>' : '') +
       '</div>'
     : '';
 
   var bodyHtml = jobGroups.length === 0
-    ? '<div style="text-align:center;color:#444;font-family:\'DM Mono\',monospace;font-size:10px;padding:20px 0;">🚛 No active lowbed moves</div>'
+    ? '<div style="text-align:center;padding:16px 0;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">No active lowbed moves</div>'
     : jobGroups.map(function(jMoves) {
         var destLabel = resolveLabel(jMoves[0].to);
         var jPend = jMoves.filter(function(m) { return (m.status||'pending') === 'pending'; }).length;
@@ -31012,71 +31003,40 @@ function widgetLowbedMoves() {
         var jDone = jMoves.filter(function(m) { return m.status === 'complete'; }).length;
         var totalEq = jMoves.reduce(function(s,m) { return s + (m.items||[]).length; }, 0);
 
-        // Status pills for this group
         var statusPills =
           '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
           (jPend ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);color:#7ab3f0;">⏳ ' + jPend + ' pending</span>' : '') +
-          (jInP  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);color:#f0d060;">⚡ ' + jInP + ' in transit</span>' : '') +
-          (jDone ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(74,122,74,0.15);border:1px solid rgba(74,122,74,0.3);color:#7ecb8f;">✓ ' + jDone + ' on site</span>' : '') +
+          (jInP  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);color:#f0d060;">⚡ ' + jInP + ' active</span>' : '') +
+          (jDone ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(74,122,74,0.15);border:1px solid rgba(74,122,74,0.3);color:#7ecb8f;">✓ ' + jDone + ' done</span>' : '') +
           '</div>';
 
-        // Equipment KPI chips
-        var typeCounts = {};
-        jMoves.forEach(function(m) {
-          (m.items || []).forEach(function(item) {
-            var t = item.type || 'other';
-            if (!typeCounts[t]) typeCounts[t] = { total: 0, arrived: 0 };
-            typeCounts[t].total++;
-            if (m.status === 'complete') typeCounts[t].arrived++;
-          });
-        });
-        var kpiChips = Object.keys(typeCounts).map(function(type) {
-          var c = typeCounts[type];
-          var color = c.arrived === c.total ? '#4a7a4a' : c.arrived > 0 ? '#c9a800' : '#4a6fa6';
-          return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:' + color + '20;border:1px solid ' + color + ';color:' + color + ';font-family:\'DM Mono\',monospace;">' + escHtml(type) + ' ' + c.arrived + '/' + c.total + '</span>';
-        }).join(' ');
-
-        // ATow cost chip (admin only)
-        var costChip = '';
-        if (isAdmin) {
-          var rentalCost = jMoves.reduce(function(sum, m) { return sum + (m.isRental ? (m.estimatedCost || 0) : 0); }, 0);
-          if (rentalCost > 0) {
-            costChip = ' <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#c9a80020;border:1px solid #c9a800;color:#c9a800;font-family:\'DM Mono\',monospace;">💰 $' + rentalCost.toLocaleString() + '</span>';
-          }
-        }
-
-        // Move rows
         var moveRows = jMoves.map(function(m, mi) {
           var st = m.status || 'pending';
-          var rowBg = st === 'complete' ? '#0d1a0d' : st === 'in_progress' ? '#3a2e00' : '#1a2a3e';
-          var driver = m.driverName || 'Unassigned';
+          var sc = stColor(st);
+          var sl = stLabel(st);
+          var eqNames = (m.items||[]).map(function(it) { return it.name||it.type; }).join(', ') || '—';
+          var driver = m.driverName || '⚠ Unassigned';
           var driverColor = m.driverName ? '#7ecb8f' : '#e8a94c';
-          var eqLines = (m.items || []).map(function(it) {
-            return '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(216,200,255,0.6);padding-left:8px;">· ' + escHtml(it.name || it.type || '—') + '</div>';
-          }).join('') || '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.4);padding-left:8px;">No equipment listed</div>';
-          var ts = m.updatedAt ? '<span style="font-size:7px;color:rgba(155,148,136,0.4);margin-left:auto;">' + escHtml(m.updatedAt) + '</span>' : '';
-          return '<div style="background:' + rowBg + ';border-left:2px dashed #3a3a5a;margin-left:8px;padding:4px 8px;margin-bottom:4px;border-radius:0 4px 4px 0;">' +
-            '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">' +
+          var strike = st === 'complete' ? 'text-decoration:line-through;opacity:0.6;' : '';
+          return '<div style="padding:6px 10px;border-top:1px dashed rgba(123,79,166,0.25);' + strike + '">' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">' +
               '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.5);">Move ' + (mi+1) + '</span>' +
-              statusChip(st) +
+              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;padding:1px 5px;border-radius:3px;color:' + sc + ';background:rgba(0,0,0,0.2);border:1px solid ' + sc + '33;">' + sl + '</span>' +
               '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + driverColor + ';margin-left:auto;">' + escHtml(driver) + '</span>' +
-              ts +
             '</div>' +
-            eqLines +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+              escHtml(eqNames) +
+            '</div>' +
           '</div>';
         }).join('');
 
         return '<div style="background:#2a1a3e;border:1px solid rgba(123,79,166,0.4);border-left:3px solid #9b6fd6;border-radius:6px;margin-bottom:8px;overflow:hidden;">' +
           '<div style="padding:8px 10px;">' +
-            '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' +
-              '<span style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#d8c8ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + escHtml(destLabel) + '</span>' +
-              costChip +
-            '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#d8c8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(destLabel) + '</div>' +
             '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(167,139,250,0.5);margin-top:2px;">' + jMoves.length + ' load' + (jMoves.length!==1?'s':'') + ' · ' + totalEq + ' pcs</div>' +
             statusPills +
-            (kpiChips ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">' + kpiChips + '</div>' : '') +
           '</div>' +
-          '<div style="padding:0 8px 8px;">' + moveRows + '</div>' +
+          moveRows +
         '</div>';
       }).join('');
 
@@ -31089,7 +31049,6 @@ function widgetLowbedMoves() {
       '</div>' +
     '</div>' +
     '<div class="home-widget-body">' +
-      rentalSummary +
       pills +
       bodyHtml +
     '</div>' +
