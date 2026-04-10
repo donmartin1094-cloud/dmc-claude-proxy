@@ -37425,7 +37425,12 @@ async function initApp(username) {
   // ── Drivers land on Heimdall: inject iframe + switch tab BEFORE appWrap shows ──
   const _isDriverRole = getCurrentRole() === 'driver' || getCurrentRole() === 'lowbed_driver';
   if (_isDriverRole) {
-    renderHeimdall(); // inject the iframe before anything is visible
+    // Defer Heimdall load until after app init
+    setTimeout(function() {
+      if (localStorage.getItem('dmc_u')) {
+        renderHeimdall();
+      }
+    }, 2000);
     // Explicitly hide all content views so nothing else flashes through
     ['homeView','scheduleView','backlogView','reportsView','chatView','arOverviewView',
      'invoiceView','apAnalyticsView','apAiaView','mailView','qcReportsView','bidView',
