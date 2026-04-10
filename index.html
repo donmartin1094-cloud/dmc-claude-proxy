@@ -16389,7 +16389,6 @@ function renderSchedule() {
   renderQueueList();
   // Re-attach queue drop zone handlers (element is recreated on every render)
   var queueZone = document.getElementById('queueDropZone');
-  console.log('[Queue] attaching drop handlers to:', document.getElementById('queueDropZone'));
   if (queueZone) {
     queueZone.addEventListener('dragover', queueDragOver);
     queueZone.addEventListener('dragleave', queueDragLeave);
@@ -17625,7 +17624,6 @@ document.addEventListener('mousemove', function(e) {
 
 // ── Drag FROM schedule TO queue ──────────────────────────────────────────────
 function queueDragOver(e) {
-  console.log('[Drag] dragover on queue zone');
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   document.getElementById('queueDropZone')?.classList.add('drag-over');
@@ -17638,7 +17636,6 @@ function queueDragLeave(e) {
 }
 
 function queueDrop(e) {
-  console.log('[Drag] drop on queue zone, src:', schedBlockDragSrc);
   e.preventDefault();
   document.getElementById('queueDropZone')?.classList.remove('drag-over');
   if (!schedBlockDragSrc) return;
@@ -18091,7 +18088,6 @@ function openSlideBackModal(run, destKey, slot, affectedMoves) {
 let schedBlockDragSrc = null; // { key, slot, run, ghost }
 
 function schedBlockDragStart(e, fromKey, fromSlot) {
-  console.log('[Drag] dragstart fired, src:', schedBlockDragSrc);
   const run = detectRun(fromKey, fromSlot);
   schedBlockDragSrc = { key: fromKey, slot: fromSlot, run };
   e.dataTransfer.effectAllowed = 'move';
@@ -18864,7 +18860,6 @@ function downloadBlob(blob, fileName) {
 }
 
 function generateDailyOrder(dateKey, slot, event) {
-  console.log('[Order] generateDailyOrder called', dateKey, slot);
   if (event) event.stopPropagation();
   buildDailyOrder(dateKey, slot);
 }
@@ -19391,7 +19386,6 @@ function _showLookaheadToast(supplier, dateRange) {
 }
 
 function buildDailyOrder(dateKey, slot) {
-  console.log('[Order] buildDailyOrder called, dateKey:', dateKey, 'slot:', slot);
   var bdata;
   if (slot.startsWith('extra_')) {
     var _idx = parseInt(slot.replace('extra_', ''));
@@ -19400,9 +19394,6 @@ function buildDailyOrder(dateKey, slot) {
     bdata = (schedData[dateKey]||{})[slot] || { type:'blank', fields:{} };
   }
   var fields = bdata.fields || {};
-  console.log('[Order] fields:', JSON.stringify(fields).slice(0,200));
-  console.log('[Order] plant value:', fields && fields.plant);
-  console.log('[Order] calling _isAmrizePlant:', typeof _isAmrizePlant);
   var foreman = slot === 'top' ? 'Filipe Joaquim'
     : slot === 'bottom' ? 'Louie Medeiros'
     : (slot.startsWith('extra_') ? (schedData[dateKey]?.extras?.[parseInt(slot.replace('extra_',''))]?.foreman || 'Extra Crew') : 'Louie Medeiros');
@@ -19427,7 +19418,6 @@ function buildDailyOrder(dateKey, slot) {
   var nightSuffix = isNight ? '.Night Work' : '';
   var primaryPlant = v('plant');
   var isAmrize = _isAmrizePlant(primaryPlant);
-  console.log('[Amrize] plant check:', JSON.stringify(primaryPlant), '→', isAmrize, '| hardcoded test:', _isAmrizePlant('Amrize - Dennis'));
 
   // ── Find second stops for this slot (extras with matching parentSlot) ──────
   // Second stops only apply to top/bottom foreman slots, not to independent extras
@@ -19517,14 +19507,10 @@ function buildDailyOrder(dateKey, slot) {
   }
 
   // ── Build and save primary order (right col = same-supplier second stop) ────
-  console.log('[Order] isAmrize result:', _isAmrizePlant(fields.plant), 'plant:', fields.plant);
-  console.log('[Order] about to choose builder...');
   var html;
   if (isAmrize) {
-    console.log('[Order] CHOSE AMRIZE builder');
     html = buildAmrizeOrderHTML(fields, dateKey, foreman, secondFields);
   } else {
-    console.log('[Order] CHOSE DMC builder');
     html = buildDMCOrderHTML(fields, orderDate, foreman, secondFields);
   }
   var fileName = (foreman + '.' + d + '.' + gc + ' ' + proj + nightSuffix)
@@ -19821,7 +19807,6 @@ async function captureLookaheadAndSave(supplier, dateRange) {
 }
 
 function buildLookaheadHTML(supplier, dateRange) {
-  console.log('[Lookahead] function called');
   const today = new Date(); today.setHours(0,0,0,0);
   const DAY_NAMES_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -19989,10 +19974,6 @@ function buildLookaheadHTML(supplier, dateRange) {
       });
     });
   });
-  console.log('[Lookahead] days count:', days.length);
-  console.log('[Lookahead] schedData keys sample:', Object.keys(schedData).slice(0,3));
-  console.log('[Lookahead] dk(days[0]):', days.length ? dk(days[0].d) : 'no days');
-  console.log('[Lookahead] plantTonnage:', JSON.stringify(plantTonnage));
 
   const plantTonnageHtml = Object.keys(plantTonnage).filter(plant => Object.keys(plantTonnage[plant]).length > 0).sort().map(plant => {
     const matLines = Object.keys(plantTonnage[plant]).sort().map(mat => {
@@ -20017,7 +19998,6 @@ function buildLookaheadHTML(supplier, dateRange) {
         </div>
       </div>` : '';
 
-  console.log('[Lookahead] tonnageSectionHtml length:', tonnageSectionHtml.length);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -33752,7 +33732,6 @@ function _laRenderSlipPanel() {
     var _u = (localStorage.getItem('dmc_u') || '').toLowerCase().trim();
     var _uBase = _u.indexOf('@') > -1 ? _u.split('@')[0] : _u;
     isAdmin = (_uBase === 'dj' || _uBase === 'donmartin');
-    console.log('[SlipAdmin] u:', _u, 'base:', _uBase, 'isAdmin:', isAdmin);
   } catch(e) {}
 
   // Match slips to this job (by backlogJobId, jobNum, or jobName)
@@ -33763,7 +33742,6 @@ function _laRenderSlipPanel() {
     return false;
   });
 
-  console.log('[SlipRow] isAdmin:', isAdmin, 'slip count:', jobSlips.length);
   // Group by date
   var byDate = {};
   jobSlips.forEach(function(sl) {
@@ -34835,7 +34813,6 @@ function _slipsJobView(jobId, jobName) {
     var _u = (localStorage.getItem('dmc_u') || '').toLowerCase().trim();
     var _uBase = _u.indexOf('@') > -1 ? _u.split('@')[0] : _u;
     isAdmin = (_uBase === 'dj' || _uBase === 'donmartin');
-    console.log('[SlipAdmin] u:', _u, 'base:', _uBase, 'isAdmin:', isAdmin);
   } catch(e) {}
   var slips = pavingSlips.filter(function(sl){ return sl.jobId === jobId || (jobName && sl.jobName && sl.jobName.toLowerCase() === jobName.toLowerCase()); });
 
@@ -37261,7 +37238,6 @@ async function fbSet(docName, value) {
       if (typeof firebase !== 'undefined') {
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
-        console.log('[fbSet] db initialized on demand');
       }
     }
     if (!db) {
@@ -37269,11 +37245,9 @@ async function fbSet(docName, value) {
       localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value));
       return { ok: false, error: 'db null' };
     }
-    console.log('[fbSet] writing', docName, 'to Firestore');
     setSyncBadge('saving');
     await db.collection('app_data').doc(docName).set({ data: JSON.stringify(value), updatedAt: Date.now() });
     setSyncBadge('synced');
-    console.log('[fbSet] successfully wrote', docName);
     return { ok: true };
   } catch(e) {
     console.error('[fbSet] write error for', docName, ':', e);
@@ -42737,11 +42711,9 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
       plan.verifiedAt = Date.now();
       plan.verifiedBy = localStorage.getItem('dmc_u')||'';
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
-      console.log('[Lowbed] About to save verified plan. db:', typeof db, 'firebase:', typeof firebase);
       try {
         if (typeof fbSet === 'function') {
           await fbSet('lowbed_plan', plan);
-          console.log('[Lowbed] Plan saved to Firestore successfully');
         }
       } catch(e) {
         console.error('[Lowbed] Firestore write failed:', e);
@@ -42957,11 +42929,9 @@ Return ONLY valid JSON (no markdown fences, no explanation):
         generatedBy: localStorage.getItem('dmc_u')||''
       });
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
-      console.log('[Lowbed] About to save generated plan. db:', typeof db, 'firebase:', typeof firebase);
       try {
         if (typeof fbSet === 'function') {
           await fbSet('lowbed_plan', plan);
-          console.log('[Lowbed] Plan saved to Firestore successfully');
         }
       } catch(e) {
         console.error('[Lowbed] Firestore write failed:', e);
