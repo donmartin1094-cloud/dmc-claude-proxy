@@ -2006,7 +2006,7 @@ const PLANTS_KEY    = 'pavescope_plants';   // kept so old localStorage key stil
 function _migrateSuppliers() {
   // If we already have the new structure, use it
   const stored = localStorage.getItem(SUPPLIERS_KEY);
-  if (stored) { try { return JSON.parse(stored); } catch(e) {} }
+  if (stored) { try { const p = JSON.parse(stored); if (Array.isArray(p)) return p; } catch(e) {} }
 
   // Migrate from old flat plantsList
   const oldFlat = JSON.parse(localStorage.getItem(PLANTS_KEY) || 'null');
