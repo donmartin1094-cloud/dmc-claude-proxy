@@ -758,7 +758,7 @@ var schedMonthOffset = 0;
 var schedViewMode = 'month'; // always monthly — no toggle on desktop
 var schedScrollToToday = true; // scroll to today on first render; false after that to preserve position
 var lookaheadActiveSupplier = null; // for 2-week lookahead supplier filterlet schedSettingsOpen = false;
-let colorPickTarget = null;
+var colorPickTarget = null;
 var schedDragSrc = null;
 var schedZoom = parseFloat(localStorage.getItem('pavescope_sched_zoom') || '1.0');
 
@@ -793,7 +793,7 @@ function changeSchedZoom(delta) {
 // ── Foreman roster (for extra blocks) ──
 const FOREMAN_KEY = 'pavescope_foremans';
 const DEFAULT_FOREMANS = ['Filipe Joaquim','Louie Medeiros'];
-let foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringify(DEFAULT_FOREMANS));
+var foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringify(DEFAULT_FOREMANS));
 function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); fbSet('foremans', foremanRoster); }
 var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second foreman
 
@@ -802,7 +802,7 @@ var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second f
 // Shape: [{ id, name, contact, notes }]
 const RENTAL_CREWS_KEY = 'pavescope_rental_crews';
 const DEFAULT_RENTAL_CREWS = [];
-let rentalCrews = JSON.parse(localStorage.getItem(RENTAL_CREWS_KEY) || '[]');
+var rentalCrews = JSON.parse(localStorage.getItem(RENTAL_CREWS_KEY) || '[]');
 function saveRentalCrews() {
   localStorage.setItem(RENTAL_CREWS_KEY, JSON.stringify(rentalCrews));
   try { if (db) fbSet('rental_crews', rentalCrews); } catch(e) {}
@@ -814,7 +814,7 @@ const DEFAULT_OPERATORS = [
   'Luis Almonte','Carlos Brito','Manuel Cruz','Jorge Dias','Antonio Ferreira',
   'Ricardo Gomes','Paulo Lopes','Sergio Matos','Fernando Neves','Miguel Oliveira'
 ];
-let operatorsList = JSON.parse(localStorage.getItem(OPERATORS_KEY) || JSON.stringify(DEFAULT_OPERATORS));
+var operatorsList = JSON.parse(localStorage.getItem(OPERATORS_KEY) || JSON.stringify(DEFAULT_OPERATORS));
 function saveOperatorsList() { localStorage.setItem(OPERATORS_KEY, JSON.stringify(operatorsList)); fbSet('operators', operatorsList); }
 
 // ── Equipment roster ──
@@ -825,9 +825,9 @@ const DEFAULT_EQUIPMENT = [
   'Paver','Roller — Steel Drum','Roller — Rubber','Milling Machine',
   'Dump Truck','Tack Truck','Water Truck','Skid Steer','Excavator','Compactor'
 ];
-let equipmentList = JSON.parse(localStorage.getItem(EQUIPMENT_KEY) || JSON.stringify(DEFAULT_EQUIPMENT));
-let equipmentCategoryList = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_KEY) || '[]');
-let equipmentCategoryMap  = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_MAP_KEY) || '{}');
+var equipmentList = JSON.parse(localStorage.getItem(EQUIPMENT_KEY) || JSON.stringify(DEFAULT_EQUIPMENT));
+var equipmentCategoryList = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_KEY) || '[]');
+var equipmentCategoryMap  = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_MAP_KEY) || '{}');
 function saveEquipmentList() {
   localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(equipmentList));
   localStorage.setItem(EQUIPMENT_CAT_KEY, JSON.stringify(equipmentCategoryList));
@@ -843,9 +843,9 @@ const DEFAULT_MATERIALS = [
   '12.5mm Surface Course','19mm Binder Course','25mm Base Course',
   'Cold Patch','Crack Filler','Reclaimed Asphalt','Stone Base'
 ];
-let materialList = JSON.parse(localStorage.getItem(MATERIAL_KEY) || JSON.stringify(DEFAULT_MATERIALS));
+var materialList = JSON.parse(localStorage.getItem(MATERIAL_KEY) || JSON.stringify(DEFAULT_MATERIALS));
 const MATERIAL_DISPLAY_KEY = 'pavescope_material_display';
-let materialDisplayNames = JSON.parse(localStorage.getItem(MATERIAL_DISPLAY_KEY) || '{}');
+var materialDisplayNames = JSON.parse(localStorage.getItem(MATERIAL_DISPLAY_KEY) || '{}');
 function saveMaterialDisplayNames() { localStorage.setItem(MATERIAL_DISPLAY_KEY, JSON.stringify(materialDisplayNames)); }
 function matDisplayName(name) {
   if (!name) return name;
@@ -860,7 +860,7 @@ function matDisplayName(name) {
 // Shape: [{ id, desc, itemNo, displayName, gyrations }]
 // materialList is kept in sync as a derived flat array — do not edit it separately.
 const MIX_TYPES_KEY = 'pavescope_mix_types';
-let mixTypesList = JSON.parse(localStorage.getItem(MIX_TYPES_KEY) || '[]');
+var mixTypesList = JSON.parse(localStorage.getItem(MIX_TYPES_KEY) || '[]');
 
 function saveMixTypesList() {
   localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(mixTypesList));
@@ -895,7 +895,7 @@ const DEFAULT_SPECIAL_ACTIONS = [
   { id:'sa5', label:'Tack Required',    color:'#10b981' },
   { id:'sa6', label:'Person on Vacation', color:'#ec4899' },
 ];
-let specialActions = JSON.parse(localStorage.getItem(SPECIAL_ACTIONS_KEY) || JSON.stringify(DEFAULT_SPECIAL_ACTIONS));
+var specialActions = JSON.parse(localStorage.getItem(SPECIAL_ACTIONS_KEY) || JSON.stringify(DEFAULT_SPECIAL_ACTIONS));
 
 // ── Tab Visibility Permissions ───────────────────────────────────────────────
 // Shape: { [role]: { [tabId]: boolean } }
@@ -942,7 +942,7 @@ function hydrateTabPerms(raw) {
   return base;
 }
 
-let tabPerms = (() => {
+var tabPerms = (() => {
   try { return hydrateTabPerms(JSON.parse(localStorage.getItem(TAB_PERMS_KEY))); }
   catch(e) { return cloneDefaultTabPerms(); }
 })();
@@ -1886,7 +1886,7 @@ function _migrateTruckPricing(raw) {
   }
   return out;
 }
-let truckPricing = _migrateTruckPricing(JSON.parse(localStorage.getItem(TRUCK_PRICING_KEY) || 'null'));
+var truckPricing = _migrateTruckPricing(JSON.parse(localStorage.getItem(TRUCK_PRICING_KEY) || 'null'));
 function saveTruckPricing() {
   localStorage.setItem(TRUCK_PRICING_KEY, JSON.stringify(truckPricing));
   try { if (db) fbSet('truck_pricing', truckPricing); } catch(e) {}
@@ -1915,7 +1915,7 @@ const AIA_REQS_KEY = 'pavescope_aia_reqs';
 const QSJ_KEY      = 'pavescope_quarterly_sales_journal';
 // AIA Req shape: { id, reqNo, dateCreated, dateWorkDone, jobNo, gcName, jobName, reqAmount, costAmount, notes, fileData, fileName, fileType, fileSizeKB }
 // QSJ entry shape: auto-generated from AIA reqs — derived, not separately stored
-let aiaReqs = JSON.parse(localStorage.getItem(AIA_REQS_KEY) || '[]');
+var aiaReqs = JSON.parse(localStorage.getItem(AIA_REQS_KEY) || '[]');
 
 // ── Bills in Progress ──────────────────────────────────────────────────────
 // Each bill: { id, jobName, jobNum, gcName, backlogJobId, schedDates[], isMultiDay,
@@ -1924,7 +1924,7 @@ let aiaReqs = JSON.parse(localStorage.getItem(AIA_REQS_KEY) || '[]');
 //   notes, createdAt, updatedAt, generatedReqId }
 const BILLS_KEY     = 'dmc_bills_progress';
 const BILLS_DAY_KEY = 'dmc_bills_last_day';
-let billsInProgress = [];
+var billsInProgress = [];
 function _billsLoad() {
   try { billsInProgress = JSON.parse(localStorage.getItem(BILLS_KEY) || '[]'); } catch(e) { billsInProgress = []; }
 }
@@ -1947,7 +1947,7 @@ function saveAiaReqs() {
 // Slip shape: { id, jobId, jobName, jobNum, reqId, date:'YYYY-MM-DD', mixType,
 //   tons, rapPct, plant, truckNum, ticketNo, photoUrl, autoScanned, notes, createdAt }
 const TAKEOFFS_KEY = 'dmc_takeoffs';
-let takeoffFolders = [];
+var takeoffFolders = [];
 function _toFoldersLoad() { try { takeoffFolders = JSON.parse(localStorage.getItem(TAKEOFFS_KEY)||'[]'); } catch(e) { takeoffFolders=[]; } }
 function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); }
 _toFoldersLoad();
@@ -1990,7 +1990,7 @@ function _normalizeMixType(mixCode, mixType) {
 
 const AA_KEY = 'pavescope_awarding_authorities';
 // Shape: [{ id, name, website, notifTitle, notifMsg }]
-let awardingAuthorities = JSON.parse(localStorage.getItem(AA_KEY) || '[]');
+var awardingAuthorities = JSON.parse(localStorage.getItem(AA_KEY) || '[]');
 function saveAwardingAuthorities() {
   localStorage.setItem(AA_KEY, JSON.stringify(awardingAuthorities));
   try { if(db) fbSet('awarding_authorities', awardingAuthorities); } catch(e) {}
@@ -2029,7 +2029,7 @@ function _migrateSuppliers() {
   return Object.keys(map).map(name => ({ name, plants: map[name] }));
 }
 
-let suppliersList = _migrateSuppliers();
+var suppliersList = _migrateSuppliers();
 
 function saveSuppliersList() {
   localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(suppliersList));
@@ -2076,7 +2076,7 @@ Object.defineProperty(window, 'plantsList', {
 function savePlantsList() { saveSuppliersList(); }
 
 // pending picker target
-let operatorPickTarget = null;
+var operatorPickTarget = null;
 
 function saveSchedData() {
   // Always save live — changes are immediately synced to Firebase for all users
@@ -5619,7 +5619,7 @@ function queueDrop(e) {
 }
 
 // ── Drag FROM queue TO schedule ──────────────────────────────────────────────
-let queueDragItemId = null;
+var queueDragItemId = null;
 
 function queueCardDragStart(e, itemId) {
   queueDragItemId = itemId;
@@ -6278,7 +6278,7 @@ function schedBlockDrop(e, toKey, toSlot, toType) {
 // ── Daily Order Generator ── (pure JS, no external libraries)
 
 const DAILY_ORDERS_KEY = 'pavescope_daily_orders';
-let dailyOrders = JSON.parse(localStorage.getItem(DAILY_ORDERS_KEY) || '[]');
+var dailyOrders = JSON.parse(localStorage.getItem(DAILY_ORDERS_KEY) || '[]');
 
 function saveDailyOrders() {
   localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(o => ({...o, blob64: undefined}))));
@@ -7485,9 +7485,9 @@ var lookaheads = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY) || '[]');
 // { id, supplier, dateRange, createdAt, imageData (base64 png) }
 
 const JOB_MIX_FORMULAS_KEY = 'pavescope_job_mix_formulas';
-let jobMixFormulas = JSON.parse(localStorage.getItem(JOB_MIX_FORMULAS_KEY) || '[]');
-let jobMixViewMode = 'cards'; // 'cards' | 'supplier'
-let jobMixSupplierCollapsed = {};
+var jobMixFormulas = JSON.parse(localStorage.getItem(JOB_MIX_FORMULAS_KEY) || '[]');
+var jobMixViewMode = 'cards'; // 'cards' | 'supplier'
+var jobMixSupplierCollapsed = {};
 
 function saveJobMixFormulas() {
   const slim = jobMixFormulas.map(j => {
@@ -9474,7 +9474,7 @@ function scheduleDrop() {}
 //  BACKLOG SYSTEM
 // ════════════════════════════════════════
 const BACKLOG_KEY = 'pavescope_backlog';
-let backlogJobs = JSON.parse(localStorage.getItem(BACKLOG_KEY) || '[]');
+var backlogJobs = JSON.parse(localStorage.getItem(BACKLOG_KEY) || '[]');
 
 // ── One-time migration: ensure every job has a jobFolder object ───────────────
 (function _initJobFolders() {
@@ -9493,10 +9493,10 @@ let backlogJobs = JSON.parse(localStorage.getItem(BACKLOG_KEY) || '[]');
   if (dirty) localStorage.setItem(BACKLOG_KEY, JSON.stringify(backlogJobs));
 })();
 
-let backlogView = 'list';
-let backlogGCCollapsed = {};
-let backlogEditId = null;
-let blContractItems = []; // working copy of items for current modal
+var backlogView = 'list';
+var backlogGCCollapsed = {};
+var backlogEditId = null;
+var blContractItems = []; // working copy of items for current modal
 
 function saveBacklog() {
   localStorage.setItem(BACKLOG_KEY, JSON.stringify(backlogJobs));
