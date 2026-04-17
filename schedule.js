@@ -7481,22 +7481,7 @@ function buildDailyOrder(dateKey, slot) {
 }
 // ── 2 Week Lookahead ──
 const LOOKAHEADS_KEY = 'pavescope_lookaheads';
-lookaheads = (function(){ try { const p = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
-// DIAG: catch non-array assignment — remove after diagnosis
-(function() {
-  var _lv = lookaheads;
-  Object.defineProperty(window, 'lookaheads', {
-    get: function() { return _lv; },
-    set: function(v) {
-      if (!Array.isArray(v)) {
-        console.error('[DIAG] lookaheads set to non-array (' + typeof v + '):', v, '\nStack:', new Error().stack);
-      }
-      _lv = v;
-    },
-    configurable: true,
-    enumerable: true
-  });
-})();
+var lookaheads = (function(){ try { const p = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 // { id, supplier, dateRange, createdAt, imageData (base64 png) }
 
 const JOB_MIX_FORMULAS_KEY = 'pavescope_job_mix_formulas';
@@ -7598,6 +7583,7 @@ function getWeekMetrics(week) {
 function getWeekColWidth(week) { return getWeekMetrics(week).colW; }
 
 function open2WeekLookahead() {
+  console.log('[DIAG] lookaheads at open:', JSON.stringify(lookaheads));
   document.getElementById('lookaheadModal')?.remove();
 
   if (!suppliersList.length) {
@@ -7725,12 +7711,14 @@ function isBlockHighlightedForSupplier(key, slot, supplier) {
  * based on how many lookaheads already exist for that supplier.
  */
 function nextLookaheadNum(supplier) {
+  if (!Array.isArray(lookaheads)) { lookaheads = []; }
   const supplierLower = supplier.toLowerCase();
   const existing = lookaheads.filter(l => l.supplier && l.supplier.toLowerCase() === supplierLower);
   return existing.length + 1;
 }
 
 async function captureLookaheadAndSave(supplier, dateRange) {
+  if (!Array.isArray(lookaheads)) { lookaheads = []; }
   // Build HTML preview of the 2-week window
   const htmlPreview = buildLookaheadHTML(supplier, dateRange);
 
@@ -9254,6 +9242,7 @@ function clearLookahead() {
 }
 
 function deleteLookahead(id) {
+  if (!Array.isArray(lookaheads)) { lookaheads = []; }
   if (!confirm('Delete this lookahead?')) return;
   lookaheads = lookaheads.filter(l => l.id !== id);
   localStorage.setItem(LOOKAHEADS_KEY, JSON.stringify(lookaheads));
