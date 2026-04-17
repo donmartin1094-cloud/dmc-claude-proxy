@@ -13923,7 +13923,6 @@ function saveAiaReqs() {
 // ── Paving Slips ──────────────────────────────────────────────────────────────
 // Slip shape: { id, jobId, jobName, jobNum, reqId, date:'YYYY-MM-DD', mixType,
 //   tons, rapPct, plant, truckNum, ticketNo, photoUrl, autoScanned, notes, createdAt }
-const SLIPS_KEY    = 'dmc_paving_slips';
 const TAKEOFFS_KEY = 'dmc_takeoffs';
 let takeoffFolders = [];
 function _toFoldersLoad() { try { takeoffFolders = JSON.parse(localStorage.getItem(TAKEOFFS_KEY)||'[]'); } catch(e) { takeoffFolders=[]; } }
