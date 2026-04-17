@@ -26817,6 +26817,24 @@ async function fbLoadAll() {
                 else if (key === 'bills_in_progress') { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); }
                 else if (key === 'paving_slips')      { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
                 else if (key === 'sched_queue')  { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
+                else if (key === 'daily_orders') {
+                  if (Array.isArray(val)) {
+                    var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
+                    var incomingIds = new Set(val.map(function(o){ return o.id; }));
+                    var lastDeleteTime = parseInt(localStorage.getItem('_doLastDelete') || '0');
+                    var merged = val.filter(function(o) {
+                      if (localIds.has(o.id)) return true;
+                      var createdAt = parseInt(o.id) || 0;
+                      return createdAt > lastDeleteTime;
+                    });
+                    dailyOrders.forEach(function(o) {
+                      if (!incomingIds.has(o.id)) merged.push(o);
+                    });
+                    dailyOrders = merged;
+                    localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })));
+                    if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
+                  }
+                }
         else if (key === 'plants')      { if (Array.isArray(val)) { const _supMap = {}; val.forEach(function(p) { const str = typeof p === 'string' ? p : p.name; const parts = str.split('—').map(function(s){ return s.trim(); }); const sup = parts[0] || str; const loc = parts.slice(1).join('—').trim(); if (!_supMap[sup]) _supMap[sup] = []; if (loc && !_supMap[sup].includes(loc)) _supMap[sup].push(loc); }); suppliersList = Object.keys(_supMap).map(function(name){ return { name: name, plants: _supMap[name] }; }); } plantsList = val; }
         else if (key === 'holidays')    { holidays = new Set(Array.isArray(val) ? val : []); localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays])); }
         else if (key === 'backlog')    { backlogJobs = val; localStorage.setItem(BACKLOG_KEY, JSON.stringify(val)); }

@@ -737,7 +737,7 @@ function rainOutBlock(key, slot) {
 
 
 const HOLIDAYS_KEY = 'pavescope_holidays';
-var holidays = new Set(JSON.parse(localStorage.getItem(HOLIDAYS_KEY) || '[]'));
+var holidays = new Set((function(){ try { const p = JSON.parse(localStorage.getItem(HOLIDAYS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })());
 function saveHolidays() {
   localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays]));
   fbSet('holidays', [...holidays]);
@@ -802,7 +802,7 @@ var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second f
 // Shape: [{ id, name, contact, notes }]
 const RENTAL_CREWS_KEY = 'pavescope_rental_crews';
 const DEFAULT_RENTAL_CREWS = [];
-var rentalCrews = JSON.parse(localStorage.getItem(RENTAL_CREWS_KEY) || '[]');
+var rentalCrews = (function(){ try { const p = JSON.parse(localStorage.getItem(RENTAL_CREWS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 function saveRentalCrews() {
   localStorage.setItem(RENTAL_CREWS_KEY, JSON.stringify(rentalCrews));
   try { if (db) fbSet('rental_crews', rentalCrews); } catch(e) {}
@@ -826,7 +826,7 @@ const DEFAULT_EQUIPMENT = [
   'Dump Truck','Tack Truck','Water Truck','Skid Steer','Excavator','Compactor'
 ];
 var equipmentList = JSON.parse(localStorage.getItem(EQUIPMENT_KEY) || JSON.stringify(DEFAULT_EQUIPMENT));
-var equipmentCategoryList = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_KEY) || '[]');
+var equipmentCategoryList = (function(){ try { const p = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 var equipmentCategoryMap  = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_MAP_KEY) || '{}');
 function saveEquipmentList() {
   localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(equipmentList));
@@ -860,7 +860,7 @@ function matDisplayName(name) {
 // Shape: [{ id, desc, itemNo, displayName, gyrations }]
 // materialList is kept in sync as a derived flat array — do not edit it separately.
 const MIX_TYPES_KEY = 'pavescope_mix_types';
-var mixTypesList = JSON.parse(localStorage.getItem(MIX_TYPES_KEY) || '[]');
+var mixTypesList = (function(){ try { const p = JSON.parse(localStorage.getItem(MIX_TYPES_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 
 function saveMixTypesList() {
   localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(mixTypesList));
@@ -1886,7 +1886,7 @@ function _migrateTruckPricing(raw) {
   }
   return out;
 }
-var truckPricing = _migrateTruckPricing(JSON.parse(localStorage.getItem(TRUCK_PRICING_KEY) || 'null'));
+var truckPricing = _migrateTruckPricing((function(){ try { return JSON.parse(localStorage.getItem(TRUCK_PRICING_KEY)); } catch(e) { return null; } })());
 function saveTruckPricing() {
   localStorage.setItem(TRUCK_PRICING_KEY, JSON.stringify(truckPricing));
   try { if (db) fbSet('truck_pricing', truckPricing); } catch(e) {}
@@ -1915,7 +1915,7 @@ const AIA_REQS_KEY = 'pavescope_aia_reqs';
 const QSJ_KEY      = 'pavescope_quarterly_sales_journal';
 // AIA Req shape: { id, reqNo, dateCreated, dateWorkDone, jobNo, gcName, jobName, reqAmount, costAmount, notes, fileData, fileName, fileType, fileSizeKB }
 // QSJ entry shape: auto-generated from AIA reqs — derived, not separately stored
-var aiaReqs = JSON.parse(localStorage.getItem(AIA_REQS_KEY) || '[]');
+var aiaReqs = (function(){ try { const p = JSON.parse(localStorage.getItem(AIA_REQS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 
 // ── Bills in Progress ──────────────────────────────────────────────────────
 // Each bill: { id, jobName, jobNum, gcName, backlogJobId, schedDates[], isMultiDay,
@@ -1990,7 +1990,7 @@ function _normalizeMixType(mixCode, mixType) {
 
 const AA_KEY = 'pavescope_awarding_authorities';
 // Shape: [{ id, name, website, notifTitle, notifMsg }]
-var awardingAuthorities = JSON.parse(localStorage.getItem(AA_KEY) || '[]');
+var awardingAuthorities = (function(){ try { const p = JSON.parse(localStorage.getItem(AA_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 function saveAwardingAuthorities() {
   localStorage.setItem(AA_KEY, JSON.stringify(awardingAuthorities));
   try { if(db) fbSet('awarding_authorities', awardingAuthorities); } catch(e) {}
@@ -5390,7 +5390,7 @@ function scheduleDragEnd() {}
 const SCHED_QUEUE_KEY = 'pavescope_sched_queue';
 // Queue item shape: { id, addedAt, jobName, jobNum, blockData }
 // blockData = full serialized block (type + fields) so nothing is lost
-var schedQueue = JSON.parse(localStorage.getItem(SCHED_QUEUE_KEY) || '[]');
+var schedQueue = (function(){ try { const p = JSON.parse(localStorage.getItem(SCHED_QUEUE_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 function saveSchedQueue() { localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(schedQueue)); try { if(db) fbSet('sched_queue', schedQueue); } catch(e){} }
 
 // ── Equipment Movement Log ─────────────────────────────────────────────────────
@@ -6278,7 +6278,7 @@ function schedBlockDrop(e, toKey, toSlot, toType) {
 // ── Daily Order Generator ── (pure JS, no external libraries)
 
 const DAILY_ORDERS_KEY = 'pavescope_daily_orders';
-var dailyOrders = JSON.parse(localStorage.getItem(DAILY_ORDERS_KEY) || '[]');
+var dailyOrders = (function(){ try { const p = JSON.parse(localStorage.getItem(DAILY_ORDERS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 
 function saveDailyOrders() {
   localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(o => ({...o, blob64: undefined}))));
@@ -7481,11 +7481,11 @@ function buildDailyOrder(dateKey, slot) {
 }
 // ── 2 Week Lookahead ──
 const LOOKAHEADS_KEY = 'pavescope_lookaheads';
-var lookaheads = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY) || '[]');
+var lookaheads = (function(){ try { const p = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 // { id, supplier, dateRange, createdAt, imageData (base64 png) }
 
 const JOB_MIX_FORMULAS_KEY = 'pavescope_job_mix_formulas';
-var jobMixFormulas = JSON.parse(localStorage.getItem(JOB_MIX_FORMULAS_KEY) || '[]');
+var jobMixFormulas = (function(){ try { const p = JSON.parse(localStorage.getItem(JOB_MIX_FORMULAS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 var jobMixViewMode = 'cards'; // 'cards' | 'supplier'
 var jobMixSupplierCollapsed = {};
 
@@ -9474,7 +9474,7 @@ function scheduleDrop() {}
 //  BACKLOG SYSTEM
 // ════════════════════════════════════════
 const BACKLOG_KEY = 'pavescope_backlog';
-var backlogJobs = JSON.parse(localStorage.getItem(BACKLOG_KEY) || '[]');
+var backlogJobs = (function(){ try { const p = JSON.parse(localStorage.getItem(BACKLOG_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 
 // ── One-time migration: ensure every job has a jobFolder object ───────────────
 (function _initJobFolders() {
