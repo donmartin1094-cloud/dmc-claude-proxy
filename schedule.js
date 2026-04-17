@@ -7583,6 +7583,7 @@ function getWeekMetrics(week) {
 function getWeekColWidth(week) { return getWeekMetrics(week).colW; }
 
 function open2WeekLookahead() {
+  console.log('[DIAG] suppliersList:', JSON.stringify(suppliersList, null, 2));
   document.getElementById('lookaheadModal')?.remove();
 
   if (!suppliersList.length) {
