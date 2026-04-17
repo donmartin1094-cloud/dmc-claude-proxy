@@ -127,8 +127,8 @@ function removeDayNoteSA(key, saId) {
 }
 
 // ── Day-note drag (moves the whole yellow bar + its data between days) ────────
-let _dnDragSrc = null;
-let _dnDragGhost = null;
+var _dnDragSrc = null;
+var _dnDragGhost = null;
 
 function createDayNoteDragGhost(fromKey) {
   const dn = schedData[fromKey] || {};
@@ -194,8 +194,8 @@ function schedDayNoteDragEnd(e) {
 }
 
 // Press-and-hold on day note: short press = open SA menu, hold = drag
-let _dnPressTimer = null;
-let _dnPressMoved = false;
+var _dnPressTimer = null;
+var _dnPressMoved = false;
 function dayNotePressStart(e, key, el) {
   // If clicking the + Action button, let it handle itself
   if (e.target.closest('.sa-action-btn') || e.target.closest('.sched-day-note-sa-chip')) return;
@@ -479,7 +479,7 @@ function openMobBlockDetail(key, slot) {
 }
 
 // ── Mobile calendar: tap / long-press / move-mode logic ─────────────────────
-let _mobMoveState = null; // null | { key, slot }
+var _mobMoveState = null; // null | { key, slot }
 
 function _mobCalCrewTap(key, slot) {
   // If in move-mode and tapping a blank target → execute the move
@@ -5508,8 +5508,8 @@ function removeFromQueue(id) {
 }
 
 // ── Queue mini-card tooltip ───────────────────────────────────────────────────
-let _qmcTooltipEl = null;
-let _qmcTooltipHide = null;
+var _qmcTooltipEl = null;
+var _qmcTooltipHide = null;
 
 function showQueueMiniTooltip(e, itemId) {
   clearTimeout(_qmcTooltipHide);
@@ -5691,7 +5691,7 @@ clearBlockData = function(key, slot) {
     }
   }
 };
-let _suppressQueuePrompt = false;
+var _suppressQueuePrompt = false;
 
 function showQueueSuggestion(queueItem, targetKey, targetSlot) {
   document.getElementById('queueSuggestModal')?.remove();
@@ -8051,8 +8051,8 @@ function buildLookaheadHTML(supplier, dateRange) {
 //  TRUCKING MODAL
 // ════════════════════════════════════════
 
-let _truckingKey = null, _truckingSlot = null;
-let _truckingRows = { dmc:[], broker:[], supplier:[] };
+var _truckingKey = null, _truckingSlot = null;
+var _truckingRows = { dmc:[], broker:[], supplier:[] };
 
 function parseTruckingData(key, slot) {
   let fields;
@@ -8206,7 +8206,7 @@ function closeTruckingModal() {
 }
 
 // ── Trucking Tooltip ──
-let _truckTipTimer = null;
+var _truckTipTimer = null;
 
 function showTruckingTooltip(e, key, slot) {
   clearTimeout(_truckTipTimer);
@@ -8342,12 +8342,12 @@ function showReportsPreview(title, content, downloadFn, closeFn, isIframe, isPdf
 
 
 // ── Reports search ──────────────────────────────────────────────────────────
-let _rSearchKbdIdx = -1;
+var _rSearchKbdIdx = -1;
 
 
 
 // ── Sidebar reports search ───────────────────────────────────────────────────
-let _rSidebarKbdIdx = -1;
+var _rSidebarKbdIdx = -1;
 
 // ── Type prefixes the user can type to filter by report type ─────────────────
 const REPORT_TYPE_PREFIXES = [
@@ -8380,7 +8380,7 @@ function detectTypePrefix(q) {
 // Type prefixes narrow the result type. General query shows compiled cards.
 // ══════════════════════════════════════════════════════════════════════════════
 
-let _gSidebarKbdIdx = -1;
+var _gSidebarKbdIdx = -1;
 
 // ── Type prefix map ───────────────────────────────────────────────────────────
 const GLOBAL_TYPE_PREFIXES = [
