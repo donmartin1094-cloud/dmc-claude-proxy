@@ -9,14 +9,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DMC Ops">
 <title>DMC Daily Operations</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -38120,44 +38120,46 @@ function doLogin() {
   })();
 }
 
-// ── Auto-login if session exists ──
-const savedUser = localStorage.getItem('dmc_u');
-if (savedUser) {
-  // Check if savedUser is valid — either in hardcoded USERS or in localStorage accounts
-  const storedAccounts = (() => { try { const s = localStorage.getItem(ACCOUNTS_KEY); return s ? JSON.parse(s) : null; } catch(e){ return null; } })();
-  const knownUser = (storedAccounts && (
-    storedAccounts.find(a => a.username === savedUser) ||
-    storedAccounts.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase())
-  )) || USERS[savedUser] || DEFAULT_TEAM_ACCOUNTS.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase());
-  if (knownUser) {
-    initApp(savedUser);
-  } else {
-    // Unknown user in localStorage — try Firebase before giving up
-    (async () => {
-      try {
-        if (typeof firebase !== 'undefined') {
-          if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-          const tempDb = firebase.firestore();
-          const doc = await tempDb.collection('app_data').doc('accounts').get();
-          if (doc.exists && doc.data().data) {
-            const fbAccounts = JSON.parse(doc.data().data);
-            localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(fbAccounts));
-            if (fbAccounts.find(a => a.username === savedUser)) {
-              saveAccounts(fbAccounts);
-              initApp(savedUser);
-              return;
+// ── Auto-login if session exists (runs after deferred CDN scripts are ready) ──
+document.addEventListener('DOMContentLoaded', function() {
+  const savedUser = localStorage.getItem('dmc_u');
+  if (savedUser) {
+    // Check if savedUser is valid — either in hardcoded USERS or in localStorage accounts
+    const storedAccounts = (() => { try { const s = localStorage.getItem(ACCOUNTS_KEY); return s ? JSON.parse(s) : null; } catch(e){ return null; } })();
+    const knownUser = (storedAccounts && (
+      storedAccounts.find(a => a.username === savedUser) ||
+      storedAccounts.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase())
+    )) || USERS[savedUser] || DEFAULT_TEAM_ACCOUNTS.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase());
+    if (knownUser) {
+      initApp(savedUser);
+    } else {
+      // Unknown user in localStorage — try Firebase before giving up
+      (async () => {
+        try {
+          if (typeof firebase !== 'undefined') {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            const tempDb = firebase.firestore();
+            const doc = await tempDb.collection('app_data').doc('accounts').get();
+            if (doc.exists && doc.data().data) {
+              const fbAccounts = JSON.parse(doc.data().data);
+              localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(fbAccounts));
+              if (fbAccounts.find(a => a.username === savedUser)) {
+                saveAccounts(fbAccounts);
+                initApp(savedUser);
+                return;
+              }
             }
           }
-        }
-      } catch(e) { /* fall through */ }
-      // Genuinely unknown — show login
-      localStorage.removeItem('dmc_u');
-      setTimeout(() => document.getElementById('loginUser').focus(), 100);
-    })();i 
+        } catch(e) { /* fall through */ }
+        // Genuinely unknown — show login
+        localStorage.removeItem('dmc_u');
+        setTimeout(() => document.getElementById('loginUser').focus(), 100);
+      })();
+    }
+  } else {
+    setTimeout(() => document.getElementById('loginUser').focus(), 100);
   }
-} else {
-  setTimeout(() => document.getElementById('loginUser').focus(), 100);
-}
+});
 
 // ════════════════════════════════════════
 //  THEME SYSTEM
