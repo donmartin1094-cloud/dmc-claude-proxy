@@ -3040,23 +3040,6 @@
   </div>
 </div><!-- /appWrap -->
 
-<script>
-// DIAG: watch lookaheads for non-array assignment — remove after diagnosis
-(function() {
-  var _lv = [];
-  Object.defineProperty(window, 'lookaheads', {
-    get: function() { return _lv; },
-    set: function(v) {
-      if (!Array.isArray(v)) {
-        console.error('[DIAG] lookaheads set to non-array (' + typeof v + '):', v, '\nStack:', new Error().stack);
-      }
-      _lv = v;
-    },
-    configurable: false,
-    enumerable: true
-  });
-})();
-</script>
 <script src="/schedule.js"></script>
 <script src="/slips.js"></script>
 <script>

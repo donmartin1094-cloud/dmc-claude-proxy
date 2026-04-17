@@ -7481,7 +7481,22 @@ function buildDailyOrder(dateKey, slot) {
 }
 // ── 2 Week Lookahead ──
 const LOOKAHEADS_KEY = 'pavescope_lookaheads';
-var lookaheads = (function(){ try { const p = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+lookaheads = (function(){ try { const p = JSON.parse(localStorage.getItem(LOOKAHEADS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+// DIAG: catch non-array assignment — remove after diagnosis
+(function() {
+  var _lv = lookaheads;
+  Object.defineProperty(window, 'lookaheads', {
+    get: function() { return _lv; },
+    set: function(v) {
+      if (!Array.isArray(v)) {
+        console.error('[DIAG] lookaheads set to non-array (' + typeof v + '):', v, '\nStack:', new Error().stack);
+      }
+      _lv = v;
+    },
+    configurable: true,
+    enumerable: true
+  });
+})();
 // { id, supplier, dateRange, createdAt, imageData (base64 png) }
 
 const JOB_MIX_FORMULAS_KEY = 'pavescope_job_mix_formulas';
