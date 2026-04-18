@@ -3412,3 +3412,6 @@ function _ccConfirmAltLocation(blockIdx, dateKey, sessionKey) {
   pushNotif('info', 'Report Drafted', 'Foreman\'s Report for '+block.foreman+' at '+loc+' — please fill in production details.');
 
   setTimeout(function() { openForemanReportForm(report.id); }, 400);
+
+  _ccCheckAllDone(ov, sessionKey);
+}
