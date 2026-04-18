@@ -3186,7 +3186,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           <div style={{display:'flex',flexWrap:'wrap',minHeight:'calc(100vh - 120px)',background:'var(--asphalt)'}}>
 
             {/* ── LEFT COLUMN: GPS Map + Device List ── */}
-            <div style={{flex: (isAdminUser || isNightmare57 || hdMobile) ? '1 1 100%' : isATow ? '0 0 50%' : isDesktopUser ? '1 1 65%' : '1 1 54%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
+            <div style={{flex: '1 1 100%', minWidth:'300px',borderRight:'1px solid var(--asphalt-light)',overflowY:'auto',order:1}}>
 
               {/* ── Equipment GPS Map + List ── */}
               <div style={{background:'var(--asphalt-mid)',height:'100%'}}>
