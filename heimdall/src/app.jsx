@@ -312,7 +312,7 @@ function EquipmentMap({ devices, getDeviceName, getDeviceEquipNum, getDeviceStat
       maxZoom: 19
     }).addTo(map);
     leafletRef.current = map;
-    setTimeout(() => map.invalidateSize(), 0);
+    requestAnimationFrame(() => requestAnimationFrame(() => map.invalidateSize()));
     return () => { map.remove(); leafletRef.current = null; };
   }, []);
 
