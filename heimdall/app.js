@@ -254,7 +254,9 @@ function EquipmentMap({ devices, getDeviceName, getDeviceEquipNum, getDeviceStat
       zoomControl: true,
       attributionControl: false
     });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "\xA9 OpenStreetMap contributors \xA9 CARTO",
+      subdomains: "abcd",
       maxZoom: 19
     }).addTo(map);
     leafletRef.current = map;
