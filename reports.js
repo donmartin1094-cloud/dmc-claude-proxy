@@ -1126,6 +1126,7 @@ function _doDeleteSelected() {
   var cv = document.getElementById('_doCardView');
   if (cv) { cv.innerHTML = ''; _renderDailyOrderCards(cv); }
   else renderReports();
+}
 
 function _doToggleExpand(fKey) {
   var area = document.getElementById(fKey + '_area');
