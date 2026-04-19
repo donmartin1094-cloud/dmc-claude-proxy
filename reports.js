@@ -1122,6 +1122,7 @@ function _doDeleteSelected() {
   if (!confirm('Delete ' + ids.length + ' selected report(s)? This cannot be undone.')) return;
   dailyOrders = dailyOrders.filter(function(o){ return ids.indexOf(o.id) === -1; });
   localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(function(o){ return Object.assign({},o,{blob64:undefined}); })));
+  _checkLocalStorageSize();
   try { if (typeof fbSet === 'function') fbSet('daily_orders', dailyOrders.map(function(o){ return Object.assign({},o,{blob64:undefined}); })); } catch(e) {}
   var cv = document.getElementById('_doCardView');
   if (cv) { cv.innerHTML = ''; _renderDailyOrderCards(cv); }
@@ -1773,6 +1774,7 @@ function saveQCReports() {
     return rest;
   });
   localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(slim));
+  _checkLocalStorageSize();
   try { if (db) fbSet('qc_reports', slim); } catch(e) { _logFbError('saveQCReports', e); }
 }
 
@@ -2215,6 +2217,7 @@ var _frSortBy = 'date'; // 'date' | 'foreman'
 
 function saveForemanReports() {
   localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(foremanReports));
+  _checkLocalStorageSize();
   try { if (db) fbSet('foreman_reports', foremanReports); } catch(e) {}
 }
 
@@ -2752,6 +2755,7 @@ var certifiedReports = JSON.parse(localStorage.getItem(CERTIFIED_REPORTS_KEY) ||
 
 function saveCertifiedReports() {
   localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports));
+  _checkLocalStorageSize();
   try { if (db) fbSet('certifiedReports', certifiedReports); } catch(e) {}
 }
 
@@ -2824,6 +2828,7 @@ function _certNotifyDana(report) {
   var danaPending = JSON.parse(localStorage.getItem('dmc_dana_certif_pending') || '[]');
   danaPending.push({ reportId: report.id, projectName: report.projectName, weekEnding: report.weekEnding, notifiedAt: new Date().toISOString() });
   localStorage.setItem('dmc_dana_certif_pending', JSON.stringify(danaPending));
+  _checkLocalStorageSize();
 }
 
 // Build utilization data from foreman reports for a given job + week
@@ -3119,9 +3124,11 @@ function deleteDailyOrder(id) {
   dailyOrders = dailyOrders.filter(function(o){ return o.id !== id; });
   // Record delete time to prevent onSnapshot restoration
   localStorage.setItem('_doLastDelete', Date.now().toString());
+  _checkLocalStorageSize();
   localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(
     dailyOrders.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })
   ));
+  _checkLocalStorageSize();
   try {
     if (db) fbSet('daily_orders', dailyOrders.map(function(o){ return Object.assign({}, o, {blob64: undefined}); }));
   } catch(e) {}

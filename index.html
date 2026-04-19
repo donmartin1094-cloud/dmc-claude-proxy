@@ -3045,6 +3045,21 @@
 <script src="/reports.js"></script>
 <script src="/mixslip-scanner.js"></script>
 <script>
+function _checkLocalStorageSize() {
+  try {
+    var total = 0;
+    for (var key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        total += (localStorage[key].length + key.length) * 2;
+      }
+    }
+    if (total > 4 * 1024 * 1024) {
+      console.warn('[localStorage] Usage exceeds 4MB:', (total / 1024 / 1024).toFixed(2) + 'MB');
+    }
+    return total;
+  } catch(e) { return 0; }
+}
+
 // Global crash reporter for production troubleshooting.
 function showRuntimeErrorOverlay(title, detail) {
   try {
@@ -4489,7 +4504,7 @@ function _getJobsList() { return jobs; }
 let notifications = JSON.parse(localStorage.getItem('pavescope_notifs') || '[]');
 // Each notif: { id, type, title, message, time, read, jobId }
 
-function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); }
+function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); _checkLocalStorageSize(); }
 
 function pushNotif(type, title, message, jobId, targetUser) {
   const notif = {
@@ -4631,6 +4646,7 @@ function saveJobs() {
   localStorage.setItem('pavescope_v3', JSON.stringify(
     jobs.map(j => ({ ...j, files: j.files.map(f => ({ name: f.name, size: f.size })), fileObjects: undefined }))
   ));
+  _checkLocalStorageSize();
   // Also push to Firebase if connected
   if (typeof db !== 'undefined' && db) {
     jobs.forEach(j => saveJobToFirebase(j));
@@ -4851,6 +4867,7 @@ function switchTab(tab) {
           var fresh = JSON.parse(doc.data().data);
           backlogJobs = fresh;
           localStorage.setItem(BACKLOG_KEY, JSON.stringify(fresh));
+          _checkLocalStorageSize();
           if (window.activeTab === 'backlog') renderBacklog();
         }
       }).catch(function() {});
@@ -5077,6 +5094,7 @@ function saveHomePrefs(prefs) {
   // Stamp a timestamp so cross-device sync knows which layout is newest
   if (prefs.positions) prefs.positionsUpdatedAt = Date.now();
   localStorage.setItem(HOME_PREFS_KEY, JSON.stringify(prefs));
+  _checkLocalStorageSize();
   try { fbSet('home_prefs', prefs); } catch(e) {}
 }
 
@@ -5106,6 +5124,7 @@ async function _loadHomePrefsFromCloud() {
       merged.positionsUpdatedAt = remoteTs;
     }
     localStorage.setItem(HOME_PREFS_KEY, JSON.stringify(merged));
+    _checkLocalStorageSize();
     const hv = document.getElementById('homeView');
     if (hv && hv.style.display !== 'none') renderHomeView(hv);
   } catch(e) {}
@@ -5810,6 +5829,7 @@ function _homeDJDaySave(dateKey) {
   try { dailyHours = JSON.parse(localStorage.getItem('dmc_dj_daily_hours') || '{}'); } catch(e) {}
   if (val === 0) delete dailyHours[dateKey]; else dailyHours[dateKey] = val;
   localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(dailyHours));
+  _checkLocalStorageSize();
   try { fbSet('dmc_dj_daily_hours', dailyHours); } catch(e) {}
   _homeDJDayEditing = null;
   _homeDJHoursRerender();
@@ -6211,6 +6231,7 @@ function _equipFireAlert(eq, from, to) {
   _equipAlerts.unshift(alert);
   if (_equipAlerts.length > 60) _equipAlerts = _equipAlerts.slice(0, 60);
   try { localStorage.setItem(EQUIP_ALERTS_KEY, JSON.stringify(_equipAlerts)); } catch(e) {}
+  _checkLocalStorageSize();
   _equipShowToast(alert);
   // Update the notifications panel if DJ's home is active
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
@@ -6267,6 +6288,7 @@ function _equipShowToast(alert) {
       // Mark read + dismiss
       _equipAlerts.forEach(function(a){ if (a.id === alert.id) a.read = true; });
       try { localStorage.setItem(EQUIP_ALERTS_KEY, JSON.stringify(_equipAlerts)); } catch(err) {}
+      _checkLocalStorageSize();
       el.remove();
     }
   };
@@ -6344,12 +6366,14 @@ function _homeEquipNotifSectionHtml() {
 function _equipMarkRead(alertId) {
   _equipAlerts.forEach(function(a){ if (a.id === alertId) a.read = true; });
   try { localStorage.setItem(EQUIP_ALERTS_KEY, JSON.stringify(_equipAlerts)); } catch(e) {}
+  _checkLocalStorageSize();
   _homeFleetRerender();
 }
 
 function _equipClearAlerts() {
   _equipAlerts = [];
   try { localStorage.setItem(EQUIP_ALERTS_KEY, '[]'); } catch(e) {}
+  _checkLocalStorageSize();
   _homeFleetRerender();
 }
 
@@ -7185,6 +7209,7 @@ let jpFolders = (function() {
 })();
 function saveJpFolders() {
   localStorage.setItem(JP_FOLDERS_KEY, JSON.stringify(jpFolders));
+  _checkLocalStorageSize();
 }
 
 // Compress image to ≤800px wide, quality 0.72, returns base64 data URL
@@ -7238,6 +7263,7 @@ async function _loadJobPhotosFromCloud() {
     remote.forEach(function(p) { byId[p.id] = p; });
     jobPhotos = Object.values(byId).sort(function(a,b){ return (b.uploadedAt||0)-(a.uploadedAt||0); }).slice(0, 500);
     localStorage.setItem(JOB_PHOTOS_KEY, JSON.stringify(jobPhotos));
+    _checkLocalStorageSize();
     var hv = document.getElementById('homeView');
     if (hv && hv.style.display !== 'none') { try { renderHomeView(hv); } catch(e) {} }
   } catch(e) {}
@@ -7245,6 +7271,7 @@ async function _loadJobPhotosFromCloud() {
 
 function saveJobPhotos() {
   localStorage.setItem(JOB_PHOTOS_KEY, JSON.stringify(jobPhotos));
+  _checkLocalStorageSize();
 }
 
 function widgetJobPhotos() {
@@ -7699,6 +7726,7 @@ var stickyNotes = JSON.parse(localStorage.getItem(STICKY_NOTES_KEY) || '[]');
 
 function saveStickyNotes() {
   localStorage.setItem(STICKY_NOTES_KEY, JSON.stringify(stickyNotes));
+  _checkLocalStorageSize();
 }
 
 function _stickyPushToCloud(note) {
@@ -7993,6 +8021,7 @@ async function _fetchMiscPhotos(btn) {
       };
     });
     localStorage.setItem('hd_fi_media', JSON.stringify(converted));
+    _checkLocalStorageSize();
     // Re-render home widgets
     if (typeof buildHome === 'function') buildHome();
     else {
@@ -8150,7 +8179,7 @@ function saveHomeCustomize() {
 function shouldShowWelcome() {
   return !localStorage.getItem('dmc_welcomed');
 }
-function markWelcomed() { localStorage.setItem('dmc_welcomed', '1'); }
+function markWelcomed() { localStorage.setItem('dmc_welcomed', '1'); _checkLocalStorageSize(); }
 
 
 var _bidCompletedToggle = 'wonlost'; // 'wonlost' | 'awarded'
@@ -8698,6 +8727,7 @@ loadPricingTabs();
 
 function savePricingTabs() {
   try { localStorage.setItem(PRICING_TABS_KEY, JSON.stringify(pricingTabs)); } catch(e) {}
+  _checkLocalStorageSize();
 }
 
 function switchPricingTab(idx) {
@@ -10256,6 +10286,7 @@ function saveKnownGC(name) {
   if (name && !knownGCs.includes(name)) {
     knownGCs.unshift(name);
     localStorage.setItem('pavescope_gcs', JSON.stringify(knownGCs));
+    _checkLocalStorageSize();
     fbSet('gcs', knownGCs);
   }
 }
@@ -13093,6 +13124,7 @@ function saveGCProfile(gc, profile) {
   const all = getAllGCProfiles();
   all[gc] = profile;
   localStorage.setItem(GC_PROFILES_KEY, JSON.stringify(all));
+  _checkLocalStorageSize();
   fbSet('gc_profiles', all);
 }
 
@@ -13839,6 +13871,7 @@ function saveInvoiceList() {
     return { ...inv, attachments: slimAtts };
   });
   localStorage.setItem(INVOICES_KEY, JSON.stringify(slimList));
+  _checkLocalStorageSize();
   try {
     if (db) fbSet('invoices', slimList);
   } catch(e) {
@@ -13912,13 +13945,16 @@ function seedDemoInvoices() {
   // Merge with any real data (demo goes to end)
   invoiceList = [...invoiceList.filter(i => !i.isDemo), ...demo];
   localStorage.setItem(INVOICES_KEY, JSON.stringify(invoiceList));
+  _checkLocalStorageSize();
   localStorage.setItem(SEED_KEY, '1');
+  _checkLocalStorageSize();
   console.log('✅ Demo invoices seeded:', demo.length);
 }
 
 function clearDemoInvoices() {
   invoiceList = invoiceList.filter(i => !i.isDemo);
   localStorage.setItem(INVOICES_KEY, JSON.stringify(invoiceList));
+  _checkLocalStorageSize();
   localStorage.removeItem('pavescope_demo_seeded_v1');
   saveInvoiceList();
   if (activeTab === 'apMix') renderInvoiceTracker();
@@ -14508,7 +14544,9 @@ function renderMail() {
       return;
     }
     // Cache mail user for outbound send — password must be set separately via localStorage.setItem('dmc_mail_pass',...)
+    _checkLocalStorageSize();
     if (acct.email) localStorage.setItem('dmc_mail_user', acct.email);
+    _checkLocalStorageSize();
     if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); }
     _mailLoadFolders();
   } catch(err) {
@@ -14632,6 +14670,7 @@ function _mailAdminSaveRow(username) {
     if (d.ok) {
       _mailAdminSetStat(username, '<span style="color:#7ecb8f;">✓ Saved</span>');
       localStorage.setItem('dmc_admin_token', r.token);
+      _checkLocalStorageSize();
     } else {
       _mailAdminSetStat(username, '<span style="color:#e57373;">✗ '+escHtml(d.error||'failed')+'</span>');
     }
@@ -17342,10 +17381,12 @@ var empWageRates = JSON.parse(localStorage.getItem(EMP_WAGES_KEY) || '{}');
 
 function saveEmployees() {
   localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
+  _checkLocalStorageSize();
   try { if (db) fbSet('employees', employees); } catch(e) {}
 }
 function saveEmpWageRates() {
   localStorage.setItem(EMP_WAGES_KEY, JSON.stringify(empWageRates));
+  _checkLocalStorageSize();
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -17875,6 +17916,7 @@ function saveFleet() {
     return e;
   });
   localStorage.setItem(FLEET_KEY, JSON.stringify(slim));
+  _checkLocalStorageSize();
   try { if (typeof fbSet === 'function') fbSet('fleet', slim); } catch(e) {}
   _fleetUpdateBadge();
 }
@@ -18304,6 +18346,7 @@ function saveForemanReport(report) {
   try { reports = JSON.parse(localStorage.getItem(FOREMAN_REPORTS_KEY) || '[]'); } catch(e) {}
   reports.unshift(report);
   localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(reports));
+  _checkLocalStorageSize();
   try { fbSet(FOREMAN_REPORTS_KEY, reports); } catch(e) {}
 
   // Update per-employee weekly hours
@@ -18316,6 +18359,7 @@ function saveForemanReport(report) {
     hoursMap[username][report.weekKey].reportIds.push(report.id);
   });
   localStorage.setItem(EMPLOYEE_HOURS_KEY, JSON.stringify(hoursMap));
+  _checkLocalStorageSize();
   try { fbSet(EMPLOYEE_HOURS_KEY, hoursMap); } catch(e) {}
 }
 
@@ -21560,6 +21604,7 @@ function _aiaSignReq() {
         var accts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
         var ai = accts.findIndex(function(a){ return a.username === user; });
         if (ai >= 0) { accts[ai].sigImage = dataUrl; localStorage.setItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts', JSON.stringify(accts)); }
+        _checkLocalStorageSize();
         _aiaState.sigImage = dataUrl;
         _aiaState.signedAt = Date.now();
         _aiaState.signedBy = user;
@@ -21590,6 +21635,7 @@ function _aiaNotarizeReq() {
         var accts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
         var ai = accts.findIndex(function(a){ return a.username === user; });
         if (ai >= 0) { accts[ai].notarySeal = dataUrl; localStorage.setItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts', JSON.stringify(accts)); }
+        _checkLocalStorageSize();
         _aiaState.notarySeal = dataUrl;
         _aiaState.notarizedAt = Date.now();
         _aiaState.status = 'complete';
@@ -23332,6 +23378,7 @@ async function fbSet(docName, value) {
     if (!db) {
       console.error('[fbSet] FAILED -- db still null after init attempt');
       localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value));
+      _checkLocalStorageSize();
       return { ok: false, error: 'db null' };
     }
     console.log('[fbSet] writing', docName, 'to Firestore');
@@ -23345,6 +23392,7 @@ async function fbSet(docName, value) {
     e._op = 'fbSet:' + docName;
     _logFbError('fbSet:' + docName, e);
     localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value));
+    _checkLocalStorageSize();
     setSyncBadge('error', e);
     return { ok: false, error: e?.message || 'Cloud sync failed' };
   }
@@ -23388,6 +23436,7 @@ async function fbLoadAll() {
         else if (key === 'tab_perms') {
           tabPerms = hydrateTabPerms(val);
           localStorage.setItem(TAB_PERMS_KEY, JSON.stringify(tabPerms));
+          _checkLocalStorageSize();
         }
         else if (key === 'operators')  { operatorsList = val; }
         else if (key === 'equipment')  { equipmentList = val; }
@@ -23395,15 +23444,22 @@ async function fbLoadAll() {
         else if (key === 'equipment_cat_map')    { equipmentCategoryMap = val; }
         else if (key === 'materials')   { materialList = val; }
                 else if (key === 'mix_types')  { mixTypesList = val; localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(val)); syncMixTypeDisplayNames(); }
+                _checkLocalStorageSize();
                 else if (key === 'invoices')    { invoiceList = val; localStorage.setItem(INVOICES_KEY, JSON.stringify(val)); }
+                _checkLocalStorageSize();
                 else if (key === 'qc_reports')  { qcReports = val; localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(val)); }
+                _checkLocalStorageSize();
                 else if (key === 'job_mix_formulas') { jobMixFormulas = Array.isArray(val) ? val : jobMixFormulas; localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(jobMixFormulas)); }
+                _checkLocalStorageSize();
                 else if (key === 'awarding_authorities') { awardingAuthorities = val; }
                 else if (key === 'truck_pricing') { truckPricing = { ...truckPricing, ...val }; }
                 else if (key === 'aia_reqs') { aiaReqs = Array.isArray(val) ? val : aiaReqs; }
                 else if (key === 'bills_in_progress') { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); }
+                _checkLocalStorageSize();
                 else if (key === 'paving_slips')      { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
+                _checkLocalStorageSize();
                 else if (key === 'sched_queue')  { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
+                _checkLocalStorageSize();
                 else if (key === 'daily_orders') {
                   if (Array.isArray(val)) {
                     var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
@@ -23419,17 +23475,24 @@ async function fbLoadAll() {
                     });
                     dailyOrders = merged;
                     localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })));
+                    _checkLocalStorageSize();
                     if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
                   }
                 }
         else if (key === 'plants')      { if (Array.isArray(val)) { const _supMap = {}; val.forEach(function(p) { const str = typeof p === 'string' ? p : p.name; const parts = str.split('—').map(function(s){ return s.trim(); }); const sup = parts[0] || str; const loc = parts.slice(1).join('—').trim(); if (!_supMap[sup]) _supMap[sup] = []; if (loc && !_supMap[sup].includes(loc)) _supMap[sup].push(loc); }); suppliersList = Object.keys(_supMap).map(function(name){ return { name: name, plants: _supMap[name] }; }); } plantsList = val; }
         else if (key === 'holidays')    { holidays = new Set(Array.isArray(val) ? val : []); localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays])); }
+        _checkLocalStorageSize();
         else if (key === 'backlog')    { backlogJobs = val; localStorage.setItem(BACKLOG_KEY, JSON.stringify(val)); }
+        _checkLocalStorageSize();
         else if (key === 'gc_profiles') { localStorage.setItem('pavescope_fb_gc_profiles', JSON.stringify(val)); }
+        _checkLocalStorageSize();
         else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val)); }
+        _checkLocalStorageSize();
         else if (key === 'gcs')        { knownGCs = val; }
         else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot(); }
+        _checkLocalStorageSize();
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
+        _checkLocalStorageSize();
       } catch(e) {}
     });
     if (Object.keys(mergedSched).length) {
@@ -23438,6 +23501,7 @@ async function fbLoadAll() {
       const localSched = JSON.parse(localStorage.getItem(SCHEDULE_KEY) || '{}');
       schedData = Object.assign({}, localSched, mergedSched);
       localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedData));
+      _checkLocalStorageSize();
     }
   } catch(e) { _logFbError('fbLoadAll', e); setSyncBadge('error', e); }
 }
@@ -23504,6 +23568,7 @@ function isAdmin() {
 async function initApp(username) {
   // Hard-coded OneStepGPS key — always available
   localStorage.setItem('HEIMDALL_API_KEY', 'mxyIjusLY5jqv9h8DFGQGwj5Sn4ehVfTgy21PgN1F2I');
+  _checkLocalStorageSize();
 
   // ── Drivers land on Heimdall: inject iframe + switch tab BEFORE appWrap shows ──
   const _isDriverRole = getCurrentRole() === 'driver' || getCurrentRole() === 'lowbed_driver';
@@ -23635,6 +23700,7 @@ async function initApp(username) {
             });
             jobPhotos = Object.values(byId).sort(function(a, b) { return (b.uploadedAt || 0) - (a.uploadedAt || 0); }).slice(0, 500);
             localStorage.setItem(JOB_PHOTOS_KEY, JSON.stringify(jobPhotos));
+            _checkLocalStorageSize();
             var hv = document.getElementById('homeView');
             if (hv && hv.style.display !== 'none') { try { renderHomeView(hv); } catch(e) {} }
           }).catch(function(e) { console.warn('job_photos initial sync error:', e.message); });
@@ -23655,11 +23721,14 @@ async function initApp(username) {
                   const acct = accounts.find(a => a.email && a.email.toLowerCase() === (user.email || '').toLowerCase());
                   const username = acct ? acct.username : (user.email || user.uid);
                   localStorage.setItem('dmc_u', username);
+                  _checkLocalStorageSize();
                 } else {
                   localStorage.setItem('dmc_u', user.email || user.uid);
+                  _checkLocalStorageSize();
                 }
               } catch(e) {
                 localStorage.setItem('dmc_u', user.email || user.uid);
+                _checkLocalStorageSize();
               }
               // If app is not initialised yet, call initApp
               if (!document.getElementById('appWrap') || document.getElementById('loginScreen').style.display !== 'none') {
@@ -23686,6 +23755,7 @@ async function initApp(username) {
                   awarded:false, ...j
                 }));
                 localStorage.setItem('pavescope_v3', JSON.stringify(jobs));
+                _checkLocalStorageSize();
               }
             }
           }).catch(e => console.warn('Jobs load error:', e.message)),
@@ -23714,6 +23784,7 @@ async function initApp(username) {
           });
           jobs = updated;
           localStorage.setItem('pavescope_v3', JSON.stringify(jobs.map(j=>({...j,files:j.files.map(f=>({name:f.name,size:f.size})),fileObjects:undefined}))));
+          _checkLocalStorageSize();
           renderSidebar();
           if (activeJobId) { const j=jobs.find(j=>j.id===activeJobId); if(j) renderJobDetail(j); }
         }
@@ -23737,45 +23808,73 @@ async function initApp(username) {
                 if (!schedEditMode) {
                   Object.assign(schedData, val);
                   localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedData));
+                  _checkLocalStorageSize();
                   if (activeTab === 'schedule') renderSchedule();
                   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
                 }
               } else if (key === 'blocktypes') { blockTypes = val; localStorage.setItem('pavescope_blocktypes', JSON.stringify(val)); if (activeTab === 'schedule') renderSchedule(); _settingsRefreshPanel('schedule'); }
+              _checkLocalStorageSize();
               else if (key === 'foremans')   { foremanRoster = val; localStorage.setItem(FOREMAN_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'operators')  { operatorsList = val; localStorage.setItem(OPERATORS_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'equipment')  { equipmentList = val; localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'equipment_categories') { equipmentCategoryList = val; localStorage.setItem(EQUIPMENT_CAT_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'equipment_cat_map')    { equipmentCategoryMap = val; localStorage.setItem(EQUIPMENT_CAT_MAP_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'materials')  { materialList = val; localStorage.setItem(MATERIAL_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'plants')     { if (Array.isArray(val)) { const _supMap = {}; val.forEach(function(p) { const str = typeof p === 'string' ? p : p.name; const parts = str.split('—').map(function(s){ return s.trim(); }); const sup = parts[0] || str; const loc = parts.slice(1).join('—').trim(); if (!_supMap[sup]) _supMap[sup] = []; if (loc && !_supMap[sup].includes(loc)) _supMap[sup].push(loc); }); suppliersList = Object.keys(_supMap).map(function(name){ return { name: name, plants: _supMap[name] }; }); } plantsList = val; _settingsRefreshPanel('plants'); }
               else if (key === 'holidays')   { holidays = new Set(Array.isArray(val) ? val : []); localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays])); if (activeTab === 'schedule') renderSchedule(); }
+              _checkLocalStorageSize();
               else if (key === 'backlog')    { backlogJobs = val; localStorage.setItem(BACKLOG_KEY, JSON.stringify(val)); if (activeTab === 'backlog') renderBacklog(); }
+              _checkLocalStorageSize();
               else if (key === 'gc_profiles') { localStorage.setItem('pavescope_fb_gc_profiles', JSON.stringify(val)); if (activeTab === 'backlog') renderBacklog(); }
+              _checkLocalStorageSize();
               else if (key === 'tab_perms') {
                 tabPerms = hydrateTabPerms(val);
                 localStorage.setItem(TAB_PERMS_KEY, JSON.stringify(tabPerms));
+                _checkLocalStorageSize();
                 applyTabPermissions();
               }
               else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val)); saveAccounts(val, { skipRemote: true }); }
+              _checkLocalStorageSize();
               else if (key === 'gcs')        { knownGCs = val; localStorage.setItem('pavescope_gcs', JSON.stringify(val)); }
+              _checkLocalStorageSize();
               else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipCheckStatusChanges(); _fleetUpdateBadge(); if (activeTab === 'equipment') { var _eqv = document.getElementById('equipmentFleetView'); if(_eqv) renderEquipmentFleet(_eqv); } }
+              _checkLocalStorageSize();
               else if (key === 'lowbed_groups') { localStorage.setItem('dmc_lowbed_groups', JSON.stringify(val)); if (activeTab === 'equipment') { var _eqv2 = document.getElementById('equipmentFleetView'); if(_eqv2) renderEquipmentFleet(_eqv2); } try { var _lbw = document.querySelector('[data-wid="lowbedmoves"]'); if (_lbw) { var _tmp = document.createElement('div'); _tmp.innerHTML = widgetLowbedMoves(); var _nb = _tmp.querySelector('.home-widget-body'); var _ob = _lbw.querySelector('.home-widget-body'); if (_nb && _ob) _ob.innerHTML = _nb.innerHTML; } } catch(e) {} }
+              _checkLocalStorageSize();
               else if (key === 'hd_equip_names') { localStorage.setItem('hd_equip_names', JSON.stringify(val)); }
+              _checkLocalStorageSize();
               else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); if (activeTab === 'reports') renderReports(); }
+              _checkLocalStorageSize();
               // ── Keys saved to Firebase but previously missing from live listener ──
               else if (key === 'invoices')         { invoiceList = val; localStorage.setItem(INVOICES_KEY, JSON.stringify(val)); if (activeTab === 'apMix') renderInvoiceTracker(); }
+              _checkLocalStorageSize();
               else if (key === 'qc_reports')       { qcReports = val; localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(val)); if (activeTab === 'reports') renderReports(); }
+              _checkLocalStorageSize();
               else if (key === 'job_mix_formulas') { jobMixFormulas = Array.isArray(val) ? val : jobMixFormulas; localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(jobMixFormulas)); if (activeTab === 'reports' || activeTab === 'reportsJobMix') renderReports(); }
+              _checkLocalStorageSize();
               else if (key === 'special_actions')  { if (Array.isArray(val) && val.length) { specialActions = val; localStorage.setItem(SPECIAL_ACTIONS_KEY, JSON.stringify(val)); } }
+              _checkLocalStorageSize();
               else if (key === 'rental_crews')     { if (Array.isArray(val)) { rentalCrews = val; localStorage.setItem(RENTAL_CREWS_KEY, JSON.stringify(val)); } }
+              _checkLocalStorageSize();
               else if (key === 'mix_types')        { mixTypesList = val; localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(val)); if (typeof syncMixTypeDisplayNames === 'function') syncMixTypeDisplayNames(); _settingsRefreshPanel('rosters'); }
+              _checkLocalStorageSize();
               else if (key === 'awarding_authorities') { awardingAuthorities = val; _settingsRefreshPanel('rosters'); }
               else if (key === 'truck_pricing')    { truckPricing = { ...truckPricing, ...val }; _settingsRefreshPanel('trucking'); }
               else if (key === 'theme')            { pendingTheme = val; applyThemeVars(val); localStorage.setItem(THEME_KEY, JSON.stringify(val)); }
+              _checkLocalStorageSize();
               else if (key === 'aia_reqs')            { aiaReqs = Array.isArray(val) ? val : aiaReqs; if (activeTab === 'apMix') renderInvoiceTracker(); }
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker(); }
+              _checkLocalStorageSize();
               else if (key === 'paving_slips')       { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {} }
+              _checkLocalStorageSize();
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val)); }
+              _checkLocalStorageSize();
               else if (key === 'daily_orders') {
                 if (Array.isArray(val)) {
                   var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
@@ -23791,6 +23890,7 @@ async function initApp(username) {
                   });
                   dailyOrders = merged;
                   localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })));
+                  _checkLocalStorageSize();
                   if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
                 }
               }
@@ -23798,6 +23898,7 @@ async function initApp(username) {
                 const _lbRole = getCurrentRole();
                 if (isAdmin() || ['lowbed_driver','rental_lowbed_driver','foreman'].includes(_lbRole)) {
                   localStorage.setItem('dmc_lowbed_plan', JSON.stringify(val));
+                  _checkLocalStorageSize();
                   try { if (typeof _homeFleetRerender === 'function') _homeFleetRerender(); } catch(e2) {}
                 }
               }
@@ -24024,6 +24125,7 @@ function _billsNewDayCheck() {
   var role = (localStorage.getItem('dmc_role') || '').toLowerCase();
   if (role !== 'admin' && role !== 'owner') {
     localStorage.setItem(BILLS_DAY_KEY, today);
+    _checkLocalStorageSize();
     return;
   }
 
@@ -24031,12 +24133,14 @@ function _billsNewDayCheck() {
   var blocks = _billsGetBlocks(yesterday);
   if (!blocks.length) {
     localStorage.setItem(BILLS_DAY_KEY, today);
+    _checkLocalStorageSize();
     return;
   }
 
   // Show verification modal
   _billsShowDayModal(yesterday, blocks, function() {
     localStorage.setItem(BILLS_DAY_KEY, today);
+    _checkLocalStorageSize();
     // Refresh home widget + AIA tab if open
     var hv = document.getElementById('homeView');
     if (hv && hv.style.display !== 'none') {
@@ -24360,6 +24464,7 @@ function _crewConfirmMark(key) {
   var cutoff = Date.now() - 172800000;
   Object.keys(s).forEach(function(k){ if (s[k] < cutoff) delete s[k]; });
   localStorage.setItem(CREW_CONFIRM_KEY, JSON.stringify(s));
+  _checkLocalStorageSize();
 }
 function _crewConfirmAlreadyDone(key) {
   if (_crewConfirmShown[key]) return true;
@@ -24481,6 +24586,7 @@ function doLogin() {
         if (doc.exists && doc.data().data) {
           accounts = JSON.parse(doc.data().data);
           localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+          _checkLocalStorageSize();
         }
       } catch(e) {
         const stored = localStorage.getItem(ACCOUNTS_KEY);
@@ -24550,6 +24656,7 @@ function doLogin() {
             }
           }
           localStorage.setItem('dmc_u', appUser);
+          _checkLocalStorageSize();
           initApp(appUser);
           firebaseAuthOk = true;
         } catch(fbErr) {
@@ -24580,6 +24687,7 @@ function doLogin() {
       if (acctMatch) {
         console.warn('Logged in via accounts fallback. Firebase Auth record may need migration.');
         localStorage.setItem('dmc_u', acctMatch.username);
+        _checkLocalStorageSize();
         // Auto-create Firebase Auth account so Firestore rules work on next login
         if (typeof firebase !== 'undefined' && firebase.auth && acctMatch.email) {
           try {
@@ -24600,6 +24708,7 @@ function doLogin() {
       if (hardcodedUser && USERS[hardcodedUser] === p) {
         console.warn('Logged in via hardcoded USERS fallback.');
         localStorage.setItem('dmc_u', hardcodedUser);
+        _checkLocalStorageSize();
         // Auto-create Firebase Auth account
         const _hwAcct = DEFAULT_TEAM_ACCOUNTS.find(a => a.username.toLowerCase() === hardcodedUser.toLowerCase());
         if (typeof firebase !== 'undefined' && firebase.auth && _hwAcct?.email) {
@@ -24614,6 +24723,7 @@ function doLogin() {
       if (hardcodedByEmail && USERS[hardcodedByEmail.username] === p) {
         console.warn('Logged in via hardcoded email fallback.');
         localStorage.setItem('dmc_u', hardcodedByEmail.username);
+        _checkLocalStorageSize();
         // Auto-create Firebase Auth account
         if (typeof firebase !== 'undefined' && firebase.auth && hardcodedByEmail.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(hardcodedByEmail.email, p).catch(() => {}); } catch(e) {}
@@ -24635,9 +24745,11 @@ function doLogin() {
         if (res.ok && data.ok && data.username) {
           console.warn('Logged in via server fallback.');
           localStorage.setItem('dmc_u', data.username);
+          _checkLocalStorageSize();
           if (Array.isArray(accounts) && data.email) {
             const hit = accounts.find(a => (a.email || '').toLowerCase() === String(data.email).toLowerCase());
             if (hit?.username) localStorage.setItem('dmc_u', hit.username);
+            _checkLocalStorageSize();
           }
           initApp(localStorage.getItem('dmc_u') || data.username);
           return;
@@ -24688,6 +24800,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (doc.exists && doc.data().data) {
               const fbAccounts = JSON.parse(doc.data().data);
               localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(fbAccounts));
+              _checkLocalStorageSize();
               if (fbAccounts.find(a => a.username === savedUser)) {
                 saveAccounts(fbAccounts);
                 initApp(savedUser);
@@ -24765,6 +24878,7 @@ function loadSavedTheme() {
 
 function saveTheme(vars) {
   localStorage.setItem(THEME_KEY, JSON.stringify(vars));
+  _checkLocalStorageSize();
   try { if (db) fbSet('theme', vars); } catch(e) {}
 }
 
@@ -25602,6 +25716,7 @@ async function refreshAccountsFromCloud() {
     const accounts = JSON.parse(doc.data().data);
     if (!Array.isArray(accounts)) return false;
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    _checkLocalStorageSize();
     await saveAccounts(accounts, { skipRemote: true });
     return true;
   } catch (e) {
@@ -26158,6 +26273,7 @@ function getAccounts() {
       if (Array.isArray(parsed)) {
         const normalized = normalizeAccountsRoster(parsed);
         localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(normalized));
+        _checkLocalStorageSize();
         return normalized;
       }
     } catch (e) {
@@ -26167,6 +26283,7 @@ function getAccounts() {
   // Bootstrap from required team roster on first use.
   const accounts = normalizeAccountsRoster(cloneDefaultTeamAccounts());
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  _checkLocalStorageSize();
   return accounts;
 }
 
@@ -26174,8 +26291,10 @@ async function saveAccounts(accounts, opts = {}) {
   const skipRemote = !!opts.skipRemote;
   const normalized = normalizeAccountsRoster(accounts);
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(normalized));
+  _checkLocalStorageSize();
   // Keep fallback Firebase cache in sync too so deleted users don't linger offline.
   localStorage.setItem('pavescope_fb_accounts', JSON.stringify(normalized));
+  _checkLocalStorageSize();
   let cloud = { ok: true };
   if (!skipRemote) cloud = await fbSet('accounts', normalized);
   // Sync back to runtime USERS and ADMIN_USERS arrays so login still works
@@ -26353,7 +26472,9 @@ function renderUserAccountsList() {
   // If cache is missing baseline users, refresh local account cache so the UI and login map stay consistent.
   if (JSON.stringify(accounts) !== JSON.stringify(accountsRaw || [])) {
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    _checkLocalStorageSize();
     localStorage.setItem('pavescope_fb_accounts', JSON.stringify(accounts));
+    _checkLocalStorageSize();
     saveAccounts(accounts, { skipRemote: true }).catch(() => {});
   }
   const currentUser = localStorage.getItem('dmc_u') || '';
@@ -26627,6 +26748,7 @@ async function saveUserAccount() {
     const loggedIn = localStorage.getItem('dmc_u') || '';
     if (loggedIn.toLowerCase() === oldUsername.toLowerCase()) {
       localStorage.setItem('dmc_u', newUsername);
+      _checkLocalStorageSize();
       document.getElementById('userBadge').textContent = '👤 ' + (displayName || newUsername);
     }
   } else {
@@ -26664,6 +26786,7 @@ async function saveUserAccount() {
   if (!cloudSave.ok) {
     await saveAccounts(accountsBefore, { skipRemote: true });
     localStorage.setItem('dmc_u', loggedInBefore);
+    _checkLocalStorageSize();
     if (userBadgeEl) userBadgeEl.textContent = userBadgeBefore;
     showUserErr('Credentials were only saved locally on this device. Cloud sync failed, so other devices cannot use them yet. ' + (cloudSave.error || ''));
     renderUserAccountsList();
@@ -28045,6 +28168,7 @@ loadSavedTheme();
   }
 
   window._xbRemap=(btn,action)=>{ _map[btn]=action; localStorage.setItem('dmc_xbox_map',JSON.stringify(_map)); };
+  _checkLocalStorageSize();
   window._xbReset=()=>{ _map=Object.assign({},DEFAULT_MAP); localStorage.removeItem('dmc_xbox_map'); document.getElementById('_xbMapper')?.remove(); _openMapper(); };
   window._openMapper = _openMapper;
 

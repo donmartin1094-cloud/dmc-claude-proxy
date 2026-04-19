@@ -25,6 +25,7 @@ function _slipsSave() {
   // Strip large photoUrl from localStorage copy (store only in Firebase / by URL ref)
   var slim = pavingSlips.map(function(s){ var o = Object.assign({}, s); if ((o.photoUrl||'').startsWith('data:')) delete o.photoUrl; return o; });
   localStorage.setItem(SLIPS_KEY, JSON.stringify(slim));
+  _checkLocalStorageSize();
   try { if (db) fbSet('paving_slips', slim); } catch(e) {}
 }
 function _laNormalizeMixTypes() {

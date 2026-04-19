@@ -740,6 +740,7 @@ const HOLIDAYS_KEY = 'pavescope_holidays';
 var holidays = new Set((function(){ try { const p = JSON.parse(localStorage.getItem(HOLIDAYS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })());
 function saveHolidays() {
   localStorage.setItem(HOLIDAYS_KEY, JSON.stringify([...holidays]));
+  _checkLocalStorageSize();
   fbSet('holidays', [...holidays]);
 }
 function toggleHoliday(key) {
@@ -775,6 +776,7 @@ function changeSchedZoom(delta) {
     schedZoom = Math.round(schedZoom * 10) / 10;
   }
   localStorage.setItem('pavescope_sched_zoom', schedZoom);
+  _checkLocalStorageSize();
 
   const inner = document.getElementById('schedScrollInner');
   if (inner) {
@@ -794,7 +796,7 @@ function changeSchedZoom(delta) {
 const FOREMAN_KEY = 'pavescope_foremans';
 const DEFAULT_FOREMANS = ['Filipe Joaquim','Louie Medeiros'];
 var foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringify(DEFAULT_FOREMANS));
-function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); fbSet('foremans', foremanRoster); }
+function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); _checkLocalStorageSize(); fbSet('foremans', foremanRoster); }
 var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second foreman
 
 
@@ -805,6 +807,7 @@ const DEFAULT_RENTAL_CREWS = [];
 var rentalCrews = (function(){ try { const p = JSON.parse(localStorage.getItem(RENTAL_CREWS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 function saveRentalCrews() {
   localStorage.setItem(RENTAL_CREWS_KEY, JSON.stringify(rentalCrews));
+  _checkLocalStorageSize();
   try { if (db) fbSet('rental_crews', rentalCrews); } catch(e) {}
 }
 
@@ -815,7 +818,7 @@ const DEFAULT_OPERATORS = [
   'Ricardo Gomes','Paulo Lopes','Sergio Matos','Fernando Neves','Miguel Oliveira'
 ];
 var operatorsList = JSON.parse(localStorage.getItem(OPERATORS_KEY) || JSON.stringify(DEFAULT_OPERATORS));
-function saveOperatorsList() { localStorage.setItem(OPERATORS_KEY, JSON.stringify(operatorsList)); fbSet('operators', operatorsList); }
+function saveOperatorsList() { localStorage.setItem(OPERATORS_KEY, JSON.stringify(operatorsList)); _checkLocalStorageSize(); fbSet('operators', operatorsList); }
 
 // ── Equipment roster ──
 const EQUIPMENT_KEY = 'pavescope_equipment';
@@ -830,8 +833,11 @@ var equipmentCategoryList = (function(){ try { const p = JSON.parse(localStorage
 var equipmentCategoryMap  = JSON.parse(localStorage.getItem(EQUIPMENT_CAT_MAP_KEY) || '{}');
 function saveEquipmentList() {
   localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(equipmentList));
+  _checkLocalStorageSize();
   localStorage.setItem(EQUIPMENT_CAT_KEY, JSON.stringify(equipmentCategoryList));
+  _checkLocalStorageSize();
   localStorage.setItem(EQUIPMENT_CAT_MAP_KEY, JSON.stringify(equipmentCategoryMap));
+  _checkLocalStorageSize();
   fbSet('equipment', equipmentList);
   fbSet('equipment_categories', equipmentCategoryList);
   fbSet('equipment_cat_map', equipmentCategoryMap);
@@ -846,7 +852,7 @@ const DEFAULT_MATERIALS = [
 var materialList = JSON.parse(localStorage.getItem(MATERIAL_KEY) || JSON.stringify(DEFAULT_MATERIALS));
 const MATERIAL_DISPLAY_KEY = 'pavescope_material_display';
 var materialDisplayNames = JSON.parse(localStorage.getItem(MATERIAL_DISPLAY_KEY) || '{}');
-function saveMaterialDisplayNames() { localStorage.setItem(MATERIAL_DISPLAY_KEY, JSON.stringify(materialDisplayNames)); }
+function saveMaterialDisplayNames() { localStorage.setItem(MATERIAL_DISPLAY_KEY, JSON.stringify(materialDisplayNames)); _checkLocalStorageSize(); }
 function matDisplayName(name) {
   if (!name) return name;
   // Direct lookup in mixTypesList by desc (most reliable)
@@ -864,6 +870,7 @@ var mixTypesList = (function(){ try { const p = JSON.parse(localStorage.getItem(
 
 function saveMixTypesList() {
   localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(mixTypesList));
+  _checkLocalStorageSize();
   try { if(db) fbSet('mix_types', mixTypesList); } catch(e){}
   // Keep materialList fully in sync with mix types (single source of truth)
   materialList = mixTypesList.map(m => m.desc).filter(Boolean);
@@ -967,6 +974,7 @@ var sidebarFolderToggles = (() => {
 
 function saveSidebarFolderToggles() {
   localStorage.setItem(SIDEBAR_FOLDER_TOGGLE_KEY, JSON.stringify(sidebarFolderToggles));
+  _checkLocalStorageSize();
 }
 
 function applySidebarFolderToggles() {
@@ -1012,6 +1020,7 @@ function toggleSidebar() {
   _sidebarCollapsed = !_sidebarCollapsed;
   document.body.classList.toggle('sidebar-collapsed', _sidebarCollapsed);
   localStorage.setItem('dmc_sidebar_collapsed', _sidebarCollapsed ? '1' : '0');
+  _checkLocalStorageSize();
   if (_sidebarCollapsed) {
     updateCollapsedNavActive(window.activeTab || 'schedule');
     updateCollNavQueueBadge();
@@ -1337,6 +1346,7 @@ function toggleSidebarFolder(folderKey, ev) {
 function saveTabPerms() {
   tabPerms = hydrateTabPerms(tabPerms);
   localStorage.setItem(TAB_PERMS_KEY, JSON.stringify(tabPerms));
+  _checkLocalStorageSize();
   try { if (db) fbSet('tab_perms', tabPerms); } catch(e) {}
 }
 function isHardcodedUser() {
@@ -1740,6 +1750,7 @@ function wxPaintAllBlocks() {
 
 function saveSpecialActions() {
   localStorage.setItem(SPECIAL_ACTIONS_KEY, JSON.stringify(specialActions));
+  _checkLocalStorageSize();
   try { if (db) fbSet('special_actions', specialActions); } catch(e) {}
 }
 // ── Special Actions on Schedule ──────────────────────────────────────────────
@@ -1852,7 +1863,7 @@ function removeSchedSpecialAction(key, slot, saId) {
 // ── Load Special Actions from Firebase ───────────────────────────────────────
 
 
-function saveMaterialList() { localStorage.setItem(MATERIAL_KEY, JSON.stringify(materialList)); fbSet('materials', materialList); }
+function saveMaterialList() { localStorage.setItem(MATERIAL_KEY, JSON.stringify(materialList)); _checkLocalStorageSize(); fbSet('materials', materialList); }
 
 // ── Awarding Authorities ──────────────────────────────────────
 
@@ -1889,6 +1900,7 @@ function _migrateTruckPricing(raw) {
 var truckPricing = _migrateTruckPricing((function(){ try { return JSON.parse(localStorage.getItem(TRUCK_PRICING_KEY)); } catch(e) { return null; } })());
 function saveTruckPricing() {
   localStorage.setItem(TRUCK_PRICING_KEY, JSON.stringify(truckPricing));
+  _checkLocalStorageSize();
   try { if (db) fbSet('truck_pricing', truckPricing); } catch(e) {}
 }
 // Lookup helpers — used by calcProjectedTrucking
@@ -1930,6 +1942,7 @@ function _billsLoad() {
 }
 function _billsSave() {
   localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress));
+  _checkLocalStorageSize();
   try { if (db) fbSet('bills_in_progress', billsInProgress); } catch(e) {}
 }
 _billsLoad();
@@ -1941,6 +1954,7 @@ function saveAiaReqs() {
     return rest;
   });
   localStorage.setItem(AIA_REQS_KEY, JSON.stringify(slim));
+  _checkLocalStorageSize();
   try { if (db) fbSet('aia_reqs', slim); } catch(e) { _logFbError('saveAiaReqs', e); }
 }
 // ── Paving Slips ──────────────────────────────────────────────────────────────
@@ -1949,7 +1963,7 @@ function saveAiaReqs() {
 const TAKEOFFS_KEY = 'dmc_takeoffs';
 var takeoffFolders = [];
 function _toFoldersLoad() { try { takeoffFolders = JSON.parse(localStorage.getItem(TAKEOFFS_KEY)||'[]'); } catch(e) { takeoffFolders=[]; } }
-function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); }
+function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); _checkLocalStorageSize(); }
 _toFoldersLoad();
 _slipsLoad();
 
@@ -1993,6 +2007,7 @@ const AA_KEY = 'pavescope_awarding_authorities';
 var awardingAuthorities = (function(){ try { const p = JSON.parse(localStorage.getItem(AA_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
 function saveAwardingAuthorities() {
   localStorage.setItem(AA_KEY, JSON.stringify(awardingAuthorities));
+  _checkLocalStorageSize();
   try { if(db) fbSet('awarding_authorities', awardingAuthorities); } catch(e) {}
 }
 
@@ -2033,8 +2048,10 @@ var suppliersList = _migrateSuppliers();
 
 function saveSuppliersList() {
   localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(suppliersList));
+  _checkLocalStorageSize();
   // Keep flat plantsList in old key so Firebase sync & any legacy reads still work
   localStorage.setItem(PLANTS_KEY, JSON.stringify(getPlantsList()));
+  _checkLocalStorageSize();
   fbSet('plants', getPlantsList());
 }
 
@@ -2081,10 +2098,12 @@ var operatorPickTarget = null;
 function saveSchedData() {
   // Always save live — changes are immediately synced to Firebase for all users
   localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedData));
+  _checkLocalStorageSize();
   fbSetSchedule();
   // Keep draft in sync
   schedDraft = JSON.parse(JSON.stringify(schedData));
   localStorage.setItem('pavescope_sched_draft', JSON.stringify(schedDraft));
+  _checkLocalStorageSize();
   // Keep DJ's home Daily Overview widget in sync
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
 }
@@ -2093,10 +2112,12 @@ function saveSchedData() {
 // Also syncs schedDraft so renderSchedule (which reads draft when in edit mode) stays current.
 function saveSchedDataDirect() {
   localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedData));
+  _checkLocalStorageSize();
   fbSetSchedule();
   // Keep draft in sync so the visual render reflects the change immediately
   schedDraft = JSON.parse(JSON.stringify(schedData));
   localStorage.setItem('pavescope_sched_draft', JSON.stringify(schedDraft));
+  _checkLocalStorageSize();
   // Keep DJ's home Daily Overview widget in sync
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
 }
@@ -2175,6 +2196,7 @@ async function confirmPublishSchedule() {
 async function doPublishSchedule() {
   // Push local schedData to Firebase
   localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedData));
+  _checkLocalStorageSize();
   fbSetSchedule();
 
   // Write presence so others know we just published
@@ -2221,6 +2243,7 @@ function fbSetSchedule() {
 
 async function fbSetDoc(docName, value) {
   if (!db) { localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value)); return; }
+  _checkLocalStorageSize();
   try {
     setSyncBadge('saving');
     const payload = JSON.stringify(value);
@@ -2228,6 +2251,7 @@ async function fbSetDoc(docName, value) {
     if (payload.length > 900000) {
       console.warn('fbSetDoc: payload too large for Firestore, localStorage only:', docName, payload.length);
       localStorage.setItem('pavescope_fb_' + docName, payload);
+      _checkLocalStorageSize();
       setSyncBadge('synced');
       return;
     }
@@ -2236,6 +2260,7 @@ async function fbSetDoc(docName, value) {
   } catch(e) {
     console.warn('fbSetDoc error:', docName, e.message || e);
     localStorage.setItem('pavescope_fb_' + docName, JSON.stringify(value));
+    _checkLocalStorageSize();
     // Only show error badge for non-size errors
     if (e.code === 'invalid-argument' || (e.message && e.message.includes('maximum'))) {
       setSyncBadge('synced'); // silently fall back — data is safe in localStorage
@@ -2244,7 +2269,7 @@ async function fbSetDoc(docName, value) {
     }
   }
 }
-function saveBlockTypes() { localStorage.setItem('pavescope_blocktypes', JSON.stringify(blockTypes)); try { if(db) fbSet('blocktypes', blockTypes); } catch(e){} }
+function saveBlockTypes() { localStorage.setItem('pavescope_blocktypes', JSON.stringify(blockTypes)); _checkLocalStorageSize(); try { if(db) fbSet('blocktypes', blockTypes); } catch(e){} }
 
 // ── Extra (additional foreman) block rendering ──
 function renderExtraBlock(key, idx, ex, isLast) {
@@ -5391,7 +5416,7 @@ const SCHED_QUEUE_KEY = 'pavescope_sched_queue';
 // Queue item shape: { id, addedAt, jobName, jobNum, blockData }
 // blockData = full serialized block (type + fields) so nothing is lost
 var schedQueue = (function(){ try { const p = JSON.parse(localStorage.getItem(SCHED_QUEUE_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
-function saveSchedQueue() { localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(schedQueue)); try { if(db) fbSet('sched_queue', schedQueue); } catch(e){} }
+function saveSchedQueue() { localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(schedQueue)); _checkLocalStorageSize(); try { if(db) fbSet('sched_queue', schedQueue); } catch(e){} }
 
 // ── Equipment Movement Log ─────────────────────────────────────────────────────
 // Logs every piece of equipment involved in a lowbed move.
@@ -5400,6 +5425,7 @@ const EQ_MOVE_LOG_KEY = 'dmc_eq_movement_log';
 function _eqMoveLogLoad() { try { return JSON.parse(localStorage.getItem(EQ_MOVE_LOG_KEY)||'[]'); } catch(e){ return []; } }
 function _eqMoveLogSave(entries) {
   localStorage.setItem(EQ_MOVE_LOG_KEY, JSON.stringify(entries));
+  _checkLocalStorageSize();
   try { if(typeof fbSet==='function') fbSet('eq_move_log', entries); } catch(e){}
 }
 
@@ -6282,6 +6308,7 @@ var dailyOrders = (function(){ try { const p = JSON.parse(localStorage.getItem(D
 
 function saveDailyOrders() {
   localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(o => ({...o, blob64: undefined}))));
+  _checkLocalStorageSize();
   fbSet('daily_orders', dailyOrders.map(o => ({...o, blob64: undefined})));
 }
 
@@ -7043,6 +7070,7 @@ function buildAndSaveForemansReport(dateKey, slot, bdata, f) {
     dailyOrders.unshift(order);
     if (dailyOrders.length > 300) dailyOrders = dailyOrders.slice(0, 300);
     localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(o => ({...o, blob64: undefined}))));
+    _checkLocalStorageSize();
     fbSet('daily_orders', dailyOrders.map(o => ({...o, blob64: undefined})));
     if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
     // Also add to QC reports folder as a Foreman's Report type
@@ -7262,6 +7290,7 @@ ${tableXml}
     };
     dailyOrders.unshift(entry);
     localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders.map(o => ({...o, blob64: undefined}))));
+    _checkLocalStorageSize();
     fbSet('daily_orders', dailyOrders.map(o => ({...o, blob64: undefined})));
   };
   reader.readAsDataURL(blob);
@@ -7405,6 +7434,7 @@ function buildDailyOrder(dateKey, slot) {
         dailyOrders.unshift(order);
         if (dailyOrders.length > 200) dailyOrders = dailyOrders.slice(0, 200);
         localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders));
+        _checkLocalStorageSize();
         try {
           if (typeof fbSet === 'function') {
             fbSet('daily_orders', dailyOrders.map(function(o){ return Object.assign({}, o, {blob64: undefined}); }));
@@ -7495,6 +7525,7 @@ function saveJobMixFormulas() {
     return rest;
   });
   localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(slim));
+  _checkLocalStorageSize();
   try { if (db) fbSet('job_mix_formulas', slim); } catch(e) { _logFbError('saveJobMixFormulas', e); }
 }
 
@@ -7745,6 +7776,7 @@ async function captureLookaheadAndSave(supplier, dateRange) {
   lookaheads.unshift(lookahead);
   if (lookaheads.length > 50) lookaheads = lookaheads.slice(0, 50);
   localStorage.setItem(LOOKAHEADS_KEY, JSON.stringify(lookaheads.map(l => ({...l}))));
+  _checkLocalStorageSize();
 
   // Show success notification
   pushNotif('success', '2 Week Lookahead Created',
@@ -9246,6 +9278,7 @@ function deleteLookahead(id) {
   if (!confirm('Delete this lookahead?')) return;
   lookaheads = lookaheads.filter(l => l.id !== id);
   localStorage.setItem(LOOKAHEADS_KEY, JSON.stringify(lookaheads));
+  _checkLocalStorageSize();
   renderReports();
 }
 
@@ -9495,6 +9528,7 @@ var backlogJobs = (function(){ try { const p = JSON.parse(localStorage.getItem(B
     }
   });
   if (dirty) localStorage.setItem(BACKLOG_KEY, JSON.stringify(backlogJobs));
+  _checkLocalStorageSize();
 })();
 
 var backlogView = 'list';
@@ -9504,6 +9538,7 @@ var blContractItems = []; // working copy of items for current modal
 
 function saveBacklog() {
   localStorage.setItem(BACKLOG_KEY, JSON.stringify(backlogJobs));
+  _checkLocalStorageSize();
   fbSet('backlog', backlogJobs);
   const hv = document.getElementById('homeView');
   if (hv && hv.style.display !== 'none') try { renderHomeView(hv); } catch(e) {}
@@ -10272,6 +10307,7 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
       plan.verifiedAt = Date.now();
       plan.verifiedBy = localStorage.getItem('dmc_u')||'';
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+      _checkLocalStorageSize();
       console.log('[Lowbed] About to save verified plan. db:', typeof db, 'firebase:', typeof firebase);
       try {
         if (typeof fbSet === 'function') {
@@ -10321,6 +10357,7 @@ td{padding:6px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;}tr:nth-c
       dailyOrders.unshift(order);
       if (dailyOrders.length>300) dailyOrders=dailyOrders.slice(0,300);
       localStorage.setItem('pavescope_daily_orders', JSON.stringify(dailyOrders.map(o=>({...o,blob64:undefined}))));
+      _checkLocalStorageSize();
       try { if(typeof fbSet==='function') fbSet('daily_orders', dailyOrders.map(o=>({...o,blob64:undefined}))); } catch(e){}
       if (typeof renderReports==='function' && (activeTab==='reports'||activeTab==='reportsDailyOrders')) renderReports();
 
@@ -10492,6 +10529,7 @@ Return ONLY valid JSON (no markdown fences, no explanation):
         generatedBy: localStorage.getItem('dmc_u')||''
       });
       localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+      _checkLocalStorageSize();
       console.log('[Lowbed] About to save generated plan. db:', typeof db, 'firebase:', typeof firebase);
       try {
         if (typeof fbSet === 'function') {
