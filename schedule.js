@@ -79,7 +79,7 @@ function openDayNoteSADrop(key, btn) {
   document.getElementById('dayNoteSADrop')?.remove();
   const dn = schedData[key] || {};
   const assigned = dn.dayNoteSA || [];
-  const available = specialActions.filter(sa => !assigned.includes(sa.id) && (sa.id !== 'sa6' || canSeeVacation()));
+  const available = specialActions.filter(sa => !assigned.includes(sa.id) && (!_saIsVacationAction(sa) || canSeeVacation()));
   if (!available.length) {
     btn.textContent = '✓ All';
     setTimeout(() => { btn.textContent = '+ Action'; }, 1000);
@@ -110,11 +110,9 @@ function openDayNoteSADrop(key, btn) {
 }
 
 function addDayNoteSA(key, saId) {
-  console.log('[VAC DEBUG] addDayNoteSA called, saId:', saId);
   document.getElementById('dayNoteSADrop')?.remove();
   const saInfo = specialActions.find(s => s.id === saId);
-  if (saInfo && saInfo.id === 'sa6') {
-    console.log('[VAC DEBUG] vacation intercept triggered');
+  if (saInfo && _saIsVacationAction(saInfo)) {
     openVacationPicker(key, null, saId, function(person, count) {
       applyDayNoteVacationDays(key, saId, person, count);
     });
@@ -1778,8 +1776,8 @@ function openSpecialActionDrop(key, slot, btn) {
   const fields = bdata.fields || {};
   const assigned = fields._specialActions || [];
 
-  // Filter out already-assigned ones + hide sa6 (vacation) from unauthorized users
-  const available = specialActions.filter(sa => !assigned.includes(sa.id) && (sa.id !== 'sa6' || canSeeVacation()));
+  // Filter out already-assigned ones + hide vacation from unauthorized users
+  const available = specialActions.filter(sa => !assigned.includes(sa.id) && (!_saIsVacationAction(sa) || canSeeVacation()));
   if (!available.length) {
     btn.textContent = '✓ All assigned';
     setTimeout(() => { btn.textContent = '+ Action'; }, 1200);
@@ -1838,7 +1836,7 @@ function addSchedSpecialAction(key, slot, saId) {
   document.getElementById('saDropMenu')?.remove();
   // Vacation action needs a picker — intercept before saving
   const saInfo = specialActions.find(s => s.id === saId);
-  if (saInfo && saInfo.id === 'sa6') {
+  if (saInfo && _saIsVacationAction(saInfo)) {
     openVacationPicker(key, slot, saId);
     return;
   }
@@ -1886,6 +1884,10 @@ function removeSchedSpecialAction(key, slot, saId) {
 function _saIsLocationAction(saInfo) {
   var lbl = (saInfo && saInfo.label || '').toLowerCase();
   return lbl.indexOf('milling') >= 0 || lbl.indexOf('grader') >= 0;
+}
+
+function _saIsVacationAction(saInfo) {
+  return (saInfo && saInfo.label || '').toLowerCase().indexOf('vacation') >= 0;
 }
 
 function openSALocationPicker(key, slot, saId, onConfirm) {
@@ -2568,8 +2570,8 @@ function renderExtraBlock(key, idx, ex, isLast) {
         saAssigned.map((sid,ci) => {
           const sa = specialActions.find(s => s.id === sid);
           if (!sa) return '';
-          if (sa.id === 'sa6' && !canSeeVacation()) return '';
-          const chipLabel1 = (sa.id === 'sa6' && fields._vacationPerson)
+          if (_saIsVacationAction(sa) && !canSeeVacation()) return '';
+          const chipLabel1 = (_saIsVacationAction(sa) && fields._vacationPerson)
             ? fields._vacationPerson
             : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
           return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
@@ -4079,8 +4081,8 @@ function renderSchedule() {
               saA.map(sid => {
                 const sa = specialActions.find(s => s.id === sid);
                 if (!sa) return '';
-                if (sa.id === 'sa6' && !canSeeVacation()) return '';
-                const chipLabel2 = (sa.id === 'sa6' && fields._vacationPerson)
+                if (_saIsVacationAction(sa) && !canSeeVacation()) return '';
+                const chipLabel2 = (_saIsVacationAction(sa) && fields._vacationPerson)
                   ? fields._vacationPerson
                   : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
                 return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
@@ -5093,7 +5095,6 @@ function openNightShiftPicker(startKey, startSlot) {
 }
 
 function openVacationPicker(key, slot, saId, onConfirm) {
-  console.log('[VAC DEBUG] openVacationPicker called');
   document.getElementById('vacationPickerModal')?.remove();
 
   const overlay = document.createElement('div');
