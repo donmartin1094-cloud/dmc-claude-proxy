@@ -216,7 +216,7 @@
   .sched-day-note-wrap .sa-action-btn { position:static; transform:none; background:rgba(0,0,0,0.12); border:1px solid rgba(0,0,0,0.2); border-radius:3px; color:#000; font-family:'DM Mono',monospace; font-size:7px; font-weight:700; padding:2px 6px; cursor:pointer; letter-spacing:.3px; opacity:0.7; transition:opacity 0.15s; white-space:nowrap; flex-shrink:0; }
   .sched-day-note-wrap .sa-action-btn:hover { opacity:1; background:rgba(0,0,0,0.2); }
   .sched-day-note-sa-chips { display:flex; flex-wrap:nowrap; gap:3px; overflow:hidden; flex:1; align-items:center; }
-  .sched-day-note-sa-chip { display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:8px; font-size:8px; font-weight:800; border:1px solid rgba(0,0,0,0.25); background:rgba(0,0,0,0.14); color:#000; white-space:nowrap; flex-shrink:0; }
+  .sched-day-note-sa-chip { display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:8px; font-size:11px; font-weight:800; border:1px solid rgba(0,0,0,0.25); background:rgba(0,0,0,0.14); color:#000; white-space:nowrap; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
   .sched-day-note-drag { cursor:grab; }
   .sched-day-note-drag:active { cursor:grabbing; }
   .sched-drag-handle:active { cursor:grabbing; }
@@ -2123,7 +2123,7 @@
   /* ── Special Actions ── */
   .sched-notes-wrap { position:relative; }
   .sched-notes-input { resize:none; }
-  .sa-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; font-size:9px; font-weight:700; letter-spacing:.5px; border:1px solid; cursor:default; flex-shrink:0; }
+  .sa-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; letter-spacing:.5px; border:1px solid; cursor:default; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
   .sa-chips-row { display:flex; flex-wrap:wrap; gap:4px; padding:4px 8px 6px; }
   .sa-drop { position:absolute; left:0; right:0; top:100%; z-index:5000; background:var(--asphalt-mid); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); box-shadow:0 8px 24px rgba(0,0,0,0.6); overflow:hidden; margin-top:2px; }
   .sa-drop-item { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; font-size:12px; font-weight:600; transition:background 0.1s; }
