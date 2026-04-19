@@ -111,6 +111,13 @@ function openDayNoteSADrop(key, btn) {
 
 function addDayNoteSA(key, saId) {
   document.getElementById('dayNoteSADrop')?.remove();
+  const saInfo = specialActions.find(s => s.id === saId);
+  if (saInfo && _saIsLocationAction(saInfo)) {
+    openSALocationPicker(key, null, saId, function(loc) {
+      _commitDayNoteSAWithLocation(key, saId, loc);
+    });
+    return;
+  }
   if (!schedData[key]) schedData[key] = {};
   const cur = schedData[key].dayNoteSA || [];
   if (!cur.includes(saId)) schedData[key].dayNoteSA = [...cur, saId];
@@ -121,6 +128,7 @@ function addDayNoteSA(key, saId) {
 function removeDayNoteSA(key, saId) {
   if (!schedData[key]) return;
   schedData[key].dayNoteSA = (schedData[key].dayNoteSA || []).filter(id => id !== saId);
+  if (schedData[key].dayNoteSALocations) delete schedData[key].dayNoteSALocations[saId];
   saveSchedDataDirect();
   renderSchedule();
 }
@@ -1872,7 +1880,7 @@ function _saIsLocationAction(saInfo) {
   return lbl.indexOf('milling') >= 0 || lbl.indexOf('grading') >= 0;
 }
 
-function openSALocationPicker(key, slot, saId) {
+function openSALocationPicker(key, slot, saId, onConfirm) {
   document.getElementById('saLocPicker')?.remove();
   var saInfo = specialActions.find(function(s) { return s.id === saId; });
   if (!saInfo) return;
@@ -1906,7 +1914,7 @@ function openSALocationPicker(key, slot, saId) {
 
   document.getElementById('saLocConfirm').onclick = function() {
     var loc = (document.getElementById('saLocInput')?.value || '').trim();
-    _commitSAWithLocation(key, slot, saId, loc);
+    if (onConfirm) { onConfirm(loc); } else { _commitSAWithLocation(key, slot, saId, loc); }
     document.getElementById('saLocPicker')?.remove();
   };
 
@@ -1970,6 +1978,18 @@ function _commitSAWithLocation(key, slot, saId, location) {
   } else {
     var idx = parseInt(slot.replace('extra_',''));
     if (schedData[key]?.extras?.[idx]) schedData[key].extras[idx].data = bdata;
+  }
+  saveSchedDataDirect();
+  renderSchedule();
+}
+
+function _commitDayNoteSAWithLocation(key, saId, location) {
+  if (!schedData[key]) schedData[key] = {};
+  const cur = schedData[key].dayNoteSA || [];
+  if (!cur.includes(saId)) schedData[key].dayNoteSA = [...cur, saId];
+  if (location) {
+    schedData[key].dayNoteSALocations = Object.assign({}, schedData[key].dayNoteSALocations || {});
+    schedData[key].dayNoteSALocations[saId] = location;
   }
   saveSchedDataDirect();
   renderSchedule();
@@ -4213,8 +4233,10 @@ function renderSchedule() {
               const chipBorder  = _graderChip ? '2px solid #000'       : `1px solid ${sa.color || 'rgba(0,0,0,0.25)'}`;
               const chipColor   = _graderChip ? '#000'                 : '#fff';
               const xColor      = _graderChip ? 'rgba(0,0,0,0.55)'    : 'rgba(255,255,255,0.7)';
+              const saLoc       = dn.dayNoteSALocations?.[sid];
+              const chipLabel   = saLoc ? sa.label + ' — ' + saLoc : sa.label;
               return `<span class="sched-day-note-sa-chip" style="background:${chipBg};border:${chipBorder};color:${chipColor};">
-                ${sa.label}
+                ${chipLabel}
                 ${canEditSched?`<button style="background:none;border:none;cursor:pointer;font-size:9px;padding:0 0 0 2px;line-height:1;color:${xColor};"
                   onclick="event.stopPropagation();removeDayNoteSA('${key}','${sid}')">✕</button>`:''}
               </span>`;
