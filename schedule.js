@@ -2617,7 +2617,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
   return `
     <div class="sched-block sched-extra-block${isLast?' sched-block-bottom':''}${isSecondStop?' sched-second-stop':''}"
          data-date-key="${key}" data-block-slot="${slot}" data-block-type="${effectiveType}" data-parent-slot="${ex.parentSlot||''}"
-         style="background:${extraBg};${isSecondStop?'border-left:3px solid var(--stripe);':''}"
+         style="background:${extraBg};"
          ondragover="schedBlockDragOver(event,'${key}','${slot}','${effectiveType}')"
          ondragleave="schedBlockDragLeave(event)"
          ondrop="schedBlockDrop(event,'${key}','${slot}','${effectiveType}')">

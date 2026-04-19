@@ -99,7 +99,7 @@
   .sched-day-header { --sched-day-header-h:45px; height:var(--sched-day-header-h); padding:0 8px; background:var(--asphalt-light); border-radius:var(--radius-lg) var(--radius-lg) 0 0; border:1px solid var(--asphalt-light); border-bottom:none; text-align:center; flex-shrink:0; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
   .sched-day-add-btn { position:absolute; bottom:4px; left:5px; background:none; border:1px dashed var(--asphalt-light); border-radius:50%; width:16px; height:16px; font-size:12px; line-height:1; color:var(--concrete-dim); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; transition:all 0.15s; }
   .sched-day-add-btn:hover { border-color:var(--stripe); color:var(--stripe); background:rgba(245,197,24,0.1); }
-  .sched-extra-block { border:1px solid var(--stripe); border-top:2px solid var(--stripe); position:relative; width:100%; box-sizing:border-box; margin:0; }
+  .sched-extra-block { border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); border-left:none; border-right:none; position:relative; width:100%; box-sizing:border-box; margin:0; }
   .sched-extra-remove { position:absolute; top:4px; right:6px; background:none; border:none; cursor:pointer; font-size:12px; color:rgba(255,255,255,0.3); padding:0; line-height:1; z-index:1; }
   .sched-extra-remove:hover { color:var(--red); }
   /* Foreman picker modal */
@@ -133,7 +133,8 @@
   .sched-day-header.today.sched-weekend .sched-day-num { color:#22c55e; }
   .sched-day-col > .sched-block,
   .sched-day-col > .sched-day-note-wrap,
-  .sched-day-col > .sched-extra-block { width:100%; margin:0; box-sizing:border-box; align-self:stretch; }
+  .sched-day-col > .sched-extra-block,
+  .sched-day-col > .sched-second-stops-wrap { width:100%; margin:0; box-sizing:border-box; align-self:stretch; }
   /* Collapse seam lines so stacked cards/bars sit visually flush at all zoom levels. */
   .sched-day-col > .sched-block + .sched-day-note-wrap,
   .sched-day-col > .sched-day-note-wrap + .sched-block,
@@ -149,7 +150,8 @@
   .sched-day-col > .sched-day-header,
   .sched-day-col > .sched-block,
   .sched-day-col > .sched-day-note-wrap,
-  .sched-day-col > .sched-extra-block { width:100%; box-sizing:border-box; align-self:stretch; }
+  .sched-day-col > .sched-extra-block,
+  .sched-day-col > .sched-second-stops-wrap { width:100%; box-sizing:border-box; align-self:stretch; }
   .sched-field-btns { display:flex; gap:3px; flex:1; flex-wrap:wrap; }
   .sched-field-toggle { flex:0 0 auto; padding:1px 5px; font-family:'DM Sans',sans-serif; font-size:7px; font-weight:700; border:1px solid rgba(255,255,255,0.15); border-radius:3px; background:rgba(0,0,0,0.2); color:rgba(255,255,255,0.4); cursor:pointer; text-align:center; transition:all 0.15s; white-space:nowrap; }
   .sched-field-toggle:hover { background:rgba(255,255,255,0.1); color:var(--white); border-color:rgba(255,255,255,0.3); }
