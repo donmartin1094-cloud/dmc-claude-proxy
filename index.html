@@ -4505,7 +4505,7 @@ function _getJobsList() { return jobs; }
 let notifications = JSON.parse(localStorage.getItem('pavescope_notifs') || '[]');
 // Each notif: { id, type, title, message, time, read, jobId }
 
-function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); _checkLocalStorageSize(); }
+function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); _checkLocalStorageSize(); try { fbSet('notifications', notifications); } catch(e) {} }
 
 function pushNotif(type, title, message, jobId, targetUser) {
   const notif = {
@@ -23481,6 +23481,19 @@ async function fbLoadAll() {
         else if (key === 'gcs')        { knownGCs = val; }
         else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot();  _checkLocalStorageSize();}
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
+        else if (key === 'notifications') {
+          var incoming = Array.isArray(val) ? val : [];
+          var localIds = new Set(notifications.map(function(n){ return n.id; }));
+          incoming.forEach(function(n){
+            if (!localIds.has(n.id)) notifications.push(n);
+          });
+          notifications.sort(function(a,b){ return b.id - a.id; });
+          notifications = notifications.slice(0, 50);
+          localStorage.setItem('pavescope_notifs', JSON.stringify(notifications));
+          _checkLocalStorageSize();
+          renderNotifBadge();
+          renderNotifList();
+        }
         _checkLocalStorageSize();
       } catch(e) {}
     });
@@ -23864,6 +23877,19 @@ async function initApp(username) {
                   _checkLocalStorageSize();
                   try { if (typeof _homeFleetRerender === 'function') _homeFleetRerender(); } catch(e2) {}
                 }
+              }
+              else if (key === 'notifications') {
+                var incoming = Array.isArray(val) ? val : [];
+                var localIds = new Set(notifications.map(function(n){ return n.id; }));
+                incoming.forEach(function(n){
+                  if (!localIds.has(n.id)) notifications.push(n);
+                });
+                notifications.sort(function(a,b){ return b.id - a.id; });
+                notifications = notifications.slice(0, 50);
+                localStorage.setItem('pavescope_notifs', JSON.stringify(notifications));
+                _checkLocalStorageSize();
+                renderNotifBadge();
+                renderNotifList();
               }
             } catch(e) {}
           }
