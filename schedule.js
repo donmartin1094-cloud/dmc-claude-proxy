@@ -10,7 +10,6 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const BLOCK_FIELDS = [
   { key:'jobName',   label:'Job Name:' },
   { key:'jobNum',    label:'Job #:' },
-  { key:'location',  label:'Town/State:' },
   { key:'plant',     label:'Plant:' },
   { key:'material',  label:'Material:', type:'material' },
   { key:'equipment', label:'Equipment:', type:'equipment' },
@@ -1827,6 +1826,11 @@ function addSchedSpecialAction(key, slot, saId) {
     openVacationPicker(key, slot, saId);
     return;
   }
+  // Milling / Grading actions need a location — intercept before saving
+  if (saInfo && _saIsLocationAction(saInfo)) {
+    openSALocationPicker(key, slot, saId);
+    return;
+  }
   const bdata = getSlotData(key, slot);
   if (!bdata.fields) bdata.fields = {};
   const current = bdata.fields._specialActions || [];
@@ -1849,11 +1853,122 @@ function removeSchedSpecialAction(key, slot, saId) {
   const bdata = getSlotData(key, slot);
   if (!bdata.fields) return;
   bdata.fields._specialActions = (bdata.fields._specialActions || []).filter(id => id !== saId);
+  if (bdata.fields._saLocations) delete bdata.fields._saLocations[saId];
   if (slot === 'top' || slot === 'bottom') {
     if (!schedData[key]) schedData[key] = {};
     schedData[key][slot] = bdata;
   } else {
     const idx = parseInt(slot.replace('extra_',''));
+    if (schedData[key]?.extras?.[idx]) schedData[key].extras[idx].data = bdata;
+  }
+  saveSchedDataDirect();
+  renderSchedule();
+}
+
+// ── Milling / Grading location picker ────────────────────────────────────────
+
+function _saIsLocationAction(saInfo) {
+  var lbl = (saInfo && saInfo.label || '').toLowerCase();
+  return lbl.indexOf('milling') >= 0 || lbl.indexOf('grading') >= 0;
+}
+
+function openSALocationPicker(key, slot, saId) {
+  document.getElementById('saLocPicker')?.remove();
+  var saInfo = specialActions.find(function(s) { return s.id === saId; });
+  if (!saInfo) return;
+
+  var overlay = document.createElement('div');
+  overlay.id = 'saLocPicker';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:22px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--stripe);margin-bottom:4px;">📍 ' + saInfo.label + '</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--concrete-dim);margin-bottom:14px;">Type a location or select from matching jobs</div>' +
+      '<div style="position:relative;">' +
+        '<input id="saLocInput" type="text" placeholder="Location, street, or job name…" autocomplete="off"' +
+          ' style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;box-sizing:border-box;outline:none;"' +
+          ' oninput="saLocFilter(this.value)" onkeydown="saLocKeydown(event)" />' +
+        '<div id="saLocSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10001;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-top:none;border-radius:0 0 var(--radius) var(--radius);max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">' +
+        '<button onclick="document.getElementById(\'saLocPicker\').remove()"' +
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:8px 18px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">' +
+          'Cancel</button>' +
+        '<button id="saLocConfirm"' +
+          ' style="background:#1a3000;border:1px solid rgba(134,239,172,0.5);border-radius:var(--radius);padding:8px 18px;color:#86efac;font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:800;cursor:pointer;">' +
+          '📍 Save Location</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  setTimeout(function() { document.getElementById('saLocInput')?.focus(); }, 60);
+
+  document.getElementById('saLocConfirm').onclick = function() {
+    var loc = (document.getElementById('saLocInput')?.value || '').trim();
+    _commitSAWithLocation(key, slot, saId, loc);
+    document.getElementById('saLocPicker')?.remove();
+  };
+
+  overlay.addEventListener('mousedown', function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+function saLocFilter(query) {
+  var box = document.getElementById('saLocSuggestions');
+  if (!box) return;
+  var q = (query || '').trim().toLowerCase();
+  if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  var jobs = (typeof backlogJobs !== 'undefined' ? backlogJobs : []);
+  var matches = jobs.filter(function(j) {
+    var num  = (j.num || j.jobNum || '').toString().toLowerCase();
+    var name = (j.name || j.jobName || '').toString().toLowerCase();
+    return num.indexOf(q) >= 0 || name.indexOf(q) >= 0;
+  }).slice(0, 12);
+  if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = matches.map(function(j) {
+    var num  = j.num  || j.jobNum  || '';
+    var name = j.name || j.jobName || '';
+    var display = (num ? '# ' + num : '') + (num && name ? ' — ' : '') + name;
+    var safe = display.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div style="padding:8px 14px;cursor:pointer;display:flex;align-items:baseline;gap:8px;" ' +
+      'onmousedown="event.preventDefault();saLocPickSuggestion(\'' + safe + '\')" ' +
+      'onmouseover="this.style.background=\'rgba(245,197,24,0.1)\'" ' +
+      'onmouseout="this.style.background=\'\'">' +
+      '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);flex-shrink:0;">' + (num ? '#' + num : '') + '</span>' +
+      '<span style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);">' + (name || display) + '</span>' +
+      '</div>';
+  }).join('');
+  box.style.display = 'block';
+}
+
+function saLocPickSuggestion(text) {
+  var input = document.getElementById('saLocInput');
+  if (input) { input.value = text; input.focus(); }
+  var box = document.getElementById('saLocSuggestions');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+
+function saLocKeydown(e) {
+  if (e.key === 'Enter') { document.getElementById('saLocConfirm')?.click(); }
+  if (e.key === 'Escape') { document.getElementById('saLocPicker')?.remove(); }
+}
+
+function _commitSAWithLocation(key, slot, saId, location) {
+  var bdata = getSlotData(key, slot);
+  if (!bdata.fields) bdata.fields = {};
+  var current = bdata.fields._specialActions || [];
+  if (!current.includes(saId)) bdata.fields._specialActions = [...current, saId];
+  if (location) {
+    bdata.fields._saLocations = Object.assign({}, bdata.fields._saLocations || {});
+    bdata.fields._saLocations[saId] = location;
+  }
+  if (slot === 'top' || slot === 'bottom') {
+    if (!schedData[key]) schedData[key] = {};
+    schedData[key][slot] = bdata;
+  } else {
+    var idx = parseInt(slot.replace('extra_',''));
     if (schedData[key]?.extras?.[idx]) schedData[key].extras[idx].data = bdata;
   }
   saveSchedDataDirect();
@@ -2426,7 +2541,9 @@ function renderExtraBlock(key, idx, ex, isLast) {
           const sa = specialActions.find(s => s.id === sid);
           if (!sa) return '';
           if (sa.id === 'sa6' && !canSeeVacation()) return '';
-          const chipLabel1 = (sa.id === 'sa6' && fields._vacationPerson) ? fields._vacationPerson : sa.label;
+          const chipLabel1 = (sa.id === 'sa6' && fields._vacationPerson)
+            ? fields._vacationPerson
+            : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
           return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
             ${chipLabel1}
             <button style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:10px;padding:0;line-height:1;"
@@ -3935,7 +4052,9 @@ function renderSchedule() {
                 const sa = specialActions.find(s => s.id === sid);
                 if (!sa) return '';
                 if (sa.id === 'sa6' && !canSeeVacation()) return '';
-                const chipLabel2 = (sa.id === 'sa6' && fields._vacationPerson) ? fields._vacationPerson : sa.label;
+                const chipLabel2 = (sa.id === 'sa6' && fields._vacationPerson)
+                  ? fields._vacationPerson
+                  : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
                 return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
                   ${chipLabel2}
                   ${canEdit ? `<button style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:10px;padding:0;line-height:1;"
