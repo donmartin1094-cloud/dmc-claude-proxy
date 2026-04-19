@@ -112,6 +112,12 @@ function openDayNoteSADrop(key, btn) {
 function addDayNoteSA(key, saId) {
   document.getElementById('dayNoteSADrop')?.remove();
   const saInfo = specialActions.find(s => s.id === saId);
+  if (saInfo && saInfo.id === 'sa6') {
+    openVacationPicker(key, null, saId, function(person, count) {
+      applyDayNoteVacationDays(key, saId, person, count);
+    });
+    return;
+  }
   if (saInfo && _saIsLocationAction(saInfo)) {
     openSALocationPicker(key, null, saId, function(loc) {
       _commitDayNoteSAWithLocation(key, saId, loc);
@@ -5084,7 +5090,7 @@ function openNightShiftPicker(startKey, startSlot) {
   };
 }
 
-function openVacationPicker(key, slot, saId) {
+function openVacationPicker(key, slot, saId, onConfirm) {
   document.getElementById('vacationPickerModal')?.remove();
 
   const overlay = document.createElement('div');
@@ -5245,7 +5251,7 @@ function openVacationPicker(key, slot, saId) {
     const person = selectedPerson || document.getElementById('vacOtherName')?.value.trim();
     const count = values[selectedIdx];
     if (!person || !count || count < 1) return;
-    applyVacationDays(key, slot, saId, person, count);
+    if (onConfirm) { onConfirm(person, count); } else { applyVacationDays(key, slot, saId, person, count); }
     overlay.remove();
   };
 }
@@ -5273,6 +5279,23 @@ function applyVacationDays(startKey, slot, saId, personName, numDays) {
     cursor.setDate(cursor.getDate() + 1);
   }
 
+  saveSchedDataDirect();
+  renderSchedule();
+  pushNotif('success', '🏖 Vacation Scheduled', `${personName} — ${numDays} day${numDays !== 1 ? 's' : ''} starting ${startKey}.`, null);
+}
+
+function applyDayNoteVacationDays(startKey, saId, personName, numDays) {
+  const [yr, mo, dy] = startKey.split('-').map(Number);
+  const cursor = new Date(yr, mo - 1, dy);
+  for (let i = 0; i < numDays; i++) {
+    const key = dk(cursor);
+    if (!schedData[key]) schedData[key] = {};
+    const cur = schedData[key].dayNoteSA || [];
+    if (!cur.includes(saId)) schedData[key].dayNoteSA = [...cur, saId];
+    schedData[key].dayNoteSALocations = Object.assign({}, schedData[key].dayNoteSALocations || {});
+    schedData[key].dayNoteSALocations[saId] = personName;
+    cursor.setDate(cursor.getDate() + 1);
+  }
   saveSchedDataDirect();
   renderSchedule();
   pushNotif('success', '🏖 Vacation Scheduled', `${personName} — ${numDays} day${numDays !== 1 ? 's' : ''} starting ${startKey}.`, null);
