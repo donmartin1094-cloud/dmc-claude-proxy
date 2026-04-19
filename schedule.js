@@ -4081,7 +4081,7 @@ function renderSchedule() {
             <button class="sched-day-add-btn" onclick="openAddForemanModal('${key}')" title="Add foreman crew for this day">+</button>
           </div>
           ${renderBlock('top')}
-          <div class="sched-second-stops-wrap" data-stop-slot="top">${_topStops.map(({ex,i}) => renderExtraBlock(key, i, ex, false)).join('')}</div>
+          <div class="sched-second-stops-wrap" data-stop-slot="top" style="order:2;width:100%;box-sizing:border-box;align-self:stretch;">${_topStops.map(({ex,i}) => renderExtraBlock(key, i, ex, false)).join('')}</div>
           ${(()=>{
             const dn = schedData[key]||{};
             const dayNoteSA = dn.dayNoteSA||[];
@@ -4111,7 +4111,7 @@ function renderSchedule() {
             </div>`;
           })()}
           ${renderBlock('bottom')}
-          <div class="sched-second-stops-wrap" data-stop-slot="bottom">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}</div>
+          <div class="sched-second-stops-wrap" data-stop-slot="bottom" style="order:4;width:100%;box-sizing:border-box;align-self:stretch;">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}</div>
           ${_otherExtras.map(({ex,i}) => renderExtraBlock(key, i, ex, i===_lastExtraI)).join('')}
         </div>`;
     }).join('');
@@ -4439,16 +4439,27 @@ function autoResize(el) {
   el.style.height=el.scrollHeight+'px';
 }
 
-function saveSchedField(el) {
-  const {key,slot,field} = el.dataset;
-  if (!schedData[key]) schedData[key]={};
-  if (!schedData[key][slot]) schedData[key][slot]={type:'blank',fields:{}};
-  if (!schedData[key][slot].fields) schedData[key][slot].fields={};
-  schedData[key][slot].fields[field] = el.value;
+function saveSchedField(elOrKey, slot, field, value) {
+  var key, val, el;
+  if (typeof elOrKey === 'string') {
+    // Programmatic call: saveSchedField(key, slot, field, value)
+    key = elOrKey;
+    val = value;
+  } else {
+    // DOM element call: saveSchedField(el)
+    el = elOrKey;
+    key = el.dataset.key;
+    slot = el.dataset.slot;
+    field = el.dataset.field;
+    val = el.value;
+  }
+  if (!schedData[key] || !schedData[key][slot]) return;
+  schedData[key][slot].fields = schedData[key][slot].fields || {};
+  schedData[key][slot].fields[field] = val;
   saveSchedData();
-  // Compliance check when job# is entered
-  if (field === 'jobNum' && el.value.trim()) {
-    _schedCheckJobCompliance(el.value.trim(), el);
+  // Compliance check when job# is entered (DOM path only — needs the element)
+  if (el && field === 'jobNum' && val.trim()) {
+    _schedCheckJobCompliance(val.trim(), el);
   }
 }
 
