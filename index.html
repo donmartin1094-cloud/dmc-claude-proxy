@@ -17598,9 +17598,14 @@ function openEmployeeProfileOverlay(id) {
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'+
         '<div><label class="form-label">First Name</label><input class="form-input" id="epFirstName" value="'+escHtml(e.firstName||'')+'"/></div>'+
         '<div><label class="form-label">Last Name</label><input class="form-input" id="epLastName"  value="'+escHtml(e.lastName||'')+'"/></div>'+
+        '<div><label class="form-label">Employee ID #</label><input class="form-input" id="epEmployeeId" placeholder="e.g. 1042" value="'+escHtml(e.employeeId||'')+'"/></div>'+
         '<div><label class="form-label">Phone</label><input class="form-input" id="epPhone" type="tel" value="'+escHtml(e.phone||'')+'"/></div>'+
-        '<div style="grid-column:1/3;"><label class="form-label">Email</label><input class="form-input" id="epEmail" type="email" value="'+escHtml(e.email||'')+'"/></div>'+
-        '<div><label class="form-label">Start Date</label><input class="form-input" id="epStartDate" type="date" value="'+escHtml(e.startDate||'')+'"/></div>'+
+        '<div><label class="form-label">Email</label><input class="form-input" id="epEmail" type="email" value="'+escHtml(e.email||'')+'"/></div>'+
+        '<div><label class="form-label">Date of Hire</label><input class="form-input" id="epStartDate" type="date" value="'+escHtml(e.startDate||'')+'"/></div>'+
+        '<div><label class="form-label">Gender</label><select class="form-input" id="epGender">'+
+          '<option value="">-- Select --</option>'+
+          ['Male','Female','Other','Prefer not to say'].map(function(g){ return '<option value="'+g+'" '+(e.gender===g?'selected':'')+'>'+g+'</option>'; }).join('')+
+        '</select></div>'+
       '</div>'+
     '</div>'+
 
@@ -17645,10 +17650,25 @@ function openEmployeeProfileOverlay(id) {
       '</div>'+
     '</div>'+
 
+    // Foreman assignment section (laborers only)
+    '<div id="epForemanAssignSection" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:16px;'+((e.role==='laborer')?'':'display:none;')+'">'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:12px;border-bottom:1px solid var(--asphalt-light);padding-bottom:6px;">👷 Crew Assignment</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div><label class="form-label">Assigned Foreman</label><select class="form-input" id="epForemanAssign">'+
+          '<option value="">-- Unassigned --</option>'+
+          (typeof foremanRoster!=='undefined'?foremanRoster:[]).map(function(f){ return '<option value="'+escHtml(f)+'" '+(e.foremanAssignment===f?'selected':'')+'>'+escHtml(f)+'</option>'; }).join('')+
+        '</select></div>'+
+      '</div>'+
+    '</div>'+
+
     // Driver section
     '<div id="epDriverSection" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:16px;'+(isDriver?'':'display:none;')+'">'+
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:12px;border-bottom:1px solid var(--asphalt-light);padding-bottom:6px;">🚛 Driver Details</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">'+
+        '<div><label class="form-label">Driver Type</label><select class="form-input" id="epDriverType">'+
+          '<option value="">-- Select --</option>'+
+          ['Mix Truck','Lowbed','Hybrid'].map(function(dt){ return '<option value="'+dt+'" '+(e.driverType===dt?'selected':'')+'>'+dt+'</option>'; }).join('')+
+        '</select></div>'+
         '<div><label class="form-label">Travel Rate ($/hr)</label><input class="form-input" id="epTravelRate" type="number" step="0.25" min="0" placeholder="0.00" value="'+(e.travelRate||'')+'"/></div>'+
         '<div><label class="form-label">On-Job Rate ($/hr)</label><input class="form-input" id="epJobRate" type="number" step="0.25" min="0" placeholder="0.00" value="'+(e.jobRate||'')+'"/></div>'+
         '<div><label class="form-label">Truck / Unit #</label><input class="form-input" id="epTruckNo" placeholder="e.g. DMC-4" value="'+escHtml(e.truckNo||'')+'"/></div>'+
@@ -17686,8 +17706,10 @@ function openEmployeeProfileOverlay(id) {
 }
 
 function _empRoleChanged(role) {
-  var sec = document.getElementById('epDriverSection');
-  if (sec) sec.style.display = (role==='driver'||role==='driver_broker') ? '' : 'none';
+  var driverSec = document.getElementById('epDriverSection');
+  if (driverSec) driverSec.style.display = (role==='driver'||role==='driver_broker') ? '' : 'none';
+  var foremanSec = document.getElementById('epForemanAssignSection');
+  if (foremanSec) foremanSec.style.display = (role==='laborer') ? '' : 'none';
 }
 
 function _empAddCertRow() {
@@ -17750,6 +17772,10 @@ function saveEmployeeProfileForm(existingId) {
   var race           = (overlay.querySelector('#epRace')       ||{}).value||'';
   var isMinority     = (overlay.querySelector('#epIsMinority') ||{}).checked||false;
   var isFemale       = (overlay.querySelector('#epIsFemale')   ||{}).checked||false;
+  var employeeId       = (overlay.querySelector('#epEmployeeId')     ||{}).value||'';
+  var gender           = (overlay.querySelector('#epGender')         ||{}).value||'';
+  var foremanAssignment= (overlay.querySelector('#epForemanAssign')  ||{}).value||'';
+  var driverType       = (overlay.querySelector('#epDriverType')     ||{}).value||'';
   var certs = [];
   overlay.querySelectorAll('#epCertsContainer [data-cert-idx]').forEach(function(row) {
     var type       = (row.querySelector('[data-cf="type"]')     ||{}).value||'';
@@ -17764,6 +17790,7 @@ function saveEmployeeProfileForm(existingId) {
     role, empType, status, hourlyRate, travelRate, jobRate,
     truckNo, brokerCompany, hasAppAccess, certs, notes,
     dob, certJobCategory, race, isMinority, isFemale,
+    employeeId, gender, foremanAssignment, driverType,
     createdAt: existingId?(employees.find(function(e){ return e.id===existingId; })||{}).createdAt||Date.now():Date.now(),
     updatedAt: Date.now(),
   };
@@ -18337,10 +18364,18 @@ function getWeekLabel(weekKey) {
 }
 
 function getCrewForForeman(username) {
+  // Resolve foreman's display name from their login account
   var uLc = (username || '').toLowerCase();
   var foremanAcct = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase() === uLc; });
-  var crewName = foremanAcct && foremanAcct.crew ? foremanAcct.crew : uLc;
-  return DEFAULT_TEAM_ACCOUNTS.filter(function(a) { return a.crew === crewName; });
+  var foremanName = foremanAcct ? foremanAcct.displayName : username;
+  // Look up assigned laborers from the employees array
+  var assigned = (typeof employees !== 'undefined' ? employees : []).filter(function(e) {
+    return e.role === 'laborer' && e.foremanAssignment === foremanName && e.status !== 'inactive';
+  });
+  // Map to the shape the wizard expects
+  return assigned.map(function(e) {
+    return { username: e.id, displayName: e.name, role: 'Laborer' };
+  });
 }
 
 function saveForemanReport(report) {
@@ -18350,7 +18385,7 @@ function saveForemanReport(report) {
   reports.unshift(report);
   localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(reports));
   _checkLocalStorageSize();
-  try { fbSet(FOREMAN_REPORTS_KEY, reports); } catch(e) {}
+  try { fbSet('foreman_reports', reports); } catch(e) {}
 
   // Update per-employee weekly hours
   var hoursMap = {};
@@ -18373,7 +18408,7 @@ function openForemanReport() {
   if (!crewMembers.length) { alert('No crew found for your account.'); return; }
 
   // State
-  var step = 1; // 1=attendance, 2=hours, 3=confirm
+  var step = 0; // 0=full crew?, 1=attendance, 2=hours, 3=confirm
   var absentUsernames = new Set();
   var selectedHours = 8;
   var customHours = '';
@@ -18386,6 +18421,18 @@ function openForemanReport() {
   function render() {
     var today = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
     var stepHtml = '';
+
+    if (step === 0) {
+      var crewNames = crewMembers.map(function(m){ return m.displayName||m.username; }).join(', ');
+      stepHtml = '<div style="padding:24px 16px;display:flex;flex-direction:column;gap:14px;align-items:center;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;color:var(--white);text-align:center;">Did you have a full crew today?</div>' +
+        (crewMembers.length ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:center;max-width:280px;">Expected crew: ' + escHtml(crewNames) + '</div>' : '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#f59e0b;text-align:center;">No laborers assigned to you yet.<br>Add them in Settings → Roster → Employees.</div>') +
+        '<div style="display:flex;gap:12px;width:100%;max-width:280px;">' +
+          '<button onclick="window._frFullCrew(true)" style="flex:1;padding:16px;background:rgba(126,203,143,0.12);border:2px solid rgba(126,203,143,0.4);border-radius:8px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;cursor:pointer;">✓ Yes</button>' +
+          '<button onclick="window._frFullCrew(false)" style="flex:1;padding:16px;background:rgba(255,100,100,0.08);border:2px solid rgba(255,100,100,0.3);border-radius:8px;color:#ff6464;font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;cursor:pointer;">✕ No</button>' +
+        '</div>' +
+      '</div>';
+    }
 
     if (step === 1) {
       var memberRows = crewMembers.map(function(m) {
@@ -18447,17 +18494,19 @@ function openForemanReport() {
       '</div>';
     }
 
-    var stepLabels = ['Attendance','Hours','Review'];
+    var stepLabels = ['Full Crew?','Attendance','Hours','Review'];
     var stepDots = stepLabels.map(function(l,i){
-      var active = i+1 === step;
+      var active = i === step;
       return '<div style="display:flex;align-items:center;gap:4px;"><div style="width:6px;height:6px;border-radius:50%;background:' + (active?'var(--stripe)':'rgba(255,255,255,0.2)') + ';"></div><span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + (active?'var(--stripe)':'rgba(255,255,255,0.3)') + ';">' + l + '</span></div>';
     }).join('');
 
-    var backBtn = step > 1 ? '<button onclick="window._frStep(-1)" style="flex:1;padding:12px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">← Back</button>' : '<button onclick="document.getElementById(\'_frDlg\').remove()" style="flex:1;padding:12px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">Cancel</button>';
+    var backBtn = step > 0 ? '<button onclick="window._frStep(-1)" style="flex:1;padding:12px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">← Back</button>' : '<button onclick="document.getElementById(\'_frDlg\').remove()" style="flex:1;padding:12px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">Cancel</button>';
     var nextLabel = step === 3 ? '✓ Submit Report' : 'Next →';
     var nextColor = step === 3 ? '#7ecb8f' : 'var(--stripe)';
     var nextBg    = step === 3 ? 'rgba(126,203,143,0.15)' : 'rgba(245,197,24,0.12)';
     var nextBorder= step === 3 ? 'rgba(126,203,143,0.4)' : 'rgba(245,197,24,0.4)';
+    // Step 0 has its own Yes/No buttons — hide the generic Next button
+    if (step === 0) { nextLabel = ''; }
 
     dlg.innerHTML = '<div style="background:var(--asphalt-mid);border-radius:16px 16px 0 0;border-top:3px solid var(--stripe);width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,0.6);">' +
       '<div style="padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
@@ -18470,11 +18519,16 @@ function openForemanReport() {
       '<div style="flex:1;overflow-y:auto;WebkitOverflowScrolling:touch;">' + stepHtml + '</div>' +
       '<div style="display:flex;gap:8px;padding:12px 16px 20px;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;">' +
         backBtn +
-        '<button onclick="window._frStep(1)" style="flex:2;padding:12px;background:' + nextBg + ';border:1px solid ' + nextBorder + ';border-radius:6px;color:' + nextColor + ';font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation;">' + nextLabel + '</button>' +
+        (step === 0 ? '' : '<button onclick="window._frStep(1)" style="flex:2;padding:12px;background:' + nextBg + ';border:1px solid ' + nextBorder + ';border-radius:6px;color:' + nextColor + ';font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation;">' + nextLabel + '</button>') +
       '</div>' +
     '</div>';
   }
 
+  window._frFullCrew = function(yes) {
+    absentUsernames = new Set();
+    step = yes ? 2 : 1; // Yes → skip attendance; No → show attendance
+    render();
+  };
   window._frToggleAbsent = function(username) {
     if (absentUsernames.has(username)) absentUsernames.delete(username);
     else absentUsernames.add(username);
@@ -18518,7 +18572,7 @@ function openForemanReport() {
       setTimeout(function(){ toast.remove(); }, 3000);
       return;
     }
-    step = Math.max(1, Math.min(3, step + dir));
+    step = Math.max(0, Math.min(3, step + dir));
     render();
   };
   window._frSetHours = function(h) { selectedHours = h; customHours = ''; render(); };
@@ -23434,6 +23488,7 @@ async function fbLoadAll() {
           Object.assign(mergedSched, val);
         } else if (key === 'blocktypes') { blockTypes = val; }
         else if (key === 'foremans')   { foremanRoster = val; }
+        else if (key === 'employees')  { employees = Array.isArray(val) ? val : employees; localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees)); _checkLocalStorageSize(); }
         else if (key === 'special_actions') { if (Array.isArray(val) && val.length) specialActions = val; }
         else if (key === 'rental_crews') { if (Array.isArray(val)) rentalCrews = val; }
         else if (key === 'tab_perms') {
@@ -23819,6 +23874,7 @@ async function initApp(username) {
               } else if (key === 'blocktypes') { blockTypes = val; localStorage.setItem('pavescope_blocktypes', JSON.stringify(val)); if (activeTab === 'schedule') renderSchedule(); _settingsRefreshPanel('schedule');  _checkLocalStorageSize();}
               else if (key === 'foremans')   { foremanRoster = val; localStorage.setItem(FOREMAN_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
               else if (key === 'operators')  { operatorsList = val; localStorage.setItem(OPERATORS_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
+              else if (key === 'employees')  { employees = Array.isArray(val) ? val : employees; localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees)); _settingsRefreshPanel('rosters'); _checkLocalStorageSize(); }
               else if (key === 'equipment')  { equipmentList = val; localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
               else if (key === 'equipment_categories') { equipmentCategoryList = val; localStorage.setItem(EQUIPMENT_CAT_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
               else if (key === 'equipment_cat_map')    { equipmentCategoryMap = val; localStorage.setItem(EQUIPMENT_CAT_MAP_KEY, JSON.stringify(val)); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
@@ -25910,15 +25966,8 @@ function switchRosterTab(type) {
   if (type === 'employees') {
     if (rosterEl) rosterEl.style.display = 'none';
     const empEl = document.getElementById('stng-employees-roster');
-    if (empEl) {
-      empEl.style.display = '';
-      // Render the employees view inline
-      const empView = document.getElementById('employeesView');
-      if (empView) {
-        empEl.innerHTML = '<div style="min-height:400px;">' + (empView.innerHTML || '') + '</div>';
-        // Re-render employees into this panel
-        if (typeof renderEmployees === 'function') renderEmployees(empEl.querySelector('div'));
-      }
+    if (empEl && typeof renderSettingsEmployees === 'function') {
+      renderSettingsEmployees(empEl);
     }
     return;
   }

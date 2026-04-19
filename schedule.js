@@ -10801,3 +10801,14 @@ Return ONLY valid JSON (no markdown fences, no explanation):
   })();
 })();
 });
+
+// ── Employee roster panel for Settings → Roster → Employees ──────────────────
+function renderSettingsEmployees(el) {
+  if (!el) return;
+  if (typeof renderEmployeeTracker === 'function') {
+    el.style.display = '';
+    renderEmployeeTracker(el);
+  } else {
+    el.innerHTML = '<div style="padding:24px;color:var(--concrete-dim);font-size:12px;">Employee system not loaded.</div>';
+  }
+}
