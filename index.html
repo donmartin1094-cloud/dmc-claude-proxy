@@ -4505,7 +4505,7 @@ function _getJobsList() { return jobs; }
 let notifications = JSON.parse(localStorage.getItem('pavescope_notifs') || '[]');
 // Each notif: { id, type, title, message, time, read, jobId }
 
-function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); _checkLocalStorageSize(); try { fbSet('notifications', notifications); } catch(e) {} }
+function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); _checkLocalStorageSize(); try { fbSet('notifications', notifications); } catch(e) { console.error('[notifications] fbSet failed:', e); } }
 
 function pushNotif(type, title, message, jobId, targetUser) {
   const notif = {
