@@ -4457,11 +4457,6 @@ function renderSchedule() {
       <!-- ── Schedule Header ───────────────────────────────────────── -->
       <div class="schedule-header sched-hdr-new">
 
-        <!-- LEGEND: absolutely positioned top-right corner -->
-        <div class="sched-legend-wrap">
-          <div class="sched-legend">${legendHtml}</div>
-        </div>
-
         <div class="sched-hdr-row1">
 
           <!-- LEFT: queue drop zone fills the left 1fr column -->
@@ -4472,7 +4467,7 @@ function renderSchedule() {
             </div>
           </div>
 
-          <!-- CENTER: title + month nav (truly centered in banner) -->
+          <!-- CENTER: title on top, month nav below — both centered -->
           <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
             <div class="schedule-title" style="position:static;transform:none;font-size:20px;line-height:1;">📅 Master Schedule</div>
             <div class="schedule-month-nav" style="margin:0;">
@@ -4483,18 +4478,21 @@ function renderSchedule() {
               <button class="schedule-nav-btn" onclick="schedMonthOffset++;renderSchedule();">▶</button>
               <button id="sched-ai-hdr-btn" onclick="window._schedAI?.open()" title="AI Schedule Assistant"
                 style="background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);border-radius:var(--radius);padding:3px 8px;color:#7ecb8f;font-size:13px;cursor:pointer;line-height:1;">🤖</button>
-              <button class="btn btn-ghost btn-sm" onclick="schedMonthOffset=0;schedScrollToToday=true;renderSchedule();" style="font-size:10px;padding:3px 7px;">Today</button>
               ${lookaheadActiveSupplier ? `<button class="btn btn-sm" onclick="clearLookahead()" style="font-size:10px;padding:3px 8px;background:rgba(213,64,61,0.15);border-color:var(--red);color:var(--red);">✕ ${lookaheadActiveSupplier.split('—')[0].trim()}</button>` : ''}
             </div>
           </div>
 
-          <!-- RIGHT: zoom controls -->
+          <!-- RIGHT: color key on top, Today + zoom centered underneath -->
           <div class="sched-hdr-right">
-            <div style="display:flex;align-items:center;gap:3px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:2px 4px;">
-              <button class="schedule-nav-btn" onclick="changeSchedZoom(-0.1)" style="width:22px;height:22px;font-size:12px;">−</button>
-              <span id="schedZoomLabel" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);min-width:28px;text-align:center;">${Math.round(schedZoom*100)}%</span>
-              <button class="schedule-nav-btn" onclick="changeSchedZoom(0.1)" style="width:22px;height:22px;font-size:12px;">+</button>
-              <button class="schedule-nav-btn" onclick="changeSchedZoom(0)" style="width:22px;height:22px;font-size:9px;">⊡</button>
+            <div class="sched-legend">${legendHtml}</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button class="btn btn-ghost btn-sm" onclick="schedMonthOffset=0;schedScrollToToday=true;renderSchedule();" style="font-size:10px;padding:3px 7px;">Today</button>
+              <div style="display:flex;align-items:center;gap:3px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:2px 4px;">
+                <button class="schedule-nav-btn" onclick="changeSchedZoom(-0.1)" style="width:22px;height:22px;font-size:12px;">−</button>
+                <span id="schedZoomLabel" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);min-width:28px;text-align:center;">${Math.round(schedZoom*100)}%</span>
+                <button class="schedule-nav-btn" onclick="changeSchedZoom(0.1)" style="width:22px;height:22px;font-size:12px;">+</button>
+                <button class="schedule-nav-btn" onclick="changeSchedZoom(0)" style="width:22px;height:22px;font-size:9px;">⊡</button>
+              </div>
             </div>
           </div>
 
