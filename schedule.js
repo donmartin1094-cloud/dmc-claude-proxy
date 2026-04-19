@@ -110,9 +110,11 @@ function openDayNoteSADrop(key, btn) {
 }
 
 function addDayNoteSA(key, saId) {
+  console.log('[VAC DEBUG] addDayNoteSA called, saId:', saId);
   document.getElementById('dayNoteSADrop')?.remove();
   const saInfo = specialActions.find(s => s.id === saId);
   if (saInfo && saInfo.id === 'sa6') {
+    console.log('[VAC DEBUG] vacation intercept triggered');
     openVacationPicker(key, null, saId, function(person, count) {
       applyDayNoteVacationDays(key, saId, person, count);
     });
@@ -5091,6 +5093,7 @@ function openNightShiftPicker(startKey, startSlot) {
 }
 
 function openVacationPicker(key, slot, saId, onConfirm) {
+  console.log('[VAC DEBUG] openVacationPicker called');
   document.getElementById('vacationPickerModal')?.remove();
 
   const overlay = document.createElement('div');
