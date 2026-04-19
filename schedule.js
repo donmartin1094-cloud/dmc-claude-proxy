@@ -4457,6 +4457,20 @@ function renderSchedule() {
       <!-- ── Schedule Header ───────────────────────────────────────── -->
       <div class="schedule-header sched-hdr-new">
 
+        <!-- LEGEND: absolutely positioned top-right corner, Today + zoom stacked below -->
+        <div class="sched-legend-wrap">
+          <div class="sched-legend">${legendHtml}</div>
+          <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;">
+            <button class="btn btn-ghost btn-sm" onclick="schedMonthOffset=0;schedScrollToToday=true;renderSchedule();" style="font-size:10px;padding:3px 7px;">Today</button>
+            <div style="display:flex;align-items:center;gap:3px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:2px 4px;">
+              <button class="schedule-nav-btn" onclick="changeSchedZoom(-0.1)" style="width:22px;height:22px;font-size:12px;">−</button>
+              <span id="schedZoomLabel" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);min-width:28px;text-align:center;">${Math.round(schedZoom*100)}%</span>
+              <button class="schedule-nav-btn" onclick="changeSchedZoom(0.1)" style="width:22px;height:22px;font-size:12px;">+</button>
+              <button class="schedule-nav-btn" onclick="changeSchedZoom(0)" style="width:22px;height:22px;font-size:9px;">⊡</button>
+            </div>
+          </div>
+        </div>
+
         <div class="sched-hdr-row1">
 
           <!-- LEFT: queue drop zone fills the left 1fr column -->
@@ -4482,19 +4496,8 @@ function renderSchedule() {
             </div>
           </div>
 
-          <!-- RIGHT: color key on top, Today + zoom centered underneath -->
-          <div class="sched-hdr-right">
-            <div class="sched-legend">${legendHtml}</div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <button class="btn btn-ghost btn-sm" onclick="schedMonthOffset=0;schedScrollToToday=true;renderSchedule();" style="font-size:10px;padding:3px 7px;">Today</button>
-              <div style="display:flex;align-items:center;gap:3px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:2px 4px;">
-                <button class="schedule-nav-btn" onclick="changeSchedZoom(-0.1)" style="width:22px;height:22px;font-size:12px;">−</button>
-                <span id="schedZoomLabel" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);min-width:28px;text-align:center;">${Math.round(schedZoom*100)}%</span>
-                <button class="schedule-nav-btn" onclick="changeSchedZoom(0.1)" style="width:22px;height:22px;font-size:12px;">+</button>
-                <button class="schedule-nav-btn" onclick="changeSchedZoom(0)" style="width:22px;height:22px;font-size:9px;">⊡</button>
-              </div>
-            </div>
-          </div>
+          <!-- RIGHT: empty spacer to keep 3-column grid balanced -->
+          <div></div>
 
         </div>
 

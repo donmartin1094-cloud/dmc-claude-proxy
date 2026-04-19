@@ -1301,8 +1301,13 @@
     overflow-x:auto;
   }
   .sched-hdr-queue-row.drag-over { background:rgba(245,197,24,0.06); border-color:rgba(245,197,24,0.3); }
-  .sched-hdr-right { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; flex-shrink:0; padding:6px 12px; }
-  .sched-legend { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .sched-hdr-right { display:flex; align-items:center; gap:6px; flex-shrink:0; flex-wrap:nowrap; justify-content:flex-end; }
+  /* Legend — fixed to top-right corner of header, Today + zoom stacked below it */
+  .sched-legend-wrap {
+    position:absolute; top:8px; right:12px;
+    display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+  }
+  .sched-legend { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
   .sched-hdr-toggle-row {
     display:flex; align-items:center; gap:0; padding:3px 12px;
     background:var(--asphalt-mid); border-bottom:2px solid var(--asphalt-light);
