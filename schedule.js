@@ -112,6 +112,8 @@ function openDayNoteSADrop(key, btn) {
 function addDayNoteSA(key, saId) {
   document.getElementById('dayNoteSADrop')?.remove();
   const saInfo = specialActions.find(s => s.id === saId);
+  console.log('[SA DEBUG] addDayNoteSA called, saId:', saId, 'label:', saInfo?.label);
+  console.log('[SA DEBUG] _saIsLocationAction result:', _saIsLocationAction(saInfo));
   if (saInfo && _saIsLocationAction(saInfo)) {
     openSALocationPicker(key, null, saId, function(loc) {
       _commitDayNoteSAWithLocation(key, saId, loc);
@@ -1881,6 +1883,7 @@ function _saIsLocationAction(saInfo) {
 }
 
 function openSALocationPicker(key, slot, saId, onConfirm) {
+  console.log('[SA DEBUG] openSALocationPicker called');
   document.getElementById('saLocPicker')?.remove();
   var saInfo = specialActions.find(function(s) { return s.id === saId; });
   if (!saInfo) return;
