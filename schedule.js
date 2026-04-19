@@ -3369,6 +3369,10 @@ function openMatSearchFromInline(inputEl, key, slot) {
   }, 80);
 }
 
+function openMixTypeChipMenu(key, slot, itemName, chipEl) {
+  openUnifiedSchedPicker({ type:'material', title:'🪨 Material & Tonnage', key, slot, field:'material' });
+}
+
 function openPickerDropdown(key, slot, field, type) {
   if (type === 'material') { openUnifiedSchedPicker({ type:'material', title:'🪨 Material & Tonnage', key, slot, field:'material' }); return; }
   const label = type === 'equipment' ? '🚜 Equipment' : '👷 Operators';
@@ -3697,6 +3701,15 @@ function _equalizeSchedBlocks() {
       // Find tallest
       var maxH = Math.max.apply(null, blocks.map(function(b) { return b.offsetHeight; }));
       if (maxH > 0) blocks.forEach(function(b) { b.style.minHeight = maxH + 'px'; });
+
+      // Equalize second-stop wrap sections so days without stops reserve the same
+      // vertical space as the tallest stop section, keeping bottom blocks aligned.
+      var stopWraps = Array.from(weekEl.querySelectorAll('.sched-second-stops-wrap[data-stop-slot="' + slot + '"]'));
+      if (stopWraps.length >= 2) {
+        stopWraps.forEach(function(w) { w.style.minHeight = ''; });
+        var maxWrapH = Math.max.apply(null, stopWraps.map(function(w) { return w.offsetHeight; }));
+        if (maxWrapH > 0) stopWraps.forEach(function(w) { w.style.minHeight = maxWrapH + 'px'; });
+      }
     });
   });
 }
@@ -3764,7 +3777,7 @@ function renderSchedule() {
         const canEdit = (isAdmin() || canEditTab('schedule')) && schedEditMode;
 
         // ── After-night-shift rest day detection ──
-        const isAfterNight = !!(schedData[key]?.afterNightShift) && effectiveType === 'blank';
+        const isAfterNight = !!(stored?.afterNightShift) && effectiveType === 'blank';
 
         const hasContent = Object.values(fields).some(v => v && v.trim());
 
@@ -4027,7 +4040,7 @@ function renderSchedule() {
             ${isAfterNight ? `
             <div style="background:#4a4a4a;padding:8px 10px;border-bottom:1px solid #666;display:flex;flex-direction:column;align-items:flex-start;gap:6px;">
               <span style="background:#333;border:1px solid #888;border-radius:4px;padding:2px 7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:#ddd;letter-spacing:0.5px;white-space:nowrap;">🌙 No Work After Night Shift</span>
-              ${canEdit ? `<button onclick="clearAfterNightFlag('${key}')"
+              ${canEdit ? `<button onclick="clearAfterNightFlag('${key}','${slot}')"
                 style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:3px 9px;font-family:'DM Sans',sans-serif;font-size:9px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;transition:all 0.15s;align-self:flex-start;"
                 onmouseover="this.style.background='rgba(255,255,255,0.2)'"
                 onmouseout="this.style.background='rgba(255,255,255,0.1)'"
@@ -4068,7 +4081,7 @@ function renderSchedule() {
             <button class="sched-day-add-btn" onclick="openAddForemanModal('${key}')" title="Add foreman crew for this day">+</button>
           </div>
           ${renderBlock('top')}
-          ${_topStops.map(({ex,i}) => renderExtraBlock(key, i, ex, false)).join('')}
+          <div class="sched-second-stops-wrap" data-stop-slot="top">${_topStops.map(({ex,i}) => renderExtraBlock(key, i, ex, false)).join('')}</div>
           ${(()=>{
             const dn = schedData[key]||{};
             const dayNoteSA = dn.dayNoteSA||[];
@@ -4098,7 +4111,7 @@ function renderSchedule() {
             </div>`;
           })()}
           ${renderBlock('bottom')}
-          ${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}
+          <div class="sched-second-stops-wrap" data-stop-slot="bottom">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}</div>
           ${_otherExtras.map(({ex,i}) => renderExtraBlock(key, i, ex, i===_lastExtraI)).join('')}
         </div>`;
     }).join('');
@@ -5137,14 +5150,15 @@ function applyConsecutiveNightShifts(startKey, startSlot, count) {
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  // Mark the day after the last night shift as "rest day"
+  // Mark the day after the last night shift as "rest day" — slot-specific so only
+  // the foreman who worked nights is blocked, not the other foreman's row.
   const afterKey = dk(cursor); // cursor is already 1 day past the last night
   if (!schedData[afterKey]) schedData[afterKey] = {};
-  // Only set the flag if that day isn't already occupied with a non-blank job
-  const topSlot = (schedData[afterKey] || {})[startSlot];
-  const alreadyHasWork = topSlot && topSlot.type && topSlot.type !== 'blank';
+  const slotAfter = (schedData[afterKey] || {})[startSlot];
+  const alreadyHasWork = slotAfter && slotAfter.type && slotAfter.type !== 'blank';
   if (!alreadyHasWork) {
-    schedData[afterKey].afterNightShift = true;
+    if (!schedData[afterKey][startSlot]) schedData[afterKey][startSlot] = { type:'blank', fields:{} };
+    schedData[afterKey][startSlot].afterNightShift = true;
   }
 
   saveSchedData();
@@ -5305,9 +5319,10 @@ function addBlockToQueue(key, slot) {
   pushNotif('success', '→ Sent to Queue', jobName || jobNum || 'Job card added to queue.', null);
 }
 
-function clearAfterNightFlag(key) {
-  if (schedData[key]) {
-    delete schedData[key].afterNightShift;
+function clearAfterNightFlag(key, slot) {
+  const s = slot || 'top';
+  if (schedData[key]?.[s]) {
+    delete schedData[key][s].afterNightShift;
     saveSchedData();
     renderSchedule();
   }
