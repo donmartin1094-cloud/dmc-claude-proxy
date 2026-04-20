@@ -5708,18 +5708,20 @@ function _homeFleetRerenderControls() {
 }
 
 function _homeFleetRerender() {
-  var fp = document.getElementById('homeFleetPanel');
-  if (!fp) return;
   var isMob = window.innerWidth <= 600;
   if (isMob) {
+    var fp = document.getElementById('homeFleetPanel');
+    if (!fp) return;
     // Mobile: daily + lowbed are their own section cards; fleet panel only holds fleet + notifs
     fp.innerHTML = '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;">' +
       _homeFleetSectionHtml() +
       _homeEquipNotifSectionHtml() +
     '</div>';
   } else {
-    fp.innerHTML = '<div style="flex:1;min-height:0;overflow-y:auto;" id="homeFleetScrollBody">' +
-      _homeDailyOverviewSectionHtml() +
+    var dailyCol = document.getElementById('homeAdminDailyCol');
+    if (dailyCol) dailyCol.innerHTML = _homeDailyOverviewSectionHtml();
+    var fp = document.getElementById('homeFleetPanel');
+    if (fp) fp.innerHTML = '<div style="flex:1;min-height:0;overflow-y:auto;height:100%;" id="homeFleetScrollBody">' +
       _homeFleetSectionHtml() +
       _homeLowbedSectionHtml() +
       _homeEquipNotifSectionHtml() +
@@ -6608,21 +6610,31 @@ function renderHomeView(el) {
       ? (_isMobAdmin
           ? _homeAdminMobSectionsHtml()
           : '<div class="home-admin-top" style="display:flex;gap:16px;align-items:flex-start;flex-shrink:0;">' +
-              '<div class="home-admin-gps-col" style="flex:0 0 60%;min-width:0;display:flex;flex-direction:column;gap:12px;">' + _homeRenderGpsFleetPanel() + '</div>' +
-              '<div class="home-admin-hrs-col" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;align-self:stretch;">' +
-                '<div id="homeDJHoursPanel">' + _homeDJHoursWidget() + '</div>' + _homeWeekScheduleWidget() +
+              '<div id="homeAdminDailyCol" style="flex:0 0 22%;min-width:200px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;background:var(--asphalt-mid);">' +
+                _homeDailyOverviewSectionHtml() +
+              '</div>' +
+              '<div id="homeGpsFleetPanel" style="flex:0 0 36%;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;position:relative;background:#111;">' +
+                '<div class="home-gps-map-inner" id="homeGpsMapEl"></div>' +
+              '</div>' +
+              '<div class="home-fleet-panel" id="homeFleetPanel" style="flex:1;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
+                '<div style="flex:1;min-height:0;overflow-y:auto;height:100%;" id="homeFleetScrollBody">' +
+                  _homeFleetSectionHtml() +
+                  _homeLowbedSectionHtml() +
+                  _homeEquipNotifSectionHtml() +
+                '</div>' +
               '</div>' +
             '</div>'
         )
       : '';
     el.innerHTML = `
       <div class="home-wrap${_isMobAdmin ? ' home-wrap-mob-admin' : ''}">
-        <div class="home-greeting">
+        <div class="home-greeting" style="${_homeIsAdmin() && !_isMobAdmin ? 'align-items:flex-start;' : ''}">
           <div class="home-greeting-text">
             <div class="home-greeting-sub">${greeting},</div>
             <div class="home-greeting-name">${safeName} 👋</div>
             <div class="home-greeting-date">${dateStr}</div>
           </div>
+          ${_homeIsAdmin() && !_isMobAdmin ? '<div id="homeDJHoursPanel" style="flex:1;min-width:220px;max-width:360px;">' + _homeDJHoursWidget() + '</div><div style="flex:1;min-width:220px;max-width:360px;">' + _homeWeekScheduleWidget() + '</div>' : ''}
           ${_isMobAdmin ? '<button class="home-admin-mob-reorder-btn" onclick="_adminMobReorder()">↕ Reorder</button>' : ''}
           ${_homeIsAdmin() ? `<button onclick="_openMixSlipScanner()" style="padding:10px 20px;background:#1a2a1a;border:1px solid #7ecb8f;border-radius:6px;color:#7ecb8f;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.background='#7ecb8f';this.style.color='#000'" onmouseout="this.style.background='#1a2a1a';this.style.color='#7ecb8f'">📷 Scan Mix Slip</button>` : ''}
           ${(!_isDriver && !_isForeman && !_isCrewRole && !_homeIsAdmin()) ? `<div style="display:flex;flex-direction:column;gap:8px;width:100%;">
