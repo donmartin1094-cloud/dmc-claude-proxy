@@ -1948,20 +1948,21 @@ function saLocFilter(query) {
   box.innerHTML = matches.map(function(j) {
     var num  = j.num  || j.jobNum  || '';
     var name = j.name || j.jobName || '';
-    var display = (num ? '# ' + num : '') + (num && name ? ' — ' : '') + name;
-    var safe = display.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var numSafe  = num.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var nameSafe = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return '<div style="padding:8px 14px;cursor:pointer;display:flex;align-items:baseline;gap:8px;" ' +
-      'onmousedown="event.preventDefault();saLocPickSuggestion(\'' + safe + '\')" ' +
+      'onmousedown="event.preventDefault();saLocPickSuggestion(\'' + numSafe + '\',\'' + nameSafe + '\')" ' +
       'onmouseover="this.style.background=\'rgba(245,197,24,0.1)\'" ' +
       'onmouseout="this.style.background=\'\'">' +
       '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);flex-shrink:0;">' + (num ? '#' + num : '') + '</span>' +
-      '<span style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);">' + (name || display) + '</span>' +
+      '<span style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);">' + (name || num) + '</span>' +
       '</div>';
   }).join('');
   box.style.display = 'block';
 }
 
-function saLocPickSuggestion(text) {
+function saLocPickSuggestion(num, name) {
+  var text = num ? ('#' + num + (name ? ' ' + name : '')) : (name || '');
   var input = document.getElementById('saLocInput');
   if (input) { input.value = text; input.focus(); }
   var box = document.getElementById('saLocSuggestions');
@@ -2424,7 +2425,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
   const btype = getBlockType(effectiveType);
   const isBlankExtra = effectiveType === 'blank';
   const extraBg = isBlankExtra ? '#ffffff' : btype.color;
-  const fc = isBlankExtra ? '#000000' : (btype.fontColor || '#ffffff');
+  const fc = '#000000';
   const fields = bdata.fields || {};
 
   const fieldsHtml = BLOCK_FIELDS.map(f => {
@@ -2572,7 +2573,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
           if (!sa) return '';
           if (_saIsVacationAction(sa) && !canSeeVacation()) return '';
           const chipLabel1 = (_saIsVacationAction(sa) && fields._vacationPerson)
-            ? fields._vacationPerson
+            ? fields._vacationPerson + ' on vacation'
             : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
           return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
             ${chipLabel1}
@@ -3919,7 +3920,7 @@ function renderSchedule() {
         const isWeekendBlank = isWeekend && effectiveType === 'blank';
         const isWeekdayBlank = !isWeekend && effectiveType === 'blank';
         const blockBg = isHoliday ? '#e8d5f5' : isWeekendBlank ? '#e8d5f5' : isWeekdayBlank ? '#ffffff' : btype.color;
-        const fc = (isHoliday || isWeekendBlank || isWeekdayBlank) ? '#000000' : (btype.fontColor || '#ffffff');
+        const fc = '#000000';
         const fields = bdata.fields || {};
         const canEdit = (isAdmin() || canEditTab('schedule')) && schedEditMode;
 
@@ -4083,7 +4084,7 @@ function renderSchedule() {
                 if (!sa) return '';
                 if (_saIsVacationAction(sa) && !canSeeVacation()) return '';
                 const chipLabel2 = (_saIsVacationAction(sa) && fields._vacationPerson)
-                  ? fields._vacationPerson
+                  ? fields._vacationPerson + ' on vacation'
                   : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
                 return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
                   ${chipLabel2}
@@ -4163,14 +4164,14 @@ function renderSchedule() {
         }
 
         const isRainedOut = !!bdata.rainedOut;
-        const finalBg = lookaheadBlockout ? '#111111' : isRainedOut ? '#4a4a4a' : isAfterNight ? '#5a5a5a' : blockBg;
-        const finalFc = lookaheadBlockout ? '#333333' : isRainedOut ? '#aaaaaa' : isAfterNight ? '#cccccc' : fc;
+        const finalBg = lookaheadBlockout ? (isHoliday || isWeekend ? '#e8d5f5' : '#ffffff') : isRainedOut ? '#4a4a4a' : isAfterNight ? '#5a5a5a' : blockBg;
+        const finalFc = lookaheadBlockout ? '#000000' : isRainedOut ? '#aaaaaa' : isAfterNight ? '#cccccc' : fc;
         const serviceOutline = lookaheadHighlight ? 'outline:3px solid #f5c518;outline-offset:-3px;' : '';
 
         return `
           <div class="sched-block${isRainedOut?' rained-out':''}${slot==='bottom' && !_botStops.length && !_otherExtras.length?' sched-block-bottom':''}"
                data-date-key="${key}" data-block-slot="${slot}" data-block-type="${effectiveType}"
-               style="background:${finalBg};${serviceOutline}${lookaheadBlockout?'user-select:none;':''}"
+               style="background:${finalBg};${serviceOutline}"
                ${dragDropAttrs}>
             <div class="sched-block-header" style="${isAfterNight ? 'background:#4a4a4a;border-bottom:2px solid #666;' : ''}">
               <div class="sched-block-header-row1">
@@ -4195,10 +4196,10 @@ function renderSchedule() {
                 onmouseout="this.style.background='rgba(255,255,255,0.1)'"
                 title="Override: allow scheduling on this day">Override →</button>` : ''}
             </div>` : ''}
-            <div class="${fieldsClass}" ${lookaheadBlockout ? 'style="pointer-events:none;opacity:0.08;"' : isAfterNight ? 'style="pointer-events:none;opacity:0.25;"' : fieldsAttrs}>
+            <div class="${fieldsClass}" ${lookaheadBlockout ? 'style="pointer-events:none;"' : isAfterNight ? 'style="pointer-events:none;opacity:0.25;"' : fieldsAttrs}>
               ${lookaheadBlockout ? '' : fieldsHtml}
             </div>
-            <div class="sched-type-btns">${typeBtnsHtml}${copyPasteBtns}${jobFinishBtns}</div>
+            ${lookaheadBlockout ? '' : `<div class="sched-type-btns">${typeBtnsHtml}${copyPasteBtns}${jobFinishBtns}</div>`}
           </div>`;
       };
 
@@ -4244,7 +4245,7 @@ function renderSchedule() {
               const chipColor   = _graderChip ? '#000'                 : '#fff';
               const xColor      = _graderChip ? 'rgba(0,0,0,0.55)'    : 'rgba(255,255,255,0.7)';
               const saLoc       = dn.dayNoteSALocations?.[sid];
-              const chipLabel   = saLoc ? sa.label + ' — ' + saLoc : sa.label;
+              const chipLabel   = (saLoc && _saIsVacationAction(sa)) ? saLoc + ' on vacation' : (saLoc ? sa.label + ' — ' + saLoc : sa.label);
               return `<span class="sched-day-note-sa-chip" style="background:${chipBg};border:${chipBorder};color:${chipColor};">
                 ${chipLabel}
                 ${canEditSched?`<button style="background:none;border:none;cursor:pointer;font-size:9px;padding:0 0 0 2px;line-height:1;color:${xColor};"

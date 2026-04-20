@@ -3058,6 +3058,7 @@ function _checkLocalStorageSize() {
   } catch(e) { return 0; }
 }
 </script>
+<script src="/ui-components.js"></script>
 <script src="/slips.js"></script>
 <script src="/schedule.js"></script>
 <script src="/reports.js"></script>
@@ -5088,6 +5089,7 @@ const HOME_WIDGETS_DEF = [
   { id:'lowbedmoves',     label:'Lowbed Moves',         icon:'🚚', desc:'Active lowbed moves — equipment in transit, deadlines, and job status', defaultOn:true  },
   { id:'foremanreport',   label:'Foreman Report',       icon:'📋', desc:'Submit daily crew attendance and hours report',                           defaultOn:true  },
   { id:'myhours',         label:'My Hours',             icon:'⏱',  desc:'Your weekly hours tracked from foreman reports',                          defaultOn:true  },
+  { id:'atowbills',       label:"Andy's Towing Bills",  icon:'🧾', desc:'Pending towing bills and totals',                                             defaultOn:true  },
 ];
 
 function getHomePrefs() {
@@ -6040,6 +6042,39 @@ function _homeATowBillsWidget() {
     '</div>';
 }
 
+function widgetATowBills() {
+  var cardId = 'homeATowBillsCard';
+  setTimeout(function() {
+    var card = document.getElementById(cardId);
+    if (!card || !db) return;
+    db.collection('app_data').doc('atow_bills').get().then(function(doc) {
+      var bills = [];
+      if (doc.exists && doc.data() && doc.data().data) { try { bills = JSON.parse(doc.data().data); } catch(e) {} }
+      if (!Array.isArray(bills)) bills = [];
+      var pending  = bills.filter(function(b){ return b.status === 'pending' || !b.status; });
+      var pendTotal = pending.reduce(function(s,b){ return s + (parseFloat(b.amount)||0); }, 0);
+      var paid      = bills.filter(function(b){ return b.status === 'paid'; });
+      if (!card) return;
+      card.innerHTML = pending.length
+        ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">' +
+            '<span style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);">' + pending.length + ' pending bill' + (pending.length !== 1 ? 's' : '') + '</span>' +
+            '<span style="background:rgba(245,197,24,0.15);border:1px solid rgba(245,197,24,0.4);border-radius:4px;padding:3px 10px;font-family:\'DM Mono\',monospace;font-size:10px;color:#f5c518;font-weight:700;">$' + pendTotal.toFixed(2) + '</span>' +
+          '</div>' +
+          '<div style="margin-top:8px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + paid.length + ' paid this cycle</div>'
+        : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:8px 0;">No pending bills</div>';
+    }).catch(function(){});
+  }, 300);
+  return '<div class="home-widget">' +
+    '<div class="home-widget-header">' +
+      '<div class="home-widget-title">🧾 Andy\'s Towing Bills</div>' +
+      '<button class="home-widget-action" onclick="event.stopPropagation();switchTab(\'atow_bills\')">View All</button>' +
+    '</div>' +
+    '<div class="home-widget-body" id="' + cardId + '" style="cursor:pointer;" onclick="switchTab(\'atow_bills\')">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:8px 0;">Loading…</div>' +
+    '</div>' +
+  '</div>';
+}
+
 function _homeWeekScheduleWidget() {
   var today = new Date();
   var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
@@ -6575,7 +6610,7 @@ function renderHomeView(el) {
           : '<div class="home-admin-top" style="display:flex;gap:16px;align-items:flex-start;flex-shrink:0;">' +
               '<div class="home-admin-gps-col" style="flex:0 0 60%;min-width:0;display:flex;flex-direction:column;gap:12px;">' + _homeRenderGpsFleetPanel() + '</div>' +
               '<div class="home-admin-hrs-col" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;align-self:stretch;">' +
-                '<div id="homeDJHoursPanel">' + _homeDJHoursWidget() + '</div>' + _homeWeekScheduleWidget() + _homeATowBillsWidget() +
+                '<div id="homeDJHoursPanel">' + _homeDJHoursWidget() + '</div>' + _homeWeekScheduleWidget() +
               '</div>' +
             '</div>'
         )
@@ -6701,6 +6736,7 @@ function buildWidget(id, displayName, pos) {
       case 'lowbedmoves':    html = widgetLowbedMoves(); break;
       case 'foremanreport':  html = widgetForemanReport(); break;
       case 'myhours':        html = widgetMyHours(); break;
+      case 'atowbills':      html = widgetATowBills(); break;
       default:                return '';
     }
     // Apply stored size + freeform position
