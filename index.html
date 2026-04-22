@@ -5392,9 +5392,9 @@ function _homeDailyOverviewSectionHtml() {
       }).filter(Boolean).join('')
     : '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.25);font-style:italic;">None today</div>';
 
-  // ── Left half: 40% Filipe | 40% Louie | 20% Special Actions — all within map height
+  // ── Foreman assignments: 40% Filipe | 40% Louie | 20% Special Actions
   var leftHalf =
-    '<div style="flex:0 0 50%;display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--asphalt-light);overflow:hidden;">' +
+    '<div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">' +
       // Filipe 40%
       '<div style="flex:0 0 40%;min-height:0;overflow:hidden;border-bottom:1px solid rgba(255,255,255,0.06);">' + filipeCard + '</div>' +
       // Louie 40%
@@ -5410,117 +5410,12 @@ function _homeDailyOverviewSectionHtml() {
       '</div>' +
     '</div>';
 
-  // ── Right half: daily lowbed moves ───────────────────────────────────────────
-  var plan = null;
-  try { plan = JSON.parse(localStorage.getItem('dmc_lowbed_plan')||'null'); } catch(e) {}
-  if (!plan || !plan.jobs || !plan.jobs.length) plan = _homeLowbedFakeData();
-
-  var LB_EQ = { paver:'🟡', roller:'🔵', excavator:'🟠', dozer:'🟤', grader:'🟣', milling_machine:'⬛', loader:'🟢' };
-
-  // Purple destination/tally cards
-  var destCardsHtml = (plan.jobs||[]).map(function(job) {
-    var moves = job.moves || [], allEq = [], arrivedSet = {};
-    moves.forEach(function(mv) {
-      (mv.equipment||[]).forEach(function(eq) {
-        if (!allEq.find(function(e){ return e.name===eq.name; })) allEq.push(eq);
-        if (mv.status === 'complete') arrivedSet[eq.name] = true;
-      });
-    });
-    var arrivedCount = Object.keys(arrivedSet).length;
-    var totalCount   = allEq.length;
-    var allArrived   = arrivedCount === totalCount && totalCount > 0;
-    var dlHtml = '';
-    if (job.deadline) {
-      try {
-        var jd = new Date(job.deadline), overdue = jd < new Date();
-        dlHtml = '<span style="background:#fff;border:2px solid #c0392b;border-radius:3px;padding:1px 5px;' +
-          'font-family:\'DM Mono\',monospace;font-size:6px;font-weight:700;color:#c0392b;white-space:nowrap;">' +
-          (overdue?'✓ ':'⚠ ') + jd.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '</span>';
-      } catch(e){}
-    }
-    var eqPips = allEq.map(function(eq) {
-      var here = !!arrivedSet[eq.name];
-      return '<div style="display:flex;align-items:center;gap:3px;margin-bottom:1px;">' +
-        '<span style="font-size:7px;opacity:'+(here?1:0.35)+';">'+(LB_EQ[eq.type]||'📦')+'</span>' +
-        '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:'+(here?'rgba(126,203,143,0.9)':'rgba(167,139,250,0.5)')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72px;">' + escHtml(eq.name||eq.type) + '</span>' +
-        (here ? '<span style="font-size:6px;color:#7ecb8f;flex-shrink:0;">✓</span>' : '') +
-      '</div>';
-    }).join('');
-    var tallyColor = allArrived ? '#7ecb8f' : (arrivedCount > 0 ? '#e8a94c' : 'rgba(167,139,250,0.7)');
-    return '<div style="flex:0 0 auto;background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.28);border-radius:7px;padding:6px 8px;margin-bottom:5px;">' +
-      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;margin-bottom:4px;">' +
-        '<div style="min-width:0;">' +
-          '<div style="font-family:\'DM Sans\',sans-serif;font-size:9px;font-weight:800;color:#c4b5fd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(job.jobName||job.jobNum||'Job') + '</div>' +
-          (job.jobNum ? '<div style="font-family:\'DM Mono\',monospace;font-size:6px;color:rgba(167,139,250,0.5);">#'+escHtml(job.jobNum)+'</div>' : '') +
-        '</div>' +
-        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">' +
-          '<span style="font-family:\'DM Mono\',monospace;font-size:8px;font-weight:700;color:'+tallyColor+';">'+arrivedCount+'/'+totalCount+' on site</span>' +
-          dlHtml +
-        '</div>' +
-      '</div>' +
-      (eqPips ? '<div style="display:flex;flex-wrap:wrap;gap:0 12px;">' + eqPips + '</div>' : '') +
-    '</div>';
-  }).join('') || '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.3);text-align:center;padding:8px 0;">No jobs planned</div>';
-
-  // Blue individual move cards
-  var moveCardsHtml = [];
-  (plan.jobs||[]).forEach(function(job) {
-    (job.moves||[]).forEach(function(mv, mi) {
-      var done = mv.status==='complete', inProg = mv.status==='in_progress';
-      var statusColor = done?'#7ecb8f':inProg?'#5ab4f5':'#60a5fa';
-      var bgColor = done?'rgba(126,203,143,0.05)':inProg?'rgba(90,180,245,0.08)':'rgba(96,165,250,0.07)';
-      var bdColor = done?'rgba(126,203,143,0.22)':inProg?'rgba(90,180,245,0.25)':'rgba(96,165,250,0.25)';
-      var route = [mv.from,mv.to].filter(Boolean).join(' → ');
-      var eqChips = (mv.equipment||[]).map(function(eq) {
-        return '<span style="display:inline-flex;align-items:center;gap:2px;background:'+(done?'rgba(126,203,143,0.09)':'rgba(96,165,250,0.1)')+';' +
-          'border:1px solid '+(done?'rgba(126,203,143,0.25)':'rgba(96,165,250,0.25)')+';border-radius:4px;' +
-          'padding:1px 5px;font-family:\'DM Mono\',monospace;font-size:6px;color:'+(done?'rgba(126,203,143,0.8)':'#93c5fd')+';' +
-          (done?'text-decoration:line-through;':'')+'white-space:nowrap;">' +
-          (LB_EQ[eq.type]||'📦')+' '+escHtml(eq.name||eq.type)+'</span>';
-      }).join('');
-      var dlChip = mv.deadline ? (function(){
-        try {
-          var dd=new Date(mv.deadline), exp=dd<new Date();
-          return '<span style="background:#fff;border:2px solid #c0392b;border-radius:3px;padding:1px 4px;font-family:\'DM Mono\',monospace;font-size:6px;font-weight:700;color:#c0392b;'+(done?'opacity:0.5;':'')+'">'+
-            (done?'✓ ':exp?'🔴 ':'⚠ ')+dd.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</span>';
-        } catch(e){ return ''; }
-      })() : '';
-      moveCardsHtml.push(
-        '<div style="flex:0 0 auto;background:'+bgColor+';border:1px solid '+bdColor+';border-radius:6px;padding:6px 8px;margin-bottom:5px;opacity:'+(done?0.65:1)+';">' +
-        '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">' +
-          '<span style="width:6px;height:6px;border-radius:50%;background:'+statusColor+';flex-shrink:0;display:inline-block;"></span>' +
-          '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:'+statusColor+';">'+(done?'Complete':inProg?'In Progress':'Pending')+'</span>' +
-          '<span style="flex:1;"></span>'+dlChip+
-        '</div>' +
-        '<div style="font-family:\'DM Sans\',sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,0.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px;">' +
-          escHtml(job.jobName||job.jobNum||'')+' — Move '+(mi+1)+
-        '</div>' +
-        (route ? '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);margin-bottom:4px;">'+escHtml(route)+'</div>' : '') +
-        (eqChips ? '<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:3px;">'+eqChips+'</div>' : '') +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+(mv.assignedDriver?'rgba(96,165,250,0.75)':'rgba(155,148,136,0.4)')+';">🚛 '+escHtml(mv.assignedDriver||'Unassigned')+'</div>' +
-        '</div>'
-      );
-    });
-  });
-
-  var rightHalf =
-    '<div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;">' +
-      '<div style="flex:0 0 auto;padding:6px 8px 2px;border-bottom:1px solid rgba(167,139,250,0.12);">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:6px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(167,139,250,0.5);margin-bottom:4px;">Equipment Status by Job</div>' +
-        destCardsHtml +
-      '</div>' +
-      '<div style="flex:1;min-height:0;overflow-y:auto;padding:6px 8px;">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:6px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(96,165,250,0.5);margin-bottom:4px;">Individual Moves</div>' +
-        (moveCardsHtml.length ? moveCardsHtml.join('') : '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.3);text-align:center;padding:8px 0;">No moves today</div>') +
-      '</div>' +
-    '</div>';
-
   // Outer wrapper: exactly matches the map panel height (420px), section header at top (flex-shrink:0),
   // content fills remaining space so Filipe=40%, Louie=40%, SA=20% of the content area
   return '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
     '<div style="flex-shrink:0;">' + hdr + '</div>' +
     '<div style="flex:1;min-height:0;display:flex;">' +
-      leftHalf + rightHalf +
+      leftHalf +
     '</div>' +
   '</div>';
 }
