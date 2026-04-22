@@ -14597,7 +14597,7 @@ function _invGenerateFromTodaySchedule() {
     var block = day[slot];
     if (!block || !block.type || block.type === 'blank' || block.type === 'pending' || block.type === 'night') return;
     var prefill = _invBuildPrefillFromBlock(todayKey, slot);
-    if (prefill) shifts.push({ slot: slot, prefill: prefill });
+    if (prefill) shifts.push(prefill);
   });
 
   if (shifts.length === 0) {
@@ -14605,39 +14605,43 @@ function _invGenerateFromTodaySchedule() {
     return;
   }
 
-  if (shifts.length === 1) {
+  var created = 0;
+  shifts.forEach(function(p) {
+    // Skip if invoice already exists for this date + foreman
+    var dup = invoiceList.some(function(inv) {
+      return inv.dateOfWork === todayKey && inv.foreman === p.foreman;
+    });
+    if (dup) return;
+
+    var entry = {
+      id:             'inv_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,5),
+      dateOfWork:     p.dateOfWork || todayKey,
+      invoiceNo:      '',
+      foreman:        p.foreman   || '',
+      jobNo:          p.jobNo     || '',
+      jobName:        p.jobName   || '',
+      gcName:         p.gcName    || '',
+      supplier:       p.supplier  || '',
+      mixItems:       p.mixType ? [{ mixType: p.mixType, tonQty: '', mixPrice: '', itemTotal: '' }] : [],
+      actualTrucking: { dmcCount: p.truckCount || 0, dmcCost: 0, brkCount: 0, brkCost: 0, supCount: 0, supCost: 0 },
+      approvedAmount: '',
+      invoiceNotes:   '',
+      attachments:    [],
+      updatedAt:      Date.now()
+    };
+    invoiceList.push(entry);
+    created++;
+  });
+
+  if (created === 0) {
+    pushNotif('info', 'Invoices Already Exist', 'Invoice entries already exist for today\'s shifts.', null, null);
     switchTab('apMix');
-    openInvoiceModal(null, shifts[0].prefill);
     return;
   }
 
-  // Two shifts — show a picker modal
-  var existing = document.getElementById('_invShiftPickerModal');
-  if (existing) existing.remove();
-
-  var overlay = document.createElement('div');
-  overlay.id = '_invShiftPickerModal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.innerHTML = '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:10px;padding:24px;min-width:280px;max-width:340px;">' +
-    '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:var(--white);margin-bottom:6px;">Generate Invoice</div>' +
-    '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-bottom:16px;">Two shifts scheduled today — choose one:</div>' +
-    shifts.map(function(s) {
-      var fo = escHtml(s.prefill.foreman || s.slot);
-      var jb = escHtml(s.prefill.jobName ? (s.prefill.jobName.length > 30 ? s.prefill.jobName.slice(0,27) + '…' : s.prefill.jobName) : 'Scheduled job');
-      var jn = s.prefill.jobNo ? ' <span style="color:var(--concrete-dim);">#' + escHtml(s.prefill.jobNo) + '</span>' : '';
-      var idx = shifts.indexOf(s);
-      return '<button onclick="document.getElementById(\'_invShiftPickerModal\').remove();switchTab(\'apMix\');openInvoiceModal(null,window._invPickerShifts[' + idx + '].prefill)" ' +
-        'style="display:block;width:100%;text-align:left;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.25);border-radius:6px;' +
-        'padding:10px 12px;margin-bottom:8px;cursor:pointer;color:var(--white);font-family:\'DM Sans\',sans-serif;">' +
-        '<div style="font-size:11px;font-weight:700;color:var(--stripe);">' + fo + '</div>' +
-        '<div style="font-size:10px;margin-top:2px;">' + jb + jn + '</div>' +
-        '</button>';
-    }).join('') +
-    '<button onclick="document.getElementById(\'_invShiftPickerModal\').remove()" style="width:100%;margin-top:4px;padding:7px;background:none;border:1px solid var(--asphalt-light);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">Cancel</button>' +
-  '</div>';
-  window._invPickerShifts = shifts;
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
+  saveInvoiceList();
+  pushNotif('success', 'Invoices Created', created + ' invoice entry' + (created > 1 ? 's' : '') + ' created for today — tap to review.', null, null);
+  switchTab('apMix');
 }
 
 // Dev helper: run in console to clear all invoice prompt flags for today
