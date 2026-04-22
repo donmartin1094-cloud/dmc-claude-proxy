@@ -14516,13 +14516,21 @@ function _invBuildPrefillFromBlock(dateKey, slot) {
 
 // ── Daily invoice prompt system ───────────────────────────────────────────────
 function _invCheckDailyPrompt() {
-  if (typeof isAdmin !== 'function' || !isAdmin()) return;
+  console.log('[INV] _invCheckDailyPrompt fired');
+  if (typeof isAdmin !== 'function' || !isAdmin()) { console.log('[INV] SKIP: isAdmin() false or missing'); return; }
   var now  = new Date();
   var h    = now.getHours();
   var m    = now.getMinutes();
   var todayKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
   var day  = (typeof schedData !== 'undefined' ? schedData[todayKey] : null) || {};
   var catchUp = !!_invCheckDailyPrompt._catchUp;
+  console.log('[INV] todayKey:', todayKey);
+  console.log('[INV] schedData[todayKey]:', JSON.stringify(schedData[todayKey]));
+  console.log('[INV] top block type:', schedData[todayKey]?.top?.type);
+  console.log('[INV] bottom block type:', schedData[todayKey]?.bottom?.type);
+  console.log('[INV] catchUp:', catchUp, '| h:', h, '| m:', m);
+  console.log('[INV] localStorage flag (top-day):', localStorage.getItem('dmc_inv_prompted_' + todayKey + '-top-day'));
+  console.log('[INV] localStorage flag (bottom-day):', localStorage.getItem('dmc_inv_prompted_' + todayKey + '-bottom-day'));
 
   var slots = ['top', 'bottom'];
   (day.extras || []).forEach(function(_, i) { slots.push('extra_' + i); });
@@ -14536,9 +14544,10 @@ function _invCheckDailyPrompt() {
       var ee = (day.extras || [])[ei];
       block = ee ? (ee.data || null) : null;
     }
-    if (!block || !block.type || block.type === 'blank') return;
+    console.log('[INV] slot:', slot, '| block type:', block?.type);
+    if (!block || !block.type || block.type === 'blank') { console.log('[INV] SKIP slot', slot, ': blank/missing'); return; }
     // Skip vacation/special-action-only blocks
-    if (block.type === 'pending') return;
+    if (block.type === 'pending') { console.log('[INV] SKIP slot', slot, ': pending'); return; }
 
     var isNight  = block.type === 'night';
     var shiftKey = isNight ? 'night' : 'day';
@@ -14546,19 +14555,22 @@ function _invCheckDailyPrompt() {
     // Trigger window: 7:00–7:05am for day, 10:00–10:05pm for night
     var inWindow = isNight ? (h === 22 && m < 6) : (h === 7 && m < 6);
     var pastTrigger = isNight ? (h >= 22) : (h >= 7);
+    console.log('[INV] slot:', slot, '| inWindow:', inWindow, '| pastTrigger:', pastTrigger, '| catchUp:', catchUp);
 
-    if (!inWindow && !(catchUp && pastTrigger)) return;
+    if (!inWindow && !(catchUp && pastTrigger)) { console.log('[INV] SKIP slot', slot, ': not in window and no catchUp'); return; }
 
     var promptKey = 'dmc_inv_prompted_' + todayKey + '-' + slot + '-' + shiftKey;
-    if (localStorage.getItem(promptKey)) return;
+    if (localStorage.getItem(promptKey)) { console.log('[INV] SKIP slot', slot, ': already prompted (flag:', promptKey, ')'); return; }
 
     var prefill = _invBuildPrefillFromBlock(todayKey, slot);
-    if (!prefill) { localStorage.setItem(promptKey, '1'); return; }
+    console.log('[INV] slot:', slot, '| prefill:', JSON.stringify(prefill));
+    if (!prefill) { localStorage.setItem(promptKey, '1'); console.log('[INV] SKIP slot', slot, ': prefill returned null'); return; }
 
     // Skip if invoice already exists for this foreman on this date
     var alreadyHas = invoiceList.some(function(inv) {
       return inv.dateOfWork === todayKey && inv.foreman === prefill.foreman;
     });
+    console.log('[INV] slot:', slot, '| alreadyHas invoice:', alreadyHas);
     localStorage.setItem(promptKey, '1');
     if (alreadyHas) return;
 
@@ -14566,6 +14578,7 @@ function _invCheckDailyPrompt() {
     var foLabel   = prefill.foreman || slot;
     var jobLabel  = prefill.jobName ? (prefill.jobName.length > 35 ? prefill.jobName.slice(0,32) + '\u2026' : prefill.jobName) : 'Scheduled job';
     var msgText   = jobLabel + (prefill.jobNo ? ' #' + prefill.jobNo : '');
+    console.log('[INV] FIRING notification for slot:', slot, '| actionId:', actionId);
     pushNotif('info', '\ud83d\udccb Invoice Ready \u2014 ' + foLabel, msgText, null, 'dj@donmartincorp.com', actionId);
   });
 
@@ -14583,6 +14596,20 @@ function _invHandleNotifAction(actionId) {
     openInvoiceModal(null, prefill);
     switchTab('apMix');
   }
+}
+
+// Dev helper: run in console to clear all invoice prompt flags for today
+// _invClearPromptFlags()
+function _invClearPromptFlags() {
+  var today = new Date();
+  var k = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  ['top','bottom','extra_0','extra_1'].forEach(function(sl) {
+    ['day','night'].forEach(function(sh) {
+      var key = 'dmc_inv_prompted_' + k + '-' + sl + '-' + sh;
+      if (localStorage.getItem(key)) { localStorage.removeItem(key); console.log('[INV] cleared flag:', key); }
+    });
+  });
+  console.log('[INV] flags cleared for', k);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -24183,9 +24210,12 @@ async function initApp(username) {
 
   // Daily invoice prompt: catch-up check on login + 60s polling interval
   if (typeof _invCheckDailyPrompt === 'function') {
+    console.log('[INV] initApp: wiring _invCheckDailyPrompt interval');
     _invCheckDailyPrompt._catchUp = true;
     setTimeout(_invCheckDailyPrompt, 2000); // wait for schedData to be available
     setInterval(_invCheckDailyPrompt, 60000);
+  } else {
+    console.log('[INV] initApp: _invCheckDailyPrompt NOT FOUND');
   }
 }
 
