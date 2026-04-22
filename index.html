@@ -14199,7 +14199,7 @@ function openInvoiceModal(id, prefill) {
   const isEdit = !!id;
   const inv = isEdit ? invoiceList.find(i => i.id === id) : null;
   const p = prefill || {};
-  const mixItems = inv?.mixItems || (p.mixType ? [{ mixType: p.mixType, tonQty:'', mixPrice:'', itemTotal:'' }] : [{ mixType:'', mixPrice:'', itemTotal:'' }]);
+  const mixItems = inv?.mixItems || (p.mixItems && p.mixItems.length ? p.mixItems : [{ mixType:'', mixPrice:'', itemTotal:'' }]);
 
   const supplierOptions = suppliersList.map(s => `<option value="${escHtml(s.name)}">`).join('');
 
@@ -14488,17 +14488,21 @@ function _invBuildPrefillFromBlock(dateKey, slot) {
   // Supplier from plant field
   var supplier = f.plant || '';
 
-  // Mix type: material field may be JSON array or plain comma-string
-  var mixType = '';
+  // Mix types: parse all items from material field (JSON array or legacy comma-string)
+  var mixItems = [];
   if (f.material) {
     try {
       var mats = JSON.parse(f.material);
       if (Array.isArray(mats) && mats.length > 0) {
-        var m0 = mats[0];
-        mixType = (typeof m0 === 'object' ? (m0.desc || m0.name || '') : String(m0)).trim();
+        mixItems = mats.map(function(m) {
+          var mt = (typeof m === 'object' ? (m.name || m.desc || '') : String(m)).trim();
+          return { mixType: mt, tonQty: '', mixPrice: '', itemTotal: '' };
+        }).filter(function(m) { return !!m.mixType; });
       }
     } catch(e) {
-      mixType = String(f.material).split(',')[0].trim();
+      mixItems = String(f.material).split(',').map(function(s) {
+        return { mixType: s.trim(), tonQty: '', mixPrice: '', itemTotal: '' };
+      }).filter(function(m) { return !!m.mixType; });
     }
   }
 
@@ -14512,7 +14516,7 @@ function _invBuildPrefillFromBlock(dateKey, slot) {
     } catch(e) {}
   }
 
-  return { dateOfWork: dateKey, foreman: foreman, jobNo: jobNo, jobName: jobName, gcName: gcName, supplier: supplier, mixType: mixType, truckCount: truckCount };
+  return { dateOfWork: dateKey, foreman: foreman, jobNo: jobNo, jobName: jobName, gcName: gcName, supplier: supplier, mixItems: mixItems, truckCount: truckCount };
 }
 
 // ── Daily invoice prompt system ───────────────────────────────────────────────
@@ -14622,7 +14626,7 @@ function _invGenerateFromTodaySchedule() {
       jobName:        p.jobName   || '',
       gcName:         p.gcName    || '',
       supplier:       p.supplier  || '',
-      mixItems:       p.mixType ? [{ mixType: p.mixType, tonQty: '', mixPrice: '', itemTotal: '' }] : [],
+      mixItems:       (p.mixItems && p.mixItems.length) ? p.mixItems : [],
       actualTrucking: { dmcCount: p.truckCount || 0, dmcCost: 0, brkCount: 0, brkCost: 0, supCount: 0, supCost: 0 },
       approvedAmount: '',
       invoiceNotes:   '',
