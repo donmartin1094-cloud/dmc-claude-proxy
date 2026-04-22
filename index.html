@@ -14635,13 +14635,11 @@ function _invGenerateFromTodaySchedule() {
 
   if (created === 0) {
     pushNotif('info', 'Invoices Already Exist', 'Invoice entries already exist for today\'s shifts.', null, null);
-    switchTab('apMix');
     return;
   }
 
   saveInvoiceList();
   pushNotif('success', 'Invoices Created', created + ' invoice entry' + (created > 1 ? 's' : '') + ' created for today — tap to review.', null, null);
-  switchTab('apMix');
 }
 
 // Dev helper: run in console to clear all invoice prompt flags for today
