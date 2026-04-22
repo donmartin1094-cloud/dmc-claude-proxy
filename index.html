@@ -4510,7 +4510,7 @@ let notifications = JSON.parse(localStorage.getItem('pavescope_notifs') || '[]')
 
 function saveNotifs() { localStorage.setItem('pavescope_notifs', JSON.stringify(notifications)); _checkLocalStorageSize(); try { fbSet('notifications', notifications); } catch(e) { console.error('[notifications] fbSet failed:', e); } }
 
-function pushNotif(type, title, message, jobId, targetUser) {
+function pushNotif(type, title, message, jobId, targetUser, actionId) {
   const notif = {
     id: Date.now().toString(),
     type,      // 'success' | 'error' | 'info'
@@ -4519,7 +4519,8 @@ function pushNotif(type, title, message, jobId, targetUser) {
     time: new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }),
     read: false,
     jobId: jobId || null,
-    targetUser: targetUser || null
+    targetUser: targetUser || null,
+    actionId: actionId || null
   };
   notifications.unshift(notif);
   if (notifications.length > 50) notifications = notifications.slice(0, 50);
@@ -7068,15 +7069,23 @@ function widgetNotifications() {
   const recent = notifications.slice(0, 6);
   const colors = { success:'var(--green)', error:'var(--red)', info:'var(--blue)' };
   const rows = recent.length
-    ? recent.map(n => `
-        <div class="home-notif-item">
-          <div class="home-notif-dot" style="background:${colors[n.type]||'var(--concrete-dim)'};"></div>
-          <div style="flex:1;">
-            <div style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:${colors[n.type]||'var(--white)'};">${escHtml(n.title)}</div>
-            <div class="home-notif-text">${escHtml(n.message)}</div>
+    ? recent.map(n => {
+        const actionBtn = (n.actionId && n.actionId.startsWith('inv_'))
+          ? `<button onclick="event.stopPropagation();_invHandleNotifAction(${JSON.stringify(n.actionId)})" style="margin-top:4px;padding:2px 8px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);border-radius:4px;color:#93c5fd;cursor:pointer;white-space:nowrap;">Create Invoice →</button>`
+          : '';
+        return `
+        <div class="home-notif-item" style="flex-direction:column;align-items:flex-start;gap:2px;">
+          <div style="display:flex;align-items:center;gap:8px;width:100%;">
+            <div class="home-notif-dot" style="background:${colors[n.type]||'var(--concrete-dim)'};flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:${colors[n.type]||'var(--white)'};">${escHtml(n.title)}</div>
+              <div class="home-notif-text">${escHtml(n.message)}</div>
+            </div>
+            <div class="home-notif-time" style="flex-shrink:0;">${escHtml(n.time||'')}</div>
           </div>
-          <div class="home-notif-time">${escHtml(n.time||'')}</div>
-        </div>`).join('')
+          ${actionBtn}
+        </div>`;
+      }).join('')
     : '<div class="home-widget-empty">No notifications yet.</div>';
 
   return `<div class="home-widget">
@@ -14185,10 +14194,11 @@ function invSetSearch(val) {
   if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }
 
-function openInvoiceModal(id) {
+function openInvoiceModal(id, prefill) {
   const isEdit = !!id;
   const inv = isEdit ? invoiceList.find(i => i.id === id) : null;
-  const mixItems = inv?.mixItems || [{ mixType:'', mixPrice:'', itemTotal:'' }];
+  const p = prefill || {};
+  const mixItems = inv?.mixItems || (p.mixType ? [{ mixType: p.mixType, tonQty:'', mixPrice:'', itemTotal:'' }] : [{ mixType:'', mixPrice:'', itemTotal:'' }]);
 
   const supplierOptions = suppliersList.map(s => `<option value="${escHtml(s.name)}">`).join('');
 
@@ -14217,7 +14227,7 @@ function openInvoiceModal(id) {
       <div class="inv-form-grid">
         <div>
           <label class="inv-form-label">Date of Work *</label>
-          <input class="inv-input" id="invDate" type="date" value="${inv?.dateOfWork||''}" style="width:100%;" />
+          <input class="inv-input" id="invDate" type="date" value="${inv?.dateOfWork || p.dateOfWork || ''}" style="width:100%;" />
         </div>
         <div>
           <label class="inv-form-label">Invoice #</label>
@@ -14225,19 +14235,19 @@ function openInvoiceModal(id) {
         </div>
         <div>
           <label class="inv-form-label">Foreman</label>
-          <input class="inv-input" id="invForeman" value="${escHtml(inv?.foreman||'')}" placeholder="Foreman name" style="width:100%;" />
+          <input class="inv-input" id="invForeman" value="${escHtml(inv?.foreman || p.foreman || '')}" placeholder="Foreman name" style="width:100%;" />
         </div>
         <div>
           <label class="inv-form-label">Job #</label>
-          <input class="inv-input" id="invJobNo" value="${escHtml(inv?.jobNo||'')}" placeholder="e.g. 2024-001" style="width:100%;" />
+          <input class="inv-input" id="invJobNo" value="${escHtml(inv?.jobNo || p.jobNo || '')}" placeholder="e.g. 2024-001" style="width:100%;" />
         </div>
         <div class="inv-form-full">
           <label class="inv-form-label">Job Name</label>
-          <input class="inv-input" id="invJobName" value="${escHtml(inv?.jobName||'')}" placeholder="e.g. Granite State — Route 3" style="width:100%;" />
+          <input class="inv-input" id="invJobName" value="${escHtml(inv?.jobName || p.jobName || '')}" placeholder="e.g. Granite State — Route 3" style="width:100%;" />
         </div>
         <div class="inv-form-full">
           <label class="inv-form-label">Supplier</label>
-          <input class="inv-input" id="invSupplier" list="invSupplierList" value="${escHtml(inv?.supplier||'')}" placeholder="Select or type supplier" style="width:100%;" />
+          <input class="inv-input" id="invSupplier" list="invSupplierList" value="${escHtml(inv?.supplier || p.supplier || '')}" placeholder="Select or type supplier" style="width:100%;" />
           <datalist id="invSupplierList">${supplierOptions}</datalist>
         </div>
       </div>
@@ -14250,7 +14260,7 @@ function openInvoiceModal(id) {
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">
           <div>
             <label class="inv-form-label">DMC Trucks (actual #)</label>
-            <input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="${inv?.actualTrucking?.dmcCount||''}" style="width:100%;" />
+            <input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="${inv?.actualTrucking?.dmcCount || p.truckCount || ''}" style="width:100%;" />
           </div>
           <div>
             <label class="inv-form-label">DMC Truck Cost ($)</label>
@@ -14444,7 +14454,136 @@ function deleteInvoice(id) {
   renderInvoiceTracker();
 }
 
+// ── Schedule → Invoice field mapper ──────────────────────────────────────────
+function _invBuildPrefillFromBlock(dateKey, slot) {
+  var day = (typeof schedData !== 'undefined' ? schedData[dateKey] : null) || {};
+  var block;
+  if (slot === 'top' || slot === 'bottom') {
+    block = day[slot];
+  } else if (typeof slot === 'string' && slot.startsWith('extra_')) {
+    var exIdx = parseInt(slot.split('_')[1]);
+    var exEntry = (day.extras || [])[exIdx];
+    block = exEntry ? (exEntry.data || null) : null;
+  }
+  if (!block || block.type === 'blank' || !block.fields) return null;
+  var f = block.fields;
 
+  // Foreman: positional for top/bottom, stored name for extras
+  var foreman = '';
+  if (slot === 'top') {
+    foreman = (typeof foremanRoster !== 'undefined' && foremanRoster[0]) || 'Filipe';
+  } else if (slot === 'bottom') {
+    foreman = (typeof foremanRoster !== 'undefined' && foremanRoster[1]) || 'Louie';
+  } else {
+    var exIdx2 = parseInt(slot.split('_')[1]);
+    foreman = ((day.extras || [])[exIdx2] || {}).foreman || '';
+  }
+
+  // Job info
+  var jobName = f.jobName || '';
+  var jobNo   = f.jobNum  || '';
+  var gcName  = jobName.includes(' \u2014 ') ? jobName.split(' \u2014 ')[0].trim() : '';
+
+  // Supplier from plant field
+  var supplier = f.plant || '';
+
+  // Mix type: material field may be JSON array or plain comma-string
+  var mixType = '';
+  if (f.material) {
+    try {
+      var mats = JSON.parse(f.material);
+      if (Array.isArray(mats) && mats.length > 0) {
+        var m0 = mats[0];
+        mixType = (typeof m0 === 'object' ? (m0.desc || m0.name || '') : String(m0)).trim();
+      }
+    } catch(e) {
+      mixType = String(f.material).split(',')[0].trim();
+    }
+  }
+
+  // Truck count from trucking JSON
+  var truckCount = '';
+  if (f.trucking) {
+    try {
+      var tr = JSON.parse(f.trucking);
+      var tc = parseInt(tr.trucks) || 0;
+      if (tc > 0) truckCount = tc;
+    } catch(e) {}
+  }
+
+  return { dateOfWork: dateKey, foreman: foreman, jobNo: jobNo, jobName: jobName, gcName: gcName, supplier: supplier, mixType: mixType, truckCount: truckCount };
+}
+
+// ── Daily invoice prompt system ───────────────────────────────────────────────
+function _invCheckDailyPrompt() {
+  if (typeof isAdmin !== 'function' || !isAdmin()) return;
+  var now  = new Date();
+  var h    = now.getHours();
+  var m    = now.getMinutes();
+  var todayKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  var day  = (typeof schedData !== 'undefined' ? schedData[todayKey] : null) || {};
+  var catchUp = !!_invCheckDailyPrompt._catchUp;
+
+  var slots = ['top', 'bottom'];
+  (day.extras || []).forEach(function(_, i) { slots.push('extra_' + i); });
+
+  slots.forEach(function(slot) {
+    var block;
+    if (slot === 'top' || slot === 'bottom') {
+      block = day[slot];
+    } else {
+      var ei = parseInt(slot.split('_')[1]);
+      var ee = (day.extras || [])[ei];
+      block = ee ? (ee.data || null) : null;
+    }
+    if (!block || !block.type || block.type === 'blank') return;
+    // Skip vacation/special-action-only blocks
+    if (block.type === 'pending') return;
+
+    var isNight  = block.type === 'night';
+    var shiftKey = isNight ? 'night' : 'day';
+
+    // Trigger window: 7:00–7:05am for day, 10:00–10:05pm for night
+    var inWindow = isNight ? (h === 22 && m < 6) : (h === 7 && m < 6);
+    var pastTrigger = isNight ? (h >= 22) : (h >= 7);
+
+    if (!inWindow && !(catchUp && pastTrigger)) return;
+
+    var promptKey = 'dmc_inv_prompted_' + todayKey + '-' + slot + '-' + shiftKey;
+    if (localStorage.getItem(promptKey)) return;
+
+    var prefill = _invBuildPrefillFromBlock(todayKey, slot);
+    if (!prefill) { localStorage.setItem(promptKey, '1'); return; }
+
+    // Skip if invoice already exists for this foreman on this date
+    var alreadyHas = invoiceList.some(function(inv) {
+      return inv.dateOfWork === todayKey && inv.foreman === prefill.foreman;
+    });
+    localStorage.setItem(promptKey, '1');
+    if (alreadyHas) return;
+
+    var actionId  = 'inv_' + todayKey + '_' + slot;
+    var foLabel   = prefill.foreman || slot;
+    var jobLabel  = prefill.jobName ? (prefill.jobName.length > 35 ? prefill.jobName.slice(0,32) + '\u2026' : prefill.jobName) : 'Scheduled job';
+    var msgText   = jobLabel + (prefill.jobNo ? ' #' + prefill.jobNo : '');
+    pushNotif('info', '\ud83d\udccb Invoice Ready \u2014 ' + foLabel, msgText, null, 'dj@donmartincorp.com', actionId);
+  });
+
+  _invCheckDailyPrompt._catchUp = false;
+}
+
+function _invHandleNotifAction(actionId) {
+  if (!actionId || !actionId.startsWith('inv_')) return;
+  // actionId format: inv_{YYYY-MM-DD}_{slot} — dateKey is always 10 chars
+  var rest    = actionId.slice(4); // strip "inv_"
+  var dateKey = rest.slice(0, 10); // YYYY-MM-DD
+  var slot    = rest.slice(11);    // skip the _ separator
+  var prefill = _invBuildPrefillFromBlock(dateKey, slot);
+  if (prefill) {
+    openInvoiceModal(null, prefill);
+    switchTab('apMix');
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 // QC REPORTS
@@ -24041,6 +24180,13 @@ async function initApp(username) {
       });
     }
   }, 800);
+
+  // Daily invoice prompt: catch-up check on login + 60s polling interval
+  if (typeof _invCheckDailyPrompt === 'function') {
+    _invCheckDailyPrompt._catchUp = true;
+    setTimeout(_invCheckDailyPrompt, 2000); // wait for schedData to be available
+    setInterval(_invCheckDailyPrompt, 60000);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
