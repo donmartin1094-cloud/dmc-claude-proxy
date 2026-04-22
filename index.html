@@ -5256,7 +5256,8 @@ function _home2ndStopToggle(slot) {
 }
 
 function _homeDailyOverviewSectionHtml() {
-  var hdr = _homeSectionHdr('📋','DAILY OVERVIEW','','_homeDailyOverviewToggle',_homeDailyOverview.open);
+  var _invHdrBtn = '<button onclick="event.stopPropagation();_invGenerateFromTodaySchedule()" style="background:none;border:1px solid rgba(245,197,24,0.35);border-radius:3px;color:rgba(245,197,24,0.75);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;white-space:nowrap;">Gen Invoice</button>';
+  var hdr = _homeSectionHdr('📋','DAILY OVERVIEW', _invHdrBtn,'_homeDailyOverviewToggle',_homeDailyOverview.open);
 
   if (!_homeDailyOverview.open) {
     return '<div style="border-bottom:1px solid var(--asphalt-light);">' + hdr + '</div>';
@@ -14516,21 +14517,13 @@ function _invBuildPrefillFromBlock(dateKey, slot) {
 
 // ── Daily invoice prompt system ───────────────────────────────────────────────
 function _invCheckDailyPrompt() {
-  console.log('[INV] _invCheckDailyPrompt fired');
-  if (typeof isAdmin !== 'function' || !isAdmin()) { console.log('[INV] SKIP: isAdmin() false or missing'); return; }
+  if (typeof isAdmin !== 'function' || !isAdmin()) return;
   var now  = new Date();
   var h    = now.getHours();
   var m    = now.getMinutes();
   var todayKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
   var day  = (typeof schedData !== 'undefined' ? schedData[todayKey] : null) || {};
   var catchUp = !!_invCheckDailyPrompt._catchUp;
-  console.log('[INV] todayKey:', todayKey);
-  console.log('[INV] schedData[todayKey]:', JSON.stringify(schedData[todayKey]));
-  console.log('[INV] top block type:', schedData[todayKey]?.top?.type);
-  console.log('[INV] bottom block type:', schedData[todayKey]?.bottom?.type);
-  console.log('[INV] catchUp:', catchUp, '| h:', h, '| m:', m);
-  console.log('[INV] localStorage flag (top-day):', localStorage.getItem('dmc_inv_prompted_' + todayKey + '-top-day'));
-  console.log('[INV] localStorage flag (bottom-day):', localStorage.getItem('dmc_inv_prompted_' + todayKey + '-bottom-day'));
 
   var slots = ['top', 'bottom'];
   (day.extras || []).forEach(function(_, i) { slots.push('extra_' + i); });
@@ -14544,10 +14537,8 @@ function _invCheckDailyPrompt() {
       var ee = (day.extras || [])[ei];
       block = ee ? (ee.data || null) : null;
     }
-    console.log('[INV] slot:', slot, '| block type:', block?.type);
-    if (!block || !block.type || block.type === 'blank') { console.log('[INV] SKIP slot', slot, ': blank/missing'); return; }
-    // Skip vacation/special-action-only blocks
-    if (block.type === 'pending') { console.log('[INV] SKIP slot', slot, ': pending'); return; }
+    if (!block || !block.type || block.type === 'blank') return;
+    if (block.type === 'pending') return;
 
     var isNight  = block.type === 'night';
     var shiftKey = isNight ? 'night' : 'day';
@@ -14555,22 +14546,19 @@ function _invCheckDailyPrompt() {
     // Trigger window: 7:00–7:05am for day, 10:00–10:05pm for night
     var inWindow = isNight ? (h === 22 && m < 6) : (h === 7 && m < 6);
     var pastTrigger = isNight ? (h >= 22) : (h >= 7);
-    console.log('[INV] slot:', slot, '| inWindow:', inWindow, '| pastTrigger:', pastTrigger, '| catchUp:', catchUp);
 
-    if (!inWindow && !(catchUp && pastTrigger)) { console.log('[INV] SKIP slot', slot, ': not in window and no catchUp'); return; }
+    if (!inWindow && !(catchUp && pastTrigger)) return;
 
     var promptKey = 'dmc_inv_prompted_' + todayKey + '-' + slot + '-' + shiftKey;
-    if (localStorage.getItem(promptKey)) { console.log('[INV] SKIP slot', slot, ': already prompted (flag:', promptKey, ')'); return; }
+    if (localStorage.getItem(promptKey)) return;
 
     var prefill = _invBuildPrefillFromBlock(todayKey, slot);
-    console.log('[INV] slot:', slot, '| prefill:', JSON.stringify(prefill));
-    if (!prefill) { localStorage.setItem(promptKey, '1'); console.log('[INV] SKIP slot', slot, ': prefill returned null'); return; }
+    if (!prefill) { localStorage.setItem(promptKey, '1'); return; }
 
     // Skip if invoice already exists for this foreman on this date
     var alreadyHas = invoiceList.some(function(inv) {
       return inv.dateOfWork === todayKey && inv.foreman === prefill.foreman;
     });
-    console.log('[INV] slot:', slot, '| alreadyHas invoice:', alreadyHas);
     localStorage.setItem(promptKey, '1');
     if (alreadyHas) return;
 
@@ -14578,7 +14566,6 @@ function _invCheckDailyPrompt() {
     var foLabel   = prefill.foreman || slot;
     var jobLabel  = prefill.jobName ? (prefill.jobName.length > 35 ? prefill.jobName.slice(0,32) + '\u2026' : prefill.jobName) : 'Scheduled job';
     var msgText   = jobLabel + (prefill.jobNo ? ' #' + prefill.jobNo : '');
-    console.log('[INV] FIRING notification for slot:', slot, '| actionId:', actionId);
     pushNotif('info', '\ud83d\udccb Invoice Ready \u2014 ' + foLabel, msgText, null, 'dj@donmartincorp.com', actionId);
   });
 
@@ -14598,6 +14585,61 @@ function _invHandleNotifAction(actionId) {
   }
 }
 
+// ── Generate invoice from today's schedule (called from daily overview header) ─
+function _invGenerateFromTodaySchedule() {
+  var today = new Date();
+  var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  var day = (typeof schedData !== 'undefined' ? schedData[todayKey] : null) || {};
+
+  // Collect all non-blank, non-night, non-pending day-shift blocks
+  var shifts = [];
+  ['top', 'bottom'].forEach(function(slot) {
+    var block = day[slot];
+    if (!block || !block.type || block.type === 'blank' || block.type === 'pending' || block.type === 'night') return;
+    var prefill = _invBuildPrefillFromBlock(todayKey, slot);
+    if (prefill) shifts.push({ slot: slot, prefill: prefill });
+  });
+
+  if (shifts.length === 0) {
+    alert('No day shifts scheduled for today.');
+    return;
+  }
+
+  if (shifts.length === 1) {
+    switchTab('apMix');
+    openInvoiceModal(null, shifts[0].prefill);
+    return;
+  }
+
+  // Two shifts — show a picker modal
+  var existing = document.getElementById('_invShiftPickerModal');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = '_invShiftPickerModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:10px;padding:24px;min-width:280px;max-width:340px;">' +
+    '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:var(--white);margin-bottom:6px;">Generate Invoice</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-bottom:16px;">Two shifts scheduled today — choose one:</div>' +
+    shifts.map(function(s) {
+      var fo = escHtml(s.prefill.foreman || s.slot);
+      var jb = escHtml(s.prefill.jobName ? (s.prefill.jobName.length > 30 ? s.prefill.jobName.slice(0,27) + '…' : s.prefill.jobName) : 'Scheduled job');
+      var jn = s.prefill.jobNo ? ' <span style="color:var(--concrete-dim);">#' + escHtml(s.prefill.jobNo) + '</span>' : '';
+      var idx = shifts.indexOf(s);
+      return '<button onclick="document.getElementById(\'_invShiftPickerModal\').remove();switchTab(\'apMix\');openInvoiceModal(null,window._invPickerShifts[' + idx + '].prefill)" ' +
+        'style="display:block;width:100%;text-align:left;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.25);border-radius:6px;' +
+        'padding:10px 12px;margin-bottom:8px;cursor:pointer;color:var(--white);font-family:\'DM Sans\',sans-serif;">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--stripe);">' + fo + '</div>' +
+        '<div style="font-size:10px;margin-top:2px;">' + jb + jn + '</div>' +
+        '</button>';
+    }).join('') +
+    '<button onclick="document.getElementById(\'_invShiftPickerModal\').remove()" style="width:100%;margin-top:4px;padding:7px;background:none;border:1px solid var(--asphalt-light);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">Cancel</button>' +
+  '</div>';
+  window._invPickerShifts = shifts;
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
 // Dev helper: run in console to clear all invoice prompt flags for today
 // _invClearPromptFlags()
 function _invClearPromptFlags() {
@@ -14606,10 +14648,9 @@ function _invClearPromptFlags() {
   ['top','bottom','extra_0','extra_1'].forEach(function(sl) {
     ['day','night'].forEach(function(sh) {
       var key = 'dmc_inv_prompted_' + k + '-' + sl + '-' + sh;
-      if (localStorage.getItem(key)) { localStorage.removeItem(key); console.log('[INV] cleared flag:', key); }
+      if (localStorage.getItem(key)) { localStorage.removeItem(key); }
     });
   });
-  console.log('[INV] flags cleared for', k);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -24210,12 +24251,10 @@ async function initApp(username) {
 
   // Daily invoice prompt: catch-up check on login + 60s polling interval
   if (typeof _invCheckDailyPrompt === 'function') {
-    console.log('[INV] initApp: wiring _invCheckDailyPrompt interval');
     _invCheckDailyPrompt._catchUp = true;
     setTimeout(_invCheckDailyPrompt, 2000); // wait for schedData to be available
     setInterval(_invCheckDailyPrompt, 60000);
   } else {
-    console.log('[INV] initApp: _invCheckDailyPrompt NOT FOUND');
   }
 }
 
