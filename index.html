@@ -15322,7 +15322,7 @@ function _mailOpenMessage(uid, folder) {
         iframe.style.cssText = 'width:100%;flex:1;min-height:0;border:none;display:block;';
         iframe.setAttribute('sandbox', 'allow-same-origin allow-popups');
         wrap.appendChild(iframe);
-        iframe.srcdoc = msg.html;
+        iframe.srcdoc = '<style>html,body{background-color:#252525!important;color:#ffffff!important}</style>' + msg.html;
       }
     }
     _mailMessageLoading = false;
