@@ -1699,7 +1699,7 @@
 
     /* ── Mobile home: stacked widgets ── */
     .home-wrap { padding: 14px 12px; gap: 12px; }
-    .home-greeting { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .home-greeting { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
     .home-customize-btn { width: 100%; justify-content: center; box-sizing: border-box; }
     .hw-mobile-edit-btn { display: flex !important; width: 100%; justify-content: center; box-sizing: border-box; }
     .home-widgets-grid {
@@ -1725,6 +1725,7 @@
     /* ── Admin home: compact sticky greeting row ── */
     .home-wrap-mob-admin { padding: 0 !important; gap: 0 !important; }
     .home-wrap-mob-admin .home-greeting {
+      display: flex !important;
       position: sticky; top: 0; z-index: 20;
       background: var(--asphalt);
       border-bottom: 1px solid var(--asphalt-light);
@@ -1952,7 +1953,7 @@
 
   /* ── Home / Welcome Dashboard ── */
   .home-wrap { padding:28px 32px; display:flex; flex-direction:column; gap:24px; min-height:100%; background:var(--asphalt); }
-  .home-greeting { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px; padding-bottom:20px; border-bottom:2px solid var(--asphalt-light); }
+  .home-greeting { display:grid; grid-template-columns:1fr auto 1fr; gap:16px; align-items:start; padding-bottom:20px; border-bottom:2px solid var(--asphalt-light); }
   .home-greeting-text { display:flex; flex-direction:column; gap:4px; }
   .home-greeting-name { font-family:'Bebas Neue',sans-serif; font-size:38px; letter-spacing:3px; color:var(--white); line-height:1; }
   .home-greeting-sub { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--concrete-dim); }
@@ -5255,9 +5256,110 @@ function _home2ndStopToggle(slot) {
   _homeFleetRerender();
 }
 
+function _homeNotifInlineHtml() {
+  var recent = notifications.slice(0, 6);
+  var colors = { success:'var(--green)', error:'var(--red)', info:'var(--blue)' };
+  var cu = localStorage.getItem('dmc_u') || '';
+  var unread = notifications.filter(function(n){ return !n.read && (!n.targetUser || n.targetUser === cu); }).length;
+  var rows = recent.length
+    ? recent.map(function(n) {
+        var c = colors[n.type] || 'var(--concrete-dim)';
+        return '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
+          '<div style="width:6px;height:6px;border-radius:50%;background:' + c + ';flex-shrink:0;margin-top:3px;"></div>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:' + c + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(n.title) + '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(n.message) + '</div>' +
+          '</div>' +
+          '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.4);flex-shrink:0;">' + escHtml(n.time || '') + '</span>' +
+        '</div>';
+      }).join('')
+    : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No notifications</div>';
+  return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
+    '<div style="padding:9px 12px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;">' +
+      '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:2px;color:var(--white);">🔔 NOTIFICATIONS' +
+        (unread ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;background:rgba(245,197,24,0.15);border:1px solid rgba(245,197,24,0.4);border-radius:3px;padding:0 5px;color:var(--stripe);margin-left:6px;">' + unread + '</span>' : '') +
+      '</span>' +
+      '<button onclick="clearAllNotifs();renderHomeView(document.getElementById(\'homeView\'))" style="font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 8px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:var(--concrete-dim);cursor:pointer;">Clear</button>' +
+    '</div>' +
+    '<div style="padding:0 12px 8px;max-height:260px;overflow-y:auto;">' + rows + '</div>' +
+  '</div>';
+}
+
+function _homeScanSlipsPicker() {
+  var today = new Date();
+  var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  var todayData = (typeof schedData !== 'undefined') ? (schedData[todayKey] || {}) : {};
+  var bl = (typeof backlogJobs !== 'undefined') ? backlogJobs : [];
+  var jobs = [];
+
+  var _addBlock = function(block, foremanLabel) {
+    if (!block || !block.type || block.type === 'blank') return;
+    var f = block.fields || {};
+    if (!f.jobNum && !f.jobName) return;
+    var match = bl.find(function(j) {
+      return (f.jobNum && j.num && j.num.toString().trim() === f.jobNum.toString().trim()) ||
+             (f.jobName && j.name && j.name.trim().toLowerCase() === f.jobName.trim().toLowerCase());
+    });
+    jobs.push({ id: match ? match.id : '', name: f.jobName || f.jobNum || 'Job', num: f.jobNum || '', foreman: foremanLabel });
+  };
+
+  var foremanNames = [
+    (typeof foremanRoster !== 'undefined' && foremanRoster[0]) || 'Filipe',
+    (typeof foremanRoster !== 'undefined' && foremanRoster[1]) || 'Louie'
+  ];
+  _addBlock(todayData.top, foremanNames[0]);
+  _addBlock(todayData.bottom, foremanNames[1]);
+  (todayData.extras || []).forEach(function(ex, xi) { _addBlock(ex.data, ex.foreman || ('Extra ' + (xi+1))); });
+
+  if (!jobs.length) {
+    bl.filter(function(j){ return j.jobProgress === 'active'; }).slice(0, 8).forEach(function(j) {
+      jobs.push({ id: j.id, name: j.name || 'Unnamed', num: j.jobNum || j.number || '', foreman: '' });
+    });
+  }
+
+  var overlay = document.createElement('div');
+  overlay.id = '_scanSlipsPickerModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+  var rows = jobs.length
+    ? jobs.map(function(j) {
+        var label = (j.num ? '#' + escHtml(j.num) + ' — ' : '') + escHtml(j.name);
+        var fBit = j.foreman ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(167,139,250,0.7);margin-top:1px;">' + escHtml(j.foreman) + '</span>' : '';
+        return '<div onclick="_homeScanSlipsPickerSelect(\'' + escHtml(j.id) + '\')" style="cursor:pointer;padding:10px 12px;border:1px solid rgba(126,203,143,0.2);border-radius:6px;background:rgba(126,203,143,0.04);display:flex;flex-direction:column;gap:2px;transition:background 0.1s;" onmouseover="this.style.background=\'rgba(126,203,143,0.1)\'" onmouseout="this.style.background=\'rgba(126,203,143,0.04)\'">' +
+          '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#7ecb8f;">' + label + '</span>' + fBit + '</div>';
+      }).join('')
+    : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px;">No active jobs found for today.</div>';
+
+  overlay.innerHTML =
+    '<div style="background:#111;border:1px solid #2a2a2a;border-radius:10px;width:400px;max-width:95vw;box-shadow:0 24px 64px rgba(0,0,0,0.7);">' +
+      '<div style="background:#0d0d0d;border-bottom:1px solid #1f1f1f;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-radius:10px 10px 0 0;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;letter-spacing:1.5px;color:#7ecb8f;">📷 SCAN MIX SLIPS</span>' +
+        '<button onclick="document.getElementById(\'_scanSlipsPickerModal\').remove()" style="background:none;border:none;color:#555;font-size:18px;cursor:pointer;line-height:1;">✕</button>' +
+      '</div>' +
+      '<div style="padding:12px;display:flex;flex-direction:column;gap:6px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:4px;letter-spacing:.5px;">Select a job to assign scanned slips to:</div>' +
+        rows +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function _homeScanSlipsPickerSelect(jobId) {
+  var m = document.getElementById('_scanSlipsPickerModal');
+  if (m) m.remove();
+  _openMixSlipScanner();
+  setTimeout(function() {
+    var sel = document.getElementById('_mssJobSel');
+    if (sel && jobId) sel.value = jobId;
+  }, 100);
+}
+
 function _homeDailyOverviewSectionHtml() {
-  var _invHdrBtn = '<button onclick="event.stopPropagation();_invGenerateFromTodaySchedule()" style="background:none;border:1px solid rgba(245,197,24,0.35);border-radius:3px;color:rgba(245,197,24,0.75);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;white-space:nowrap;">Gen Invoice</button>';
-  var hdr = _homeSectionHdr('📋','DAILY OVERVIEW', _invHdrBtn,'_homeDailyOverviewToggle',_homeDailyOverview.open);
+  var _invHdrBtns =
+    '<button onclick="event.stopPropagation();_invGenerateFromTodaySchedule()" style="background:none;border:1px solid rgba(245,197,24,0.35);border-radius:3px;color:rgba(245,197,24,0.75);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;white-space:nowrap;">Gen Invoice</button>' +
+    '<button onclick="event.stopPropagation();_homeScanSlipsPicker()" style="background:none;border:1px solid rgba(126,203,143,0.35);border-radius:3px;color:rgba(126,203,143,0.75);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;white-space:nowrap;">📷 Scan Slips</button>';
+  var hdr = _homeSectionHdr('📋','DAILY OVERVIEW', _invHdrBtns,'_homeDailyOverviewToggle',_homeDailyOverview.open);
 
   if (!_homeDailyOverview.open) {
     return '<div style="border-bottom:1px solid var(--asphalt-light);">' + hdr + '</div>';
@@ -6535,15 +6637,25 @@ function renderHomeView(el) {
       : '';
     el.innerHTML = `
       <div class="home-wrap${_isMobAdmin ? ' home-wrap-mob-admin' : ''}">
-        <div class="home-greeting" style="${_homeIsAdmin() && !_isMobAdmin ? 'align-items:flex-start;' : ''}">
-          <div class="home-greeting-text">
-            <div class="home-greeting-sub">${greeting},</div>
-            <div class="home-greeting-name">${safeName} 👋</div>
-            <div class="home-greeting-date">${dateStr}</div>
-          </div>
-          ${_homeIsAdmin() && !_isMobAdmin ? '<div id="homeDJHoursPanel" style="flex:1;min-width:220px;max-width:360px;">' + _homeDJHoursWidget() + '</div><div style="flex:1;min-width:220px;max-width:360px;">' + _homeWeekScheduleWidget() + '</div>' : ''}
+        <div class="home-greeting">
+          ${_homeIsAdmin() && !_isMobAdmin
+            ? '<div style="min-width:0;">' + _homeWeekScheduleWidget() + '</div>' +
+              '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0;">' +
+                '<div class="home-greeting-text" style="text-align:center;">' +
+                  '<div class="home-greeting-sub">' + greeting + ',</div>' +
+                  '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+                  '<div class="home-greeting-date">' + dateStr + '</div>' +
+                '</div>' +
+                '<div id="homeDJHoursPanel" style="width:100%;">' + _homeDJHoursWidget() + '</div>' +
+              '</div>' +
+              '<div style="min-width:0;">' + _homeNotifInlineHtml() + '</div>'
+            : '<div class="home-greeting-text">' +
+                '<div class="home-greeting-sub">' + greeting + ',</div>' +
+                '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+                '<div class="home-greeting-date">' + dateStr + '</div>' +
+              '</div>'
+          }
           ${_isMobAdmin ? '<button class="home-admin-mob-reorder-btn" onclick="_adminMobReorder()">↕ Reorder</button>' : ''}
-          ${_homeIsAdmin() ? `<button onclick="_openMixSlipScanner()" style="padding:10px 20px;background:#1a2a1a;border:1px solid #7ecb8f;border-radius:6px;color:#7ecb8f;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.background='#7ecb8f';this.style.color='#000'" onmouseout="this.style.background='#1a2a1a';this.style.color='#7ecb8f'">📷 Scan Mix Slip</button>` : ''}
           ${(!_isDriver && !_isForeman && !_isCrewRole && !_homeIsAdmin()) ? `<div style="display:flex;flex-direction:column;gap:8px;width:100%;">
             <button class="home-customize-btn" onclick="openHomeCustomize()">⚙️ Customize Dashboard</button>
             <button class="hw-mobile-edit-btn" id="_hwMobileEditBtn" onclick="hwToggleMobileEdit()">✏️ Edit Order</button>
