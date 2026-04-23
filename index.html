@@ -18496,6 +18496,7 @@ function widgetLowbedMoves() {
       '<div class="home-widget-title">🚚 Lowbed Moves</div>' +
       '<div style="display:flex;align-items:center;gap:5px;">' +
         '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + manualMoves.length + ' moves</span>' +
+        (isAdmin() ? '<button onclick="_lbManualMovePick()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:4px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;font-weight:700;">+ Move</button>' : '') +
         '<button onclick="switchTab(\'heimdall\')" style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;">Open →</button>' +
       '</div>' +
     '</div>' +
@@ -18504,6 +18505,321 @@ function widgetLowbedMoves() {
       bodyHtml +
     '</div>' +
   '</div>';
+}
+
+// ── Manual Move — home screen vanilla JS port ────────────────────────────────
+var _lbMoveMode  = null;
+var _lbMoveItems = [];
+var _lbEqOpen    = {};
+
+var _LB_RULES = {
+  paver:      { loadClass:'heavy',   canPairWith:['roller','skid_steer','mecalac','compactor','generator'] },
+  milling:    { loadClass:'monster' },
+  excavator:  { loadClass:'monster' },
+  mecalac:    { loadClass:'medium',  canPairWith:['mecalac','roller','skid_steer','paver','compactor','generator','trailer','other'] },
+  roller:     { loadClass:'medium',  canPairWith:['roller','skid_steer','compactor','generator','trailer'] },
+  loader:     { loadClass:'medium',  canPairWith:['skid_steer','trailer'] },
+  skid_steer: { loadClass:'light',   canPairWith:['skid_steer','roller','loader','compactor','generator','trailer'] },
+  compactor:  { loadClass:'light',   canPairWith:['compactor','roller','skid_steer','generator','trailer'] },
+  generator:  { loadClass:'light',   canPairWith:['generator','skid_steer','compactor','trailer'] },
+  trailer:    { loadClass:'light',   canPairWith:['trailer','skid_steer','generator','compactor','roller'] },
+  other:      { loadClass:'light',   canPairWith:['other','trailer','generator','skid_steer','roller'] },
+  dump_truck: { loadClass:'skip' }, lowbed: { loadClass:'skip' }, tack_truck: { loadClass:'skip' }, water_truck: { loadClass:'skip' }
+};
+
+function _lbCheckCompat(newType, existingItems) {
+  if (!existingItems.length) return { ok: true };
+  var nr = _LB_RULES[newType] || { loadClass:'light', canPairWith:[] };
+  if (nr.loadClass === 'monster') return { ok: false, reason: 'This equipment requires the full lowbed alone — remove existing items first.' };
+  if (nr.loadClass === 'skip')    return { ok: false, reason: 'Self-propelled equipment does not go on a lowbed.' };
+  for (var _i = 0; _i < existingItems.length; _i++) {
+    var _item = existingItems[_i];
+    var _er = _LB_RULES[_item.type] || { loadClass:'light', canPairWith:[] };
+    if (_er.loadClass === 'monster') return { ok: false, reason: _item.name + ' requires the full lowbed alone — cannot add more.' };
+    if (_er.loadClass === 'heavy') {
+      var _pf = ['roller','skid_steer','mecalac','compactor','generator'];
+      if (_pf.indexOf(newType) === -1) return { ok: false, reason: 'Cannot add ' + newType + ' to a load with a paver.' };
+    }
+  }
+  if (nr.loadClass === 'heavy') {
+    if (existingItems.some(function(x) { return (_LB_RULES[x.type]||{}).loadClass === 'heavy'; }))
+      return { ok: false, reason: 'Two pavers cannot share a load — start a separate move.' };
+    if (existingItems.some(function(x) { return (_LB_RULES[x.type]||{}).loadClass === 'monster'; }))
+      return { ok: false, reason: 'Cannot add a paver to this load.' };
+    return { ok: true };
+  }
+  for (var _j = 0; _j < existingItems.length; _j++) {
+    var _it = existingItems[_j];
+    var _ir = _LB_RULES[_it.type] || {};
+    if (_ir.loadClass === 'heavy') continue;
+    if ((nr.canPairWith||[]).length > 0 && (nr.canPairWith||[]).indexOf(_it.type) === -1)
+      return { ok: false, reason: nr.loadClass + ' equipment is not compatible with ' + _it.type + ' on the same load.' };
+  }
+  return { ok: true };
+}
+
+function _lbGetEqStatus(eqId, groups) {
+  var active = groups.filter(function(m) {
+    return m.manual && m.status !== 'cancelled' && m.status !== 'cleared' &&
+           m.items && m.items.some(function(i) { return i.id === eqId; });
+  });
+  if (!active.length) return { status: 'available', label: 'At Garage',              color: '#4a7a4a' };
+  var inT = active.find(function(m) { return m.status === 'in_progress'; });
+  if (inT) return { status: 'in_transit', label: 'In Transit',                       color: '#c9a800' };
+  var pnd = active.find(function(m) { return m.status === 'pending' || !m.status; });
+  if (pnd) return { status: 'assigned',   label: 'Assigned — pending move',          color: '#7ab3f0' };
+  var cmp = active.find(function(m) { return m.status === 'complete'; });
+  if (cmp) return { status: 'on_site',    label: 'On Site at job',                   color: '#9b6fd6' };
+  return { status: 'available', label: 'At Garage', color: '#4a7a4a' };
+}
+
+function _lbModalRoot() {
+  var el = document.getElementById('_lbMoveModalRoot');
+  if (!el) { el = document.createElement('div'); el.id = '_lbMoveModalRoot'; document.body.appendChild(el); }
+  return el;
+}
+
+function _lbModalClose() {
+  var el = document.getElementById('_lbMoveModalRoot');
+  if (el) el.innerHTML = '';
+  _lbMoveItems = [];
+  _lbEqOpen    = {};
+}
+
+function _lbManualMovePick() {
+  if (!isAdmin()) { _lbManualMoveOpen('single'); return; }
+  var root = _lbModalRoot();
+  root.innerHTML =
+    '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;">' +
+    '<div onclick="event.stopPropagation()" style="background:var(--asphalt-mid);border:1px solid rgba(245,197,24,0.3);border-radius:10px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.8);overflow:hidden;">' +
+      '<div style="padding:18px 20px;border-bottom:1px solid var(--asphalt-light);">' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--stripe);">🚛 Manual Lowbed Move</div>' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:4px;">What are you setting up?</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;padding:16px 20px;">' +
+        '<button onclick="_lbManualMoveOpen(\'single\')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:rgba(126,203,143,0.06);border:1px solid rgba(126,203,143,0.25);border-radius:8px;cursor:pointer;text-align:left;width:100%;">' +
+          '<span style="font-size:22px;">🚚</span>' +
+          '<div>' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:15px;letter-spacing:1px;color:#7ecb8f;">Single Move</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">One lowbed trip — equipment compatibility rules apply</div>' +
+          '</div>' +
+        '</button>' +
+        '<button onclick="_lbManualMoveOpen(\'job\')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.25);border-radius:8px;cursor:pointer;text-align:left;width:100%;">' +
+          '<span style="font-size:22px;">🏗️</span>' +
+          '<div>' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:15px;letter-spacing:1px;color:var(--stripe);">Job Setup</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Group all equipment for a job — no pairing restrictions</div>' +
+          '</div>' +
+        '</button>' +
+      '</div>' +
+      '<div style="padding:10px 20px 16px;border-top:1px solid var(--asphalt-light);">' +
+        '<button onclick="_lbModalClose()" style="width:100%;background:none;border:1px solid var(--asphalt-light);border-radius:5px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:7px 16px;cursor:pointer;">Cancel</button>' +
+      '</div>' +
+    '</div>' +
+    '</div>';
+}
+
+function _lbManualMoveOpen(mode) {
+  _lbMoveMode  = mode;
+  _lbMoveItems = [];
+  _lbEqOpen    = {};
+  var today = new Date().toISOString().split('T')[0];
+
+  var jobs = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var locOpts = '<option value="">— Select location —</option>' +
+    '<option value="__garage__">🏠 Garage</option>' +
+    jobs.map(function(j) {
+      var lbl = (j.num ? '#' + j.num + ' — ' : '') + (j.name || String(j.id));
+      return '<option value="' + escHtml(String(j.id)) + '">' + escHtml(lbl) + '</option>';
+    }).join('');
+
+  var EQ_ICONS_LB = { paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️', loader:'🚜',
+    skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛', lowbed:'🚚', tack_truck:'🛢️',
+    water_truck:'💧', generator:'⚡', trailer:'🔗', other:'📦' };
+  var EQ_TYPE_LABELS_LB = { paver:'Pavers', roller:'Rollers', milling:'Milling Machines',
+    excavator:'Excavators', loader:'Loaders', skid_steer:'Skid Steers', compactor:'Compactors',
+    dump_truck:'Dump Trucks', lowbed:'Lowbeds', tack_truck:'Tack Trucks',
+    water_truck:'Water Trucks', generator:'Generators', trailer:'Trailers', other:'Other' };
+
+  var fleetAll = typeof equipmentFleet !== 'undefined'
+    ? equipmentFleet.filter(function(e) { return e.active !== false; }) : [];
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e2) {}
+
+  var byType = {}, typeOrder = [];
+  fleetAll.forEach(function(eq) {
+    var t = eq.type || 'other';
+    if (!byType[t]) { byType[t] = []; typeOrder.push(t); }
+    byType[t].push(eq);
+  });
+
+  var eqAccordion = typeOrder.map(function(type) {
+    var items = byType[type];
+    var rows = items.map(function(eq) {
+      var avail = _lbGetEqStatus(eq.id, groups);
+      var blocked = avail.status === 'in_transit' || avail.status === 'on_site';
+      var availLabel = avail.status === 'available'  ? '● At Garage'
+                     : avail.status === 'assigned'   ? '⚠ Assigned — pending move'
+                     : avail.status === 'in_transit' ? '🚛 In Transit'
+                     : avail.status === 'on_site'    ? '📍 On Site at job'
+                     : '● ' + avail.label;
+      var safeId   = escHtml(eq.id);
+      var safeName = escHtml(eq.name || eq.id).replace(/'/g, '&#39;');
+      var safeType = escHtml(eq.type || 'other');
+      return '<div onclick="_lbAddItem(\'' + safeId + '\',\'' + safeName + '\',\'' + safeType + '\')" ' +
+        'data-lb-eq="' + safeId + '" ' +
+        'style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;' +
+        'cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';' +
+        'opacity:' + (blocked ? '0.45' : '1') + ';' +
+        'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);margin-bottom:2px;">' +
+        '<div style="flex:1;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#fff;">' + escHtml(eq.name || eq.id) + '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + avail.color + ';margin-top:1px;">' + availLabel + '</div>' +
+        '</div>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:rgba(126,203,143,0.6);">+ Add</span>' +
+      '</div>';
+    }).join('');
+    var icon  = EQ_ICONS_LB[type]     || '📦';
+    var label = EQ_TYPE_LABELS_LB[type] || type;
+    return '<div style="border-radius:6px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;margin-bottom:4px;">' +
+      '<button onclick="_lbToggleEqType(\'' + type + '\')" id="lb_eq_hdr_' + type + '" ' +
+        'style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,0.04);border:none;cursor:pointer;text-align:left;">' +
+        '<span style="font-size:14px;">' + icon + '</span>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#fff;flex:1;">' + label + '</span>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + items.length + '</span>' +
+        '<span id="lb_eq_arr_' + type + '" style="font-size:10px;color:var(--concrete-dim);">▾</span>' +
+      '</button>' +
+      '<div id="lb_eq_body_' + type + '" style="display:none;padding:4px 6px 6px;">' + rows + '</div>' +
+    '</div>';
+  }).join('');
+
+  var inpS = 'width:100%;background:#252525;border:1px solid #333;border-radius:5px;color:#fff;' +
+             'font-family:\'DM Mono\',monospace;font-size:11px;padding:7px 10px;box-sizing:border-box;';
+  var lblS = 'font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;color:var(--concrete-dim);margin-bottom:4px;';
+  var title = mode === 'job' ? '🚛 Job Setup — All Equipment' : '🚛 Manual Lowbed Move';
+
+  var root = _lbModalRoot();
+  root.innerHTML =
+    '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;">' +
+    '<div onclick="event.stopPropagation()" ' +
+      'style="background:var(--asphalt-mid);border:1px solid rgba(245,197,24,0.3);border-radius:10px;width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.8);">' +
+      '<div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--stripe);flex:1;">' + title + '</div>' +
+        '<button onclick="_lbModalClose()" style="background:none;border:none;color:var(--concrete-dim);font-size:16px;cursor:pointer;">✕</button>' +
+      '</div>' +
+      '<div style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><div style="' + lblS + '">DATE</div>' +
+            '<input id="lb_date" type="date" value="' + today + '" style="' + inpS + '"></div>' +
+          '<div><div style="' + lblS + '">DRIVER</div>' +
+            '<input id="lb_driver" type="text" placeholder="Driver name" style="' + inpS + '"></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><div style="' + lblS + '">FROM</div>' +
+            '<select id="lb_from" style="' + inpS + '">' + locOpts + '</select></div>' +
+          '<div><div style="' + lblS + '">TO</div>' +
+            '<select id="lb_to" style="' + inpS + '">' + locOpts + '</select></div>' +
+        '</div>' +
+        '<div><div style="' + lblS + '">DEADLINE — MOVE MUST BE COMPLETE BY</div>' +
+          '<input id="lb_deadline" type="datetime-local" style="' + inpS + 'color-scheme:dark;"></div>' +
+        '<div><div style="' + lblS + '">EQUIPMENT TO HAUL</div>' +
+          '<div id="lb_selected_chips" style="margin-bottom:8px;"></div>' +
+          eqAccordion +
+        '</div>' +
+        '<div><div style="' + lblS + '">NOTES</div>' +
+          '<textarea id="lb_notes" rows="2" placeholder="Special instructions…" style="' + inpS + 'resize:vertical;"></textarea></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">' +
+        '<button onclick="_lbModalClose()" style="background:none;border:1px solid var(--asphalt-light);border-radius:5px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:7px 16px;cursor:pointer;">Cancel</button>' +
+        '<button onclick="_lbManualMoveSave()" style="background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.5);border-radius:5px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:7px 20px;cursor:pointer;">Save Move</button>' +
+      '</div>' +
+    '</div>' +
+    '</div>';
+}
+
+function _lbToggleEqType(type) {
+  _lbEqOpen[type] = !_lbEqOpen[type];
+  var body = document.getElementById('lb_eq_body_' + type);
+  var arr  = document.getElementById('lb_eq_arr_'  + type);
+  if (body) body.style.display = _lbEqOpen[type] ? 'block' : 'none';
+  if (arr)  arr.textContent    = _lbEqOpen[type] ? '▴' : '▾';
+}
+
+function _lbAddItem(id, name, type) {
+  if (_lbMoveItems.some(function(i) { return i.id === id; })) return;
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var avail = _lbGetEqStatus(id, groups);
+  if (avail.status === 'in_transit') { alert('🚛 ' + name + ' is currently in transit and cannot be assigned to another move.'); return; }
+  if (avail.status === 'on_site')    { alert('📍 ' + name + ' is on site. It must be cleaned out in Heimdall before reassigning.'); return; }
+  if (avail.status === 'assigned')   { if (!confirm(name + ' is already assigned to a pending move. Add it anyway?')) return; }
+  if (_lbMoveMode === 'single') {
+    var compat = _lbCheckCompat(type, _lbMoveItems);
+    if (!compat.ok) { alert('⚠️ ' + compat.reason); return; }
+  }
+  _lbMoveItems.push({ id: id, name: name, type: type });
+  _lbRenderChips();
+}
+
+function _lbRemoveItem(id) {
+  _lbMoveItems = _lbMoveItems.filter(function(i) { return i.id !== id; });
+  _lbRenderChips();
+}
+
+function _lbRenderChips() {
+  var el = document.getElementById('lb_selected_chips');
+  if (!el) return;
+  if (!_lbMoveItems.length) { el.innerHTML = ''; return; }
+  var EQ_ICONS_CH = { paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️', loader:'🚜',
+    skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛', lowbed:'🚚', tack_truck:'🛢️',
+    water_truck:'💧', generator:'⚡', trailer:'🔗', other:'📦' };
+  el.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:5px;padding:8px;background:rgba(245,197,24,0.04);border:1px solid rgba(245,197,24,0.15);border-radius:6px;">' +
+    _lbMoveItems.map(function(item) {
+      return '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,197,24,0.12);' +
+        'border:1px solid rgba(245,197,24,0.35);border-radius:10px;padding:3px 8px;' +
+        'font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);">' +
+        (EQ_ICONS_CH[item.type] || '📦') + ' ' + escHtml(item.name) +
+        '<button onclick="_lbRemoveItem(\'' + escHtml(item.id) + '\')" ' +
+          'style="background:none;border:none;color:rgba(245,197,24,0.5);cursor:pointer;font-size:10px;line-height:1;padding:0 0 0 2px;">✕</button>' +
+      '</span>';
+    }).join('') +
+    '</div>';
+}
+
+function _lbManualMoveSave() {
+  var driver   = (document.getElementById('lb_driver')   || {}).value || '';
+  var date     = (document.getElementById('lb_date')     || {}).value || new Date().toISOString().split('T')[0];
+  var from     = (document.getElementById('lb_from')     || {}).value || '';
+  var to       = (document.getElementById('lb_to')       || {}).value || '';
+  var deadline = (document.getElementById('lb_deadline') || {}).value || '';
+  var notes    = (document.getElementById('lb_notes')    || {}).value || '';
+  if (!driver.trim() || !_lbMoveItems.length) {
+    alert('Add a driver name and at least one piece of equipment.');
+    return;
+  }
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var ts    = Date.now();
+  var newId = 'mm_' + ts;
+  var existing = _lbMoveMode === 'job'
+    ? groups.find(function(g) { return g.manual && g.to === to && g.jobGroupId; })
+    : null;
+  var jobGroupId = existing ? existing.jobGroupId
+    : (_lbMoveMode === 'job' ? 'job_' + ts : 'single_' + newId);
+  groups.push({
+    id: newId, jobGroupId: jobGroupId, manual: true,
+    date: date, driverName: driver.trim(), from: from, to: to,
+    deadline: deadline, notes: notes, items: _lbMoveItems.slice(),
+    status: 'pending', createdAt: ts,
+    isRental: /atow|andy/i.test(driver), rentalService: null,
+    rentalHours: 2, rentalMileage: 0, estimatedCost: 0,
+    actualHours: null, actualCost: null
+  });
+  localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+  try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+  _lbModalClose();
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
 }
 
 // ── Foreman Report & Employee Hours ──────────────────────────────────────────
