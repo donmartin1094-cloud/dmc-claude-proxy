@@ -5747,12 +5747,10 @@ function _homeLowbedToggle() {
 }
 
 function _homeLowbedSectionHtml() {
-  // Read live manual moves from dmc_lowbed_groups (same source as Heimdall)
   var groups = [];
   try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
   var manualMoves = groups.filter(function(m) { return m.manual === true; });
 
-  // Group by jobGroupId / destination — mirrors widgetLowbedMoves logic
   var toGroupMap = {}, toGroupOrder = [];
   manualMoves.forEach(function(move) {
     var key = move.jobGroupId && move.jobGroupId.startsWith('job_')
@@ -5763,23 +5761,16 @@ function _homeLowbedSectionHtml() {
     if (!toGroupMap[key]) { toGroupMap[key] = []; toGroupOrder.push(key); }
     toGroupMap[key].push(move);
   });
-  var jobGroups = toGroupOrder.map(function(k) { return toGroupMap[k]; });
+  var jobGroups = toGroupOrder.map(function(k) { return { key: k, moves: toGroupMap[k] }; });
 
-  var resolveLabel = function(toVal) {
-    if (!toVal || toVal === '__garage__') return 'Garage';
-    var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
-    var j = bl.find(function(j) { return String(j.id) === String(toVal); });
-    if (j) return (j.num ? '#' + j.num + ' — ' : '') + (j.name || toVal);
-    return toVal;
-  };
   var stColor = function(s) {
     if (s === 'complete')    return '#4a7a4a';
     if (s === 'in_progress') return '#f0d060';
     return '#7ab3f0';
   };
   var stLabel = function(s) {
-    if (s === 'complete')    return '✓ Complete';
-    if (s === 'in_progress') return '⚡ In Progress';
+    if (s === 'complete')    return '✓ Done';
+    if (s === 'in_progress') return '⚡ Active';
     return '⏳ Pending';
   };
 
@@ -5788,53 +5779,92 @@ function _homeLowbedSectionHtml() {
   var totalComplete = manualMoves.filter(function(m) { return m.status === 'complete'; }).length;
 
   var pills = (totalActive || totalPending || totalComplete)
-    ? '<div style="display:flex;flex-wrap:wrap;gap:5px;padding:8px 12px 4px;">' +
-        (totalActive   ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f0d060;font-weight:700;">⚡ ' + totalActive + ' In Progress</span>' : '') +
-        (totalPending  ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ab3f0;font-weight:700;">⏳ ' + totalPending + ' Pending</span>' : '') +
-        (totalComplete ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,122,74,0.1);border:1px solid rgba(74,122,74,0.3);border-radius:4px;padding:3px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;font-weight:700;">✓ ' + totalComplete + ' Done</span>' : '') +
+    ? '<div style="display:flex;flex-wrap:wrap;gap:5px;padding:6px 10px 4px;">' +
+        (totalActive   ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);border-radius:4px;padding:2px 7px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f0d060;font-weight:700;">⚡ ' + totalActive + ' Active</span>' : '') +
+        (totalPending  ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);border-radius:4px;padding:2px 7px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ab3f0;font-weight:700;">⏳ ' + totalPending + ' Pending</span>' : '') +
+        (totalComplete ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,122,74,0.1);border:1px solid rgba(74,122,74,0.3);border-radius:4px;padding:2px 7px;font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;font-weight:700;">✓ ' + totalComplete + ' Done</span>' : '') +
       '</div>'
     : '';
 
   var bodyHtml = jobGroups.length === 0
     ? '<div style="text-align:center;padding:16px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No active lowbed moves</div>'
-    : jobGroups.map(function(jMoves) {
-        var destLabel = resolveLabel(jMoves[0].to);
-        var jPend = jMoves.filter(function(m) { return (m.status||'pending') === 'pending'; }).length;
-        var jInP  = jMoves.filter(function(m) { return m.status === 'in_progress'; }).length;
-        var jDone = jMoves.filter(function(m) { return m.status === 'complete'; }).length;
-        var totalEq = jMoves.reduce(function(s,m) { return s + (m.items||[]).length; }, 0);
-        var statusPills =
-          '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
-          (jPend ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(122,179,240,0.1);border:1px solid rgba(122,179,240,0.3);color:#7ab3f0;">⏳ ' + jPend + ' pending</span>' : '') +
-          (jInP  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(240,208,96,0.1);border:1px solid rgba(240,208,96,0.3);color:#f0d060;">⚡ ' + jInP + ' active</span>' : '') +
-          (jDone ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;background:rgba(74,122,74,0.15);border:1px solid rgba(74,122,74,0.3);color:#7ecb8f;">✓ ' + jDone + ' done</span>' : '') +
+    : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 8px 8px;">' +
+        jobGroups.map(function(jg) {
+          var jMoves = jg.moves;
+          var gId = jg.key;
+          var isOpen = !!_lbCardOpen[gId];
+          var destLabel = _lbResolveLabel(jMoves[0].to);
+          var firstDate = jMoves[0].date || '';
+          var allDone = jMoves.every(function(m) { return m.status === 'complete'; });
+          var anyActive = jMoves.some(function(m) { return m.status === 'in_progress'; });
+          var groupStatus = allDone ? 'complete' : (anyActive ? 'in_progress' : 'pending');
+          var sc = stColor(groupStatus);
+          var sl = stLabel(groupStatus);
+
+          var cardHdr =
+            '<div onclick="_lbToggleCard(\'' + gId + '\')" style="cursor:pointer;padding:8px 9px;display:flex;flex-direction:column;gap:3px;">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">' +
+                '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;color:#d8c8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;">' + escHtml(destLabel) + '</span>' +
+                '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 5px;border-radius:3px;color:' + sc + ';background:rgba(0,0,0,0.25);border:1px solid ' + sc + '44;white-space:nowrap;">' + sl + '</span>' +
+              '</div>' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">' +
+                '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.5);">' + jMoves.length + ' move' + (jMoves.length !== 1 ? 's' : '') + ' ' + (isOpen ? '▲' : '▼') + '</span>' +
+                (firstDate ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.4);">' + escHtml(firstDate) + '</span>' : '') +
+              '</div>' +
+            '</div>';
+
+          var cardBody = '';
+          if (isOpen) {
+            var moveRowsHtml = jMoves.map(function(m) {
+              var st = m.status || 'pending';
+              var msc = stColor(st);
+              var msl = stLabel(st);
+              var driver = m.driverName || '⚠ Unassigned';
+              var driverColor = m.driverName ? '#7ecb8f' : '#e8a94c';
+              var fromLabel = (m.from && m.from !== '__garage__') ? m.from : 'Garage';
+              var toLabel = _lbResolveLabel(m.to);
+              var strike = st === 'complete' ? 'text-decoration:line-through;opacity:0.5;' : '';
+              return '<div style="padding:5px 9px;border-top:1px dashed rgba(123,79,166,0.2);' + strike + '">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:2px;">' +
+                  '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">' + escHtml(driver) + '</span>' +
+                  '<span style="font-family:\'DM Mono\',monospace;font-size:6px;padding:1px 4px;border-radius:3px;color:' + msc + ';background:rgba(0,0,0,0.2);border:1px solid ' + msc + '33;">' + msl + '</span>' +
+                '</div>' +
+                '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                  escHtml(fromLabel) + ' → ' + escHtml(toLabel) +
+                '</div>' +
+              '</div>';
+            }).join('');
+
+            var typeCounts = {};
+            jMoves.forEach(function(m) {
+              (m.items || []).forEach(function(it) {
+                var t = it.type || 'other';
+                typeCounts[t] = (typeCounts[t] || 0) + 1;
+              });
+            });
+            var typeKeys = Object.keys(typeCounts);
+            var totalsHtml = typeKeys.length
+              ? '<div style="padding:5px 9px;border-top:1px solid rgba(123,79,166,0.2);font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(167,139,250,0.6);">' +
+                  typeKeys.map(function(t) {
+                    return (t.charAt(0).toUpperCase() + t.slice(1)) + ': ' + typeCounts[t];
+                  }).join(' · ') +
+                '</div>'
+              : '';
+
+            var cleanoutBtn = (_homeIsAdmin() && !allDone)
+              ? '<div style="padding:5px 9px 7px;">' +
+                  '<button onclick="event.stopPropagation();_lbCleanoutJob(\'' + gId + '\')" style="width:100%;background:rgba(255,100,100,0.08);border:1px solid rgba(255,100,100,0.3);border-radius:3px;color:#ff8080;font-family:\'DM Mono\',monospace;font-size:7px;padding:3px 0;cursor:pointer;font-weight:700;">Cleanout ✓</button>' +
+                '</div>'
+              : '';
+
+            cardBody = moveRowsHtml + totalsHtml + cleanoutBtn;
+          }
+
+          return '<div style="background:#1e1035;border:1px solid rgba(123,79,166,' + (allDone ? '0.2' : '0.4') + ');border-top:2px solid ' + sc + ';border-radius:6px;overflow:hidden;' + (allDone ? 'opacity:0.65;' : '') + '">' +
+            cardHdr + cardBody +
           '</div>';
-        var moveRows = jMoves.map(function(m, mi) {
-          var st = m.status || 'pending';
-          var sc = stColor(st);
-          var sl = stLabel(st);
-          var eqNames = (m.items||[]).map(function(it) { return it.name||it.type; }).join(', ') || '—';
-          var driver = m.driverName || '⚠ Unassigned';
-          var driverColor = m.driverName ? '#7ecb8f' : '#e8a94c';
-          var strike = st === 'complete' ? 'text-decoration:line-through;opacity:0.6;' : '';
-          return '<div style="padding:6px 10px;border-top:1px dashed rgba(123,79,166,0.25);' + strike + '">' +
-            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">' +
-              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.5);">Move ' + (mi+1) + '</span>' +
-              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;padding:1px 5px;border-radius:3px;color:' + sc + ';background:rgba(0,0,0,0.2);border:1px solid ' + sc + '33;">' + sl + '</span>' +
-              '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + driverColor + ';margin-left:auto;">' + escHtml(driver) + '</span>' +
-            '</div>' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(eqNames) + '</div>' +
-          '</div>';
-        }).join('');
-        return '<div style="background:#2a1a3e;border:1px solid rgba(123,79,166,0.4);border-left:3px solid #9b6fd6;border-radius:6px;margin:6px 10px;overflow:hidden;">' +
-          '<div style="padding:8px 10px;">' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#d8c8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(destLabel) + '</div>' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(167,139,250,0.5);margin-top:2px;">' + jMoves.length + ' load' + (jMoves.length!==1?'s':'') + ' · ' + totalEq + ' pcs</div>' +
-            statusPills +
-          '</div>' +
-          moveRows +
-        '</div>';
-      }).join('');
+        }).join('') +
+      '</div>';
 
   var hdr = '<div style="position:sticky;top:0;z-index:1;background:var(--asphalt-mid);padding:6px 12px;' +
     'border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;">' +
@@ -5843,14 +5873,12 @@ function _homeLowbedSectionHtml() {
       '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + manualMoves.length + ' moves</span>' +
       (_homeIsAdmin() ? '<button onclick="_lbManualMovePick()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:3px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;font-weight:700;">+ Move</button>' : '') +
       '<button onclick="switchTab(\'heimdall\')" style="background:none;border:1px solid rgba(167,139,250,0.3);border-radius:3px;color:rgba(167,139,250,0.7);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;">Plan →</button>' +
-      '<button onclick="_homeLowbedToggle()" style="background:none;border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;">'+(_homeLowbedOpen?'▲':'▼')+'</button>' +
+      '<button onclick="_homeLowbedToggle()" style="background:none;border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;">' + (_homeLowbedOpen ? '▲' : '▼') + '</button>' +
     '</div>' +
   '</div>';
 
   return '<div>' + hdr +
-    (_homeLowbedOpen
-      ? '<div style="padding-bottom:6px;">' + pills + bodyHtml + '</div>'
-      : '') +
+    (_homeLowbedOpen ? '<div>' + pills + bodyHtml + '</div>' : '') +
   '</div>';
 }
 
@@ -18494,6 +18522,7 @@ function widgetLowbedMoves() {
 var _lbMoveMode  = null;
 var _lbMoveItems = [];
 var _lbEqOpen    = {};
+var _lbCardOpen  = {};
 
 var _LB_RULES = {
   paver:      { loadClass:'heavy',   canPairWith:['roller','skid_steer','mecalac','compactor','generator'] },
@@ -18801,6 +18830,73 @@ function _lbManualMoveSave() {
   });
   localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
   try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+  _lbModalClose();
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbResolveLabel(toVal) {
+  if (!toVal || toVal === '__garage__') return 'Garage';
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var j = bl.find(function(jb) { return String(jb.id) === String(toVal); });
+  if (j) return (j.num ? '#' + j.num + ' — ' : '') + (j.name || toVal);
+  return toVal;
+}
+
+function _lbToggleCard(groupId) {
+  _lbCardOpen[groupId] = !_lbCardOpen[groupId];
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbCleanoutJob(groupId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var jMoves = groups.filter(function(m) {
+    if (!m.manual) return false;
+    var k = m.jobGroupId && m.jobGroupId.startsWith('job_') ? m.jobGroupId
+      : (m.to && m.to !== '__garage__') ? 'job_' + m.to : 'single_' + m.id;
+    return k === groupId;
+  });
+  if (!jMoves.length) return;
+  var destLabel = _lbResolveLabel(jMoves[0].to);
+  var root = _lbModalRoot();
+  root.innerHTML =
+    '<div style="background:#1a0f2e;border:1px solid rgba(123,79,166,0.5);border-radius:10px;padding:20px;max-width:340px;margin:auto;font-family:\'DM Mono\',monospace;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#a78bfa;margin-bottom:12px;">CONFIRM CLEANOUT</div>' +
+      '<div style="font-size:11px;color:var(--concrete);margin-bottom:6px;">Mark <span style="color:#d8c8ff;font-weight:700;">' + escHtml(destLabel) + '</span> as complete and notify all assigned drivers?</div>' +
+      '<div style="font-size:9px;color:var(--concrete-dim);margin-bottom:16px;">All moves in this job group will be marked Complete and each assigned driver will receive a notification.</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        '<button onclick="_lbModalClose()" style="background:none;border:1px solid var(--asphalt-light);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:6px 14px;cursor:pointer;">Cancel</button>' +
+        '<button onclick="_lbCleanoutConfirm(\'' + groupId + '\')" style="background:rgba(255,100,100,0.12);border:1px solid rgba(255,100,100,0.4);border-radius:4px;color:#ff8080;font-family:\'DM Mono\',monospace;font-size:10px;padding:6px 14px;cursor:pointer;font-weight:700;">Mark Complete</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function _lbCleanoutConfirm(groupId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var accounts = [];
+  try { accounts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]'); } catch(e) {}
+  var drivers = new Set();
+  var destLabel = '';
+  groups.forEach(function(m) {
+    if (!m.manual) return;
+    var k = m.jobGroupId && m.jobGroupId.startsWith('job_') ? m.jobGroupId
+      : (m.to && m.to !== '__garage__') ? 'job_' + m.to : 'single_' + m.id;
+    if (k === groupId) {
+      m.status = 'complete';
+      if (!destLabel) destLabel = _lbResolveLabel(m.to);
+      if (m.driverName) drivers.add(m.driverName);
+    }
+  });
+  localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+  try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+  drivers.forEach(function(driverName) {
+    var acct = accounts.find(function(a) { return (a.displayName || '').toLowerCase() === driverName.toLowerCase(); });
+    var targetUser = acct ? acct.username : null;
+    pushNotif('info', 'Lowbed Move Complete',
+      (destLabel || 'Job') + ' is finished. Equipment can return to shop or be reassigned.',
+      null, targetUser, null);
+  });
   _lbModalClose();
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
 }
