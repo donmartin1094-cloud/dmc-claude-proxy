@@ -24009,6 +24009,7 @@ async function fbLoadAll() {
         else if (key === 'gcs')        { knownGCs = val; }
         else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot();  _checkLocalStorageSize();}
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
+        else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
         else if (key === 'notifications') {
           var incoming = Array.isArray(val) ? val : [];
           var localIds = new Set(notifications.map(function(n){ return n.id; }));
@@ -24380,6 +24381,7 @@ async function initApp(username) {
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker();  _checkLocalStorageSize();}
               else if (key === 'paving_slips')       { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {}  _checkLocalStorageSize();}
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
+              else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
               else if (key === 'daily_orders') {
                 if (Array.isArray(val)) {
                   var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
