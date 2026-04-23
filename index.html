@@ -5092,6 +5092,8 @@ const HOME_WIDGETS_DEF = [
   { id:'foremanreport',   label:'Foreman Report',       icon:'📋', desc:'Submit daily crew attendance and hours report',                           defaultOn:true  },
   { id:'myhours',         label:'My Hours',             icon:'⏱',  desc:'Your weekly hours tracked from foreman reports',                          defaultOn:true  },
   { id:'atowbills',       label:"Andy's Towing Bills",  icon:'🧾', desc:'Pending towing bills and totals',                                             defaultOn:true  },
+  { id:'fleetstatus',     label:'Fleet Status',          icon:'🔧', desc:'Equipment status with filter and sort controls',                                defaultOn:true  },
+  { id:'equipalerts',     label:'Equipment Alerts',      icon:'🔔', desc:'Status-change alerts for fleet equipment',                                      defaultOn:true  },
 ];
 
 function getHomePrefs() {
@@ -5547,8 +5549,6 @@ function _homeRenderGpsFleetPanel() {
     '<div class="home-fleet-panel" id="homeFleetPanel">' +
       '<div style="flex:1;min-height:0;overflow-y:auto;" id="homeFleetScrollBody">' +
         _homeLowbedSectionHtml() +
-        _homeFleetSectionHtml() +
-        _homeEquipNotifSectionHtml() +
       '</div>' +
     '</div>' +
   '</div>';
@@ -5709,11 +5709,8 @@ function _homeFleetRerender() {
   var isMob = window.innerWidth <= 600;
   if (isMob) {
     var fp = document.getElementById('homeFleetPanel');
-    if (!fp) return;
-    // Mobile: daily + lowbed are their own section cards; fleet panel only holds fleet + notifs
-    fp.innerHTML = '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;">' +
-      _homeFleetSectionHtml() +
-      _homeEquipNotifSectionHtml() +
+    if (fp) fp.innerHTML = '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;">' +
+      _homeLowbedSectionHtml() +
     '</div>';
   } else {
     var dailyCol = document.getElementById('homeAdminDailyCol');
@@ -5721,10 +5718,9 @@ function _homeFleetRerender() {
     var fp = document.getElementById('homeFleetPanel');
     if (fp) fp.innerHTML = '<div style="flex:1;min-height:0;overflow-y:auto;height:100%;" id="homeFleetScrollBody">' +
       _homeLowbedSectionHtml() +
-      _homeFleetSectionHtml() +
-      _homeEquipNotifSectionHtml() +
     '</div>';
   }
+  _refreshFleetWidgets();
 }
 
 // ── DJ admin home: hours widget (daily Sun–Sat grid) ──────────────────────────
@@ -6025,8 +6021,7 @@ function _homeAdminMobSectionsHtml() {
     gps:    '<div style="height:220px;"><div class="home-gps-map-inner" id="homeGpsMapEl" style="width:100%;height:100%;"></div></div>',
     fleet:  '<div id="homeFleetPanel" style="display:flex;flex-direction:column;">' +
               '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;">' +
-                _homeFleetSectionHtml() +
-                _homeEquipNotifSectionHtml() +
+                _homeLowbedSectionHtml() +
               '</div>' +
             '</div>',
     lowbed: _homeLowbedSectionHtml()
@@ -6100,6 +6095,102 @@ function widgetATowBills() {
       '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:8px 0;">Loading…</div>' +
     '</div>' +
   '</div>';
+}
+
+function widgetFleetStatus() {
+  var active = equipmentFleet.filter(function(e){ return e.active !== false; });
+  var down  = active.filter(function(e){ return e.status === 'down'; }).length;
+  var limp  = active.filter(function(e){ return e.status === 'limping'; }).length;
+  var issues = down + limp;
+  var badgeHtml = issues > 0
+    ? '<span style="background:var(--red);color:#fff;font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;border-radius:8px;padding:1px 7px;">' + issues + '</span>'
+    : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--green);">All Clear</span>';
+  var controlsAndBody = _homeFleetControlsHtml() +
+    '<div class="home-fleet-body" id="homeFleetBody" style="overflow-y:auto;max-height:320px;">' + _homeFleetBodyHtml() + '</div>';
+  return '<div class="home-widget">' +
+    '<div class="home-widget-header">' +
+      '<div class="home-widget-title">🔧 Fleet Status</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + active.length + ' units</span>' +
+        badgeHtml +
+      '</div>' +
+    '</div>' +
+    '<div class="home-widget-body" style="padding:0;" id="homeFleetWidgetBody">' + controlsAndBody + '</div>' +
+  '</div>';
+}
+
+function widgetEquipAlerts() {
+  var unread = _equipAlerts.filter(function(a){ return !a.read; }).length;
+  var badgeHtml = unread > 0
+    ? '<span style="background:var(--red);color:#fff;font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;border-radius:8px;padding:1px 7px;">' + unread + '</span>'
+    : '';
+  var rows = _equipAlerts.length === 0
+    ? '<div style="padding:14px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(155,148,136,0.35);text-align:center;">No equipment alerts</div>'
+    : _equipAlerts.slice(0, 30).map(function(a) {
+        var toMeta   = _equipAlertMeta(a.to);
+        var fromMeta = _equipAlertMeta(a.from);
+        var ts       = new Date(a.ts);
+        var tsStr    = ts.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' +
+                       ts.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+        return '<div onclick="_equipMarkRead(\'' + a.id + '\')" style="display:flex;align-items:flex-start;gap:8px;' +
+          'padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.04);' +
+          'background:' + (a.read ? 'transparent' : 'rgba(255,255,255,0.02)') + ';cursor:pointer;">' +
+          '<span style="font-size:12px;flex-shrink:0;margin-top:1px;">' + toMeta.icon + '</span>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="display:flex;align-items:center;gap:6px;">' +
+              '<span style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">' + escHtml(a.equipName) + '</span>' +
+              (!a.read ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0;display:inline-block;"></span>' : '') +
+            '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;margin-top:1px;">' +
+              '<span style="color:' + fromMeta.color + ';">' + fromMeta.label + '</span>' +
+              '<span style="color:rgba(200,200,200,0.35);"> → </span>' +
+              '<span style="color:' + toMeta.color + ';font-weight:700;">' + toMeta.label + '</span>' +
+            '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.4);margin-top:2px;">' + tsStr + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+  return '<div class="home-widget">' +
+    '<div class="home-widget-header">' +
+      '<div class="home-widget-title">🔔 Equipment Alerts' + (badgeHtml ? ' ' + badgeHtml : '') + '</div>' +
+      '<button class="home-widget-action" onclick="event.stopPropagation();_equipClearAlerts()">Clear</button>' +
+    '</div>' +
+    '<div class="home-widget-body" style="padding:0;max-height:320px;overflow-y:auto;" id="homeEquipAlertsWidgetBody">' + rows + '</div>' +
+  '</div>';
+}
+
+function _refreshFleetWidgets() {
+  var fsBody = document.getElementById('homeFleetWidgetBody');
+  if (fsBody) {
+    var active = equipmentFleet.filter(function(e){ return e.active !== false; });
+    var down  = active.filter(function(e){ return e.status === 'down'; }).length;
+    var limp  = active.filter(function(e){ return e.status === 'limping'; }).length;
+    fsBody.innerHTML = _homeFleetControlsHtml() +
+      '<div class="home-fleet-body" id="homeFleetBody" style="overflow-y:auto;max-height:320px;">' + _homeFleetBodyHtml() + '</div>';
+  }
+  var eaBody = document.getElementById('homeEquipAlertsWidgetBody');
+  if (eaBody) {
+    var rows2 = _equipAlerts.length === 0
+      ? '<div style="padding:14px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(155,148,136,0.35);text-align:center;">No equipment alerts</div>'
+      : _equipAlerts.slice(0, 30).map(function(a) {
+          var toMeta   = _equipAlertMeta(a.to);
+          var fromMeta = _equipAlertMeta(a.from);
+          var ts       = new Date(a.ts);
+          var tsStr    = ts.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' + ts.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+          return '<div onclick="_equipMarkRead(\'' + a.id + '\')" style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.04);background:' + (a.read ? 'transparent' : 'rgba(255,255,255,0.02)') + ';cursor:pointer;">' +
+            '<span style="font-size:12px;flex-shrink:0;margin-top:1px;">' + toMeta.icon + '</span>' +
+            '<div style="flex:1;min-width:0;">' +
+              '<div style="display:flex;align-items:center;gap:6px;">' +
+                '<span style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">' + escHtml(a.equipName) + '</span>' +
+                (!a.read ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0;display:inline-block;"></span>' : '') +
+              '</div>' +
+              '<div style="font-family:\'DM Mono\',monospace;font-size:9px;margin-top:1px;"><span style="color:' + fromMeta.color + ';">' + fromMeta.label + '</span><span style="color:rgba(200,200,200,0.35);"> → </span><span style="color:' + toMeta.color + ';font-weight:700;">' + toMeta.label + '</span></div>' +
+              '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:rgba(155,148,136,0.4);margin-top:2px;">' + tsStr + '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+    eaBody.innerHTML = rows2;
+  }
 }
 
 function _homeWeekScheduleWidget() {
@@ -6644,8 +6735,6 @@ function renderHomeView(el) {
               '<div class="home-fleet-panel" id="homeFleetPanel" style="flex:1;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
                 '<div style="flex:1;min-height:0;overflow-y:auto;height:100%;" id="homeFleetScrollBody">' +
                   _homeLowbedSectionHtml() +
-                  _homeFleetSectionHtml() +
-                  _homeEquipNotifSectionHtml() +
                 '</div>' +
               '</div>' +
             '</div>'
@@ -6784,6 +6873,8 @@ function buildWidget(id, displayName, pos) {
       case 'foremanreport':  html = widgetForemanReport(); break;
       case 'myhours':        html = widgetMyHours(); break;
       case 'atowbills':      html = widgetATowBills(); break;
+      case 'fleetstatus':    html = widgetFleetStatus(); break;
+      case 'equipalerts':    html = widgetEquipAlerts(); break;
       default:                return '';
     }
     // Apply stored size + freeform position
