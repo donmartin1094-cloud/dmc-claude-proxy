@@ -6210,7 +6210,9 @@ function _homeWeekScheduleWidget() {
     var d = new Date(sunday);
     d.setDate(sunday.getDate() + i);
     var k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    days.push({ key: k, name: DAY_NAMES[i], date: d.getDate(), month: MONTHS[d.getMonth()], isToday: k === todayKey });
+    var _isWknd = (i === 0 || i === 6);
+    var _isHol  = (typeof holidays !== 'undefined') && holidays.has(k);
+    days.push({ key: k, name: DAY_NAMES[i], date: d.getDate(), month: MONTHS[d.getMonth()], isToday: k === todayKey, isWeekend: _isWknd, isHoliday: _isHol });
   }
 
   // Row definitions: top crew, bottom crew, any extras found in the week
@@ -6249,9 +6251,13 @@ function _homeWeekScheduleWidget() {
     // Header row
     gridHtml += '<div></div>';
     days.forEach(function(d) {
-      gridHtml += '<div style="text-align:center;padding-bottom:3px;border-bottom:1px solid ' + (d.isToday ? 'var(--stripe)' : 'rgba(255,255,255,0.08)') + ';margin-bottom:2px;">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:.5px;color:' + (d.isToday ? 'var(--stripe)' : 'var(--concrete-dim)') + ';">' + d.name + '</div>' +
-        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;line-height:1.1;color:' + (d.isToday ? 'var(--stripe)' : 'var(--white)') + ';">' + d.date + '</div>' +
+      var _offDay = !d.isToday && (d.isWeekend || d.isHoliday);
+      var _nameCl = d.isToday ? 'var(--stripe)' : _offDay ? 'rgba(196,181,253,0.75)' : 'var(--concrete-dim)';
+      var _dateCl = d.isToday ? 'var(--stripe)' : _offDay ? 'rgba(196,181,253,0.9)'  : 'var(--white)';
+      var _bordCl = d.isToday ? 'var(--stripe)' : _offDay ? 'rgba(196,181,253,0.35)' : 'rgba(255,255,255,0.08)';
+      gridHtml += '<div style="text-align:center;padding-bottom:3px;border-bottom:1px solid ' + _bordCl + ';margin-bottom:2px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:.5px;color:' + _nameCl + ';">' + d.name + (d.isHoliday ? ' ✦' : '') + '</div>' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;line-height:1.1;color:' + _dateCl + ';">' + d.date + '</div>' +
         '<div style="font-family:\'DM Mono\',monospace;font-size:6px;color:rgba(155,148,136,0.5);">' + d.month + '</div>' +
       '</div>';
     });
@@ -6269,7 +6275,12 @@ function _homeWeekScheduleWidget() {
         else { var ex = (dd.extras || [])[row.extraIdx]; bd = ex ? ex.data : null; }
 
         if (!bd || !bd.type || bd.type === 'blank') {
-          gridHtml += '<div style="padding:1px;"><div style="height:38px;border-radius:3px;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.06);"></div></div>';
+          var _offBlank = day.isWeekend || day.isHoliday;
+          gridHtml += '<div style="padding:1px;"><div style="height:38px;border-radius:3px;' +
+            (_offBlank
+              ? 'background:rgba(148,112,198,0.22);border:1px solid rgba(196,181,253,0.3);'
+              : 'background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.06);') +
+          '"></div></div>';
         } else {
           var bt = (typeof getBlockType === 'function') ? getBlockType(bd.type) : { color:'#5ab4f5', label: bd.type };
           var f  = bd.fields || {};
@@ -6278,8 +6289,8 @@ function _homeWeekScheduleWidget() {
           var esc = typeof escHtml === 'function' ? escHtml : function(s){ return s; };
           gridHtml += '<div style="padding:1px;">' +
             '<div style="height:38px;border-radius:3px;background:' + bt.color + '1a;border:1.5px solid ' + bt.color + '55;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 3px;gap:1px;">' +
-              (jobNum  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:' + bt.color + ';line-height:1.2;text-align:center;">' + esc(jobNum) + '</span>' : '') +
-              '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:' + bt.color + 'bb;line-height:1.2;text-align:center;word-break:break-all;max-width:100%;overflow:hidden;">' + esc(jobName) + '</span>' +
+              (jobNum  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:#ffffff;line-height:1.2;text-align:center;">' + esc(jobNum) + '</span>' : '') +
+              '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:rgba(255,255,255,0.85);line-height:1.2;text-align:center;word-break:break-all;max-width:100%;overflow:hidden;">' + esc(jobName) + '</span>' +
             '</div>' +
           '</div>';
         }
