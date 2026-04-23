@@ -5094,6 +5094,7 @@ const HOME_WIDGETS_DEF = [
   { id:'atowbills',       label:"Andy's Towing Bills",  icon:'🧾', desc:'Pending towing bills and totals',                                             defaultOn:true  },
   { id:'fleetstatus',     label:'Fleet Status',          icon:'🔧', desc:'Equipment status with filter and sort controls',                                defaultOn:true  },
   { id:'equipalerts',     label:'Equipment Alerts',      icon:'🔔', desc:'Status-change alerts for fleet equipment',                                      defaultOn:true  },
+  { id:'bidrequests',     label:'Bid Requests',           icon:'📋', desc:'Open bid requests with urgency and due date tracking',                           defaultOn:true  },
 ];
 
 function getHomePrefs() {
@@ -6159,6 +6160,58 @@ function widgetEquipAlerts() {
   '</div>';
 }
 
+function _bidCardsHtml() {
+  var open = _bidRequests.filter(function(b) { return b.status === 'open'; });
+  var now  = new Date();
+  if (!open.length) return '<div style="padding:14px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(155,148,136,0.35);text-align:center;">No open bid requests</div>';
+  return open.map(function(b) {
+    var borderColor = 'rgba(155,148,136,0.3)';
+    if (b.dueDate) {
+      var due  = new Date(b.dueDate);
+      var days = Math.ceil((due - now) / 86400000);
+      if      (days <= 3) borderColor = '#e57373';
+      else if (days <= 7) borderColor = 'var(--stripe)';
+      else                borderColor = '#81c784';
+    }
+    var dueTxt = b.dueDate
+      ? new Date(b.dueDate).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+      : 'No deadline';
+    return '<div style="border-left:3px solid '+borderColor+';display:flex;">'+
+      '<div style="flex:1;padding:9px 12px;cursor:pointer;" onclick="switchTab(\'mail\');_mailOpenFromBidLog('+b.emailUid+',\''+escHtml(b.folder)+'\')">'+
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(b.from)+'</div>'+
+        (b.company ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:1px;">'+escHtml(b.company)+'</div>' : '')+
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:rgba(255,255,255,0.6);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">'+escHtml(b.jobDescription||b.subject)+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+borderColor+';margin-top:4px;">'+escHtml(dueTxt)+'</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;padding:0 10px;flex-shrink:0;">'+
+        '<button onclick="event.stopPropagation();_bidMarkComplete(\''+escHtml(b.id)+'\')"'+
+          ' style="background:none;border:1px solid rgba(129,199,132,0.4);border-radius:var(--radius);padding:3px 8px;color:#81c784;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;white-space:nowrap;">'+
+          '✓ Done</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="height:1px;background:rgba(255,255,255,0.04);"></div>';
+  }).join('');
+}
+
+function widgetBidRequests() {
+  var openCount = _bidRequests.filter(function(b) { return b.status === 'open'; }).length;
+  var badge = openCount > 0
+    ? ' <span style="background:#e57373;color:#fff;font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;border-radius:8px;padding:1px 7px;">'+openCount+'</span>'
+    : '';
+  return '<div class="home-widget">'+
+    '<div class="home-widget-header">'+
+      '<div class="home-widget-title">📋 Bid Requests'+badge+'</div>'+
+      '<button class="home-widget-action" onclick="event.stopPropagation();switchTab(\'mail\');_mailShowBidLog()">View All</button>'+
+    '</div>'+
+    '<div class="home-widget-body" style="padding:0;max-height:320px;overflow-y:auto;" id="homeBidRequestsWidgetBody">'+_bidCardsHtml()+'</div>'+
+  '</div>';
+}
+
+function _refreshBidWidget() {
+  var body = document.getElementById('homeBidRequestsWidgetBody');
+  if (body) body.innerHTML = _bidCardsHtml();
+}
+
 function _refreshFleetWidgets() {
   var fsBody = document.getElementById('homeFleetWidgetBody');
   if (fsBody) {
@@ -6886,6 +6939,7 @@ function buildWidget(id, displayName, pos) {
       case 'atowbills':      html = widgetATowBills(); break;
       case 'fleetstatus':    html = widgetFleetStatus(); break;
       case 'equipalerts':    html = widgetEquipAlerts(); break;
+      case 'bidrequests':    html = widgetBidRequests(); break;
       default:                return '';
     }
     // Apply stored size + freeform position
@@ -14915,6 +14969,172 @@ var _mailMessages        = [];
 var _mailOpenUid         = null;
 var _mailFolderLoading   = false;
 var _mailMessageLoading  = false;
+var _mailActiveCategory  = 'all';
+var _bidRequests         = [];
+var _mailScannedUids     = {};
+
+function _mailGetCategory(msg) {
+  var uid = msg.uid;
+  for (var i = 0; i < _bidRequests.length; i++) {
+    if (_bidRequests[i].emailUid === uid && _bidRequests[i].status !== undefined) return 'bidrequests';
+  }
+  var subj = (msg.subject || '').toLowerCase();
+  var purchaseKw = ['order','receipt','invoice','payment','tracking','shipping','confirmation','your purchase'];
+  var promoKw    = ['sale','deal','% off','%off','offer','newsletter','unsubscribe','promo','discount','coupon'];
+  for (var p = 0; p < purchaseKw.length; p++) { if (subj.indexOf(purchaseKw[p]) !== -1) return 'purchases'; }
+  for (var r = 0; r < promoKw.length;    r++) { if (subj.indexOf(promoKw[r])    !== -1) return 'promotions'; }
+  return 'inbox';
+}
+
+function _mailRenderList(messages, folder) {
+  var body = document.getElementById('mailListBody');
+  if (!body) return;
+  if (!messages.length) {
+    body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--concrete-dim);font-size:11px;">No messages</div>';
+    return;
+  }
+  body.innerHTML = messages.map(function(m) {
+    var from    = m.from ? (m.from.name || m.from.address || '') : '—';
+    var subj    = m.subject || '(no subject)';
+    var dt      = m.date ? _mailFmtDate(new Date(m.date)) : '';
+    var unread  = !m.seen;
+    var flagged = m.flagged;
+    return '<div onclick="_mailOpenMessage('+m.uid+',\''+escHtml(folder)+'\')"'+
+      ' id="mailRow_'+m.uid+'"'+
+      ' data-flagged="'+(flagged?'1':'0')+'"'+
+      ' data-unread="'+(unread?'1':'0')+'"'+
+      ' style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+
+      (unread ? 'background:rgba(245,197,24,0.04);' : '')+'"'+
+      ' onmouseover="this.style.background=\'rgba(255,255,255,0.06)\'" onmouseout="this.style.background=\''+(unread?'rgba(245,197,24,0.04)':'')+'\'">'+
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'+
+        '<span id="mailDot_'+m.uid+'" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;'+(unread?'background:var(--stripe);':'')+'"></span>'+
+        '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:12px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
+        '<span id="mailFlag_'+m.uid+'" style="color:var(--stripe);font-size:10px;'+(flagged?'':'display:none;')+'">★</span>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">'+escHtml(dt)+'</div>'+
+      '</div>'+
+      '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
+    '</div>';
+  }).join('');
+}
+
+function _mailRenderCategoryTabs() {
+  var el = document.getElementById('mailCategoryTabs');
+  if (!el) return;
+  var cats = [
+    { id:'all',         label:'All' },
+    { id:'inbox',       label:'Inbox' },
+    { id:'promotions',  label:'Promos' },
+    { id:'purchases',   label:'Purchases' },
+    { id:'bidrequests', label:'Bids' }
+  ];
+  var counts = { all: _mailMessages.length, inbox: 0, promotions: 0, purchases: 0, bidrequests: 0 };
+  _mailMessages.forEach(function(m) {
+    var cat = _mailGetCategory(m);
+    if (counts[cat] !== undefined) counts[cat]++;
+  });
+  el.innerHTML = cats.map(function(c) {
+    var active = _mailActiveCategory === c.id;
+    var cnt    = counts[c.id] || 0;
+    return '<button onclick="_mailSelectCategory(\''+c.id+'\')"'+
+      ' style="background:'+(active?'var(--stripe)':'rgba(255,255,255,0.06)')+';'+
+      'color:'+(active?'var(--asphalt)':'var(--concrete-dim)')+';'+
+      'border:none;border-radius:var(--radius);padding:3px 8px;'+
+      'font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;white-space:nowrap;">'+
+      escHtml(c.label)+(cnt ? ' <span style="opacity:0.65;">'+cnt+'</span>' : '')+
+    '</button>';
+  }).join('');
+}
+
+function _mailSelectCategory(cat) {
+  _mailActiveCategory = cat;
+  _mailRenderCategoryTabs();
+  var filtered = (cat === 'all')
+    ? _mailMessages
+    : _mailMessages.filter(function(m) { return _mailGetCategory(m) === cat; });
+  _mailRenderList(filtered, _mailFolder);
+}
+
+async function loadBidRequests() {
+  try {
+    var saved = await fbGet('bid_requests', null);
+    if (saved && Array.isArray(saved)) {
+      _bidRequests = saved;
+    } else {
+      var loc = localStorage.getItem('dmc_bid_requests');
+      _bidRequests = loc ? JSON.parse(loc) : [];
+    }
+  } catch(e) {
+    var loc2 = localStorage.getItem('dmc_bid_requests');
+    _bidRequests = loc2 ? JSON.parse(loc2) : [];
+  }
+  try {
+    var sc = localStorage.getItem('dmc_mail_scanned_uids');
+    _mailScannedUids = sc ? JSON.parse(sc) : {};
+  } catch(e) { _mailScannedUids = {}; }
+}
+
+function saveBidRequests() {
+  localStorage.setItem('dmc_bid_requests', JSON.stringify(_bidRequests));
+  _checkLocalStorageSize();
+  try { fbSet('bid_requests', _bidRequests); } catch(e) {}
+  localStorage.setItem('dmc_mail_scanned_uids', JSON.stringify(_mailScannedUids));
+  _checkLocalStorageSize();
+}
+
+async function _mailClassifyBidRequest(msg, uid, folder) {
+  var cacheKey = uid + '_' + folder;
+  if (_mailScannedUids[cacheKey]) return;
+  _mailScannedUids[cacheKey] = true;
+  var fromStr  = msg.from ? ((msg.from.name || '') + ' ' + (msg.from.address || '')).trim() : '';
+  var bodyText = (msg.text || '').slice(0, 1200);
+  if (!bodyText && msg.html) {
+    bodyText = msg.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
+  }
+  var railBase = _mailRailBase();
+  try {
+    var res = await fetch(railBase + '/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role: 'user', content:
+          'You are helping a paving/asphalt construction company identify bid requests.\n' +
+          'Does this email contain a request for pricing, a bid, or a quote for construction or paving work?\n' +
+          'From: ' + fromStr + '\nSubject: ' + (msg.subject || '') + '\nBody: ' + bodyText + '\n\n' +
+          'Return ONLY valid JSON — no prose:\n' +
+          '{"isBidRequest":true,"requestor":"name","company":"company name","jobDescription":"one sentence","dueDate":"YYYY-MM-DD or null"}\n' +
+          'OR\n{"isBidRequest":false}'
+        }]
+      })
+    });
+    if (!res.ok) { saveBidRequests(); return; }
+    var data  = await res.json();
+    var text  = (data.content || []).map(function(b) { return b.text || ''; }).join('').trim();
+    var match = text.match(/\{[\s\S]*\}/);
+    if (!match) { saveBidRequests(); return; }
+    var parsed = JSON.parse(match[0]);
+    if (!parsed.isBidRequest) { saveBidRequests(); return; }
+    var br = {
+      id:             Date.now().toString(),
+      emailUid:       uid,
+      folder:         folder,
+      from:           msg.from ? (msg.from.name || msg.from.address || '') : '',
+      company:        parsed.company || '',
+      subject:        msg.subject || '',
+      dateRequested:  msg.date || new Date().toISOString(),
+      dueDate:        (parsed.dueDate && parsed.dueDate !== 'null') ? parsed.dueDate : null,
+      jobDescription: parsed.jobDescription || '',
+      status:         'open'
+    };
+    _bidRequests.unshift(br);
+    saveBidRequests();
+    pushNotif('info', 'Bid Request Detected', (br.company || br.from) + ' — ' + br.jobDescription);
+    _mailRenderCategoryTabs();
+  } catch(e) {
+    saveBidRequests();
+  }
+}
 
 function escapeSrcdoc(html) {
   return (html || '')
@@ -14961,7 +15181,7 @@ function renderMail() {
     _checkLocalStorageSize();
     if (acct.email) localStorage.setItem('dmc_mail_user', acct.email);
     _checkLocalStorageSize();
-    if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); }
+    if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); loadBidRequests(); }
     _mailLoadFolders();
   } catch(err) {
     console.error('[Mail] render crash:', err);
@@ -15125,10 +15345,14 @@ function _mailBuildApp(wrap, acct) {
               '⚙ Accounts'+
             '</button>'
           : '')+
+        '<button onclick="_mailShowBidLog()"'+
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Bid requests log">'+
+          '📋 Bid Log'+
+        '</button>'+
       '</div>'+
 
       // 3-panel body
-      '<div style="flex:1;display:flex;overflow:hidden;min-height:0;">'+
+      '<div id="mailPanels" style="flex:1;display:flex;overflow:hidden;min-height:0;">'+
 
         // Folder sidebar
         '<div id="mailFolders" style="width:160px;flex-shrink:0;background:var(--asphalt);border-right:1px solid var(--asphalt-light);overflow-y:auto;padding:8px 0;">'+
@@ -15138,6 +15362,7 @@ function _mailBuildApp(wrap, acct) {
         // Message list
         '<div id="mailList" style="width:260px;flex-shrink:0;background:var(--asphalt-mid);border-right:1px solid var(--asphalt-light);display:flex;flex-direction:column;overflow:hidden;">'+
           '<div id="mailListHdr" style="flex-shrink:0;padding:8px 14px;border-bottom:1px solid var(--asphalt-light);font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Inbox</div>'+
+          '<div id="mailCategoryTabs" style="flex-shrink:0;border-bottom:1px solid var(--asphalt-light);padding:5px 8px;display:flex;gap:3px;flex-wrap:wrap;background:var(--asphalt-mid);"></div>'+
           '<div id="mailListBody" style="flex:1;overflow-y:auto;">'+
             '<div style="padding:20px;text-align:center;color:var(--concrete-dim);font-size:11px;">Loading…</div>'+
           '</div>'+
@@ -15151,6 +15376,24 @@ function _mailBuildApp(wrap, acct) {
         '</div>'+
 
       '</div>'+
+
+      // Bid Log panel (full-width, replaces 3-panel body when open)
+      '<div id="mailBidLog" style="display:none;flex:1;flex-direction:column;overflow:hidden;">'+
+        '<div style="flex-shrink:0;padding:8px 16px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;gap:10px;background:var(--asphalt-mid);">'+
+          '<button onclick="_mailHideBidLog()"'+
+            ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+            '← Back'+
+          '</button>'+
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:2px;color:var(--white);">📋 Bid Requests Log</div>'+
+          '<div style="flex:1;"></div>'+
+          '<button id="_bidLogToggleBtn" onclick="_mailToggleShowAllBids()"'+
+            ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+            'Show Completed'+
+          '</button>'+
+        '</div>'+
+        '<div id="mailBidLogBody" data-show-all="0" style="flex:1;overflow-y:auto;"></div>'+
+      '</div>'+
+
     '</div>';
 }
 
@@ -15209,9 +15452,10 @@ function _mailLoadFolders() {
 
 function _mailSelectFolder(path, name) {
   if (_mailFolderLoading) return;
-  _mailFolder   = path;
-  _mailFolderNm = name;
-  _mailOpenUid  = null;
+  _mailFolder         = path;
+  _mailFolderNm       = name;
+  _mailOpenUid        = null;
+  _mailActiveCategory = 'all';
   // Update viewer
   var v = document.getElementById('mailViewer');
   if (v) v.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;">Select a message to read</div>';
@@ -15230,32 +15474,9 @@ function _mailLoadMessages(folder, folderName) {
     _mailMessages = d.messages || [];
     if (stat) stat.textContent = _mailMessages.length + ' messages';
     if (!body) return;
-    if (!_mailMessages.length) {
-      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--concrete-dim);font-size:11px;">No messages</div>';
-      return;
-    }
-    body.innerHTML = _mailMessages.map(function(m) {
-      var from    = m.from ? (m.from.name || m.from.address || '') : '—';
-      var subj    = m.subject || '(no subject)';
-      var dt      = m.date ? _mailFmtDate(new Date(m.date)) : '';
-      var unread  = !m.seen;
-      var flagged = m.flagged;
-      return '<div onclick="_mailOpenMessage('+m.uid+',\''+escHtml(folder)+'\')"'+
-        ' id="mailRow_'+m.uid+'"'+
-        ' data-flagged="'+(flagged?'1':'0')+'"'+
-        ' data-unread="'+(unread?'1':'0')+'"'+
-        ' style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+
-        (unread ? 'background:rgba(245,197,24,0.04);' : '')+'"'+
-        ' onmouseover="this.style.background=\'rgba(255,255,255,0.06)\'" onmouseout="this.style.background=\''+(unread?'rgba(245,197,24,0.04)':'')+'\'">'+
-        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'+
-          '<span id="mailDot_'+m.uid+'" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;'+(unread?'background:var(--stripe);':'')+'"></span>'+
-          '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:12px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
-          '<span id="mailFlag_'+m.uid+'" style="color:var(--stripe);font-size:10px;'+(flagged?'':'display:none;')+'">★</span>'+
-          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">'+escHtml(dt)+'</div>'+
-        '</div>'+
-        '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
-      '</div>';
-    }).join('');
+    _mailActiveCategory = 'all';
+    _mailRenderCategoryTabs();
+    _mailRenderList(_mailMessages, folder);
   }).catch(function(err) {
     if (body) body.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:9px;">'+escHtml(err.message)+'</div>';
   });
@@ -15327,6 +15548,7 @@ function _mailOpenMessage(uid, folder) {
     }
     _mailMessageLoading = false;
     if (hasAtt) { _mailRenderAttachments(msg.attachments, uid, folder); }
+    _mailClassifyBidRequest(msg, uid, folder);
   }).catch(function(err) {
     _mailMessageLoading = false;
     if (v) v.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(err.message)+'</div>';
@@ -15377,6 +15599,95 @@ function _mailAction(uid, folder, action) {
 
 function _mailRefresh() {
   _mailLoadMessages(_mailFolder, _mailFolderNm);
+}
+
+function _mailShowBidLog() {
+  var panels = document.getElementById('mailPanels');
+  var log    = document.getElementById('mailBidLog');
+  if (panels) panels.style.display = 'none';
+  if (log)    { log.style.display = 'flex'; _mailRenderBidLog(); }
+}
+
+function _mailHideBidLog() {
+  var panels = document.getElementById('mailPanels');
+  var log    = document.getElementById('mailBidLog');
+  if (panels) panels.style.display = '';
+  if (log)    log.style.display = 'none';
+}
+
+function _mailToggleShowAllBids() {
+  var el  = document.getElementById('mailBidLogBody');
+  var btn = document.getElementById('_bidLogToggleBtn');
+  if (!el) return;
+  el.dataset.showAll = el.dataset.showAll === '1' ? '0' : '1';
+  if (btn) btn.textContent = el.dataset.showAll === '1' ? 'Hide Completed' : 'Show Completed';
+  _mailRenderBidLog();
+}
+
+function _mailRenderBidLog() {
+  var el = document.getElementById('mailBidLogBody');
+  if (!el) return;
+  var showAll = el.dataset.showAll === '1';
+  var list = showAll ? _bidRequests : _bidRequests.filter(function(b) { return b.status === 'open'; });
+  if (!list.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">'+(showAll ? 'No bid requests yet.' : 'No open bid requests.')+'</div>';
+    return;
+  }
+  var colS  = 'padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);border-bottom:2px solid var(--asphalt-light);white-space:nowrap;text-align:left;';
+  var cellS = 'padding:9px 12px;font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;';
+  var dimS  = 'padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;white-space:nowrap;';
+  var rows = list.map(function(b) {
+    var dateReq = b.dateRequested ? new Date(b.dateRequested).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    var dueTxt  = b.dueDate ? new Date(b.dueDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    var stColor = b.status === 'open' ? 'var(--stripe)' : 'var(--concrete-dim)';
+    var stLabel = b.status === 'open' ? '● Open' : '✓ Done';
+    return '<tr onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'">'+
+      '<td style="'+cellS+'">'+escHtml(b.from)+'</td>'+
+      '<td style="'+cellS+'">'+escHtml(b.company||'—')+'</td>'+
+      '<td style="'+cellS+';max-width:280px;">'+escHtml(b.jobDescription||b.subject)+'</td>'+
+      '<td style="'+dimS+'">'+escHtml(dateReq)+'</td>'+
+      '<td style="'+dimS+'">'+escHtml(dueTxt)+'</td>'+
+      '<td style="padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:'+stColor+';border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;">'+stLabel+'</td>'+
+      '<td style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;white-space:nowrap;">'+
+        '<button onclick="_mailOpenFromBidLog('+b.emailUid+',\''+escHtml(b.folder)+'\')"'+
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:3px 8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;margin-right:4px;">↗ Open</button>'+
+        (b.status === 'open'
+          ? '<button onclick="_bidMarkComplete(\''+escHtml(b.id)+'\')"'+
+              ' style="background:none;border:1px solid rgba(129,199,132,0.4);border-radius:var(--radius);padding:3px 8px;color:#81c784;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">✓ Done</button>'
+          : '')+
+      '</td>'+
+    '</tr>';
+  }).join('');
+  el.innerHTML =
+    '<table style="width:100%;border-collapse:collapse;">'+
+      '<thead><tr>'+
+        '<th style="'+colS+'">Requestor</th>'+
+        '<th style="'+colS+'">Company</th>'+
+        '<th style="'+colS+'">Job Description</th>'+
+        '<th style="'+colS+'">Requested</th>'+
+        '<th style="'+colS+'">Due Date</th>'+
+        '<th style="'+colS+'">Status</th>'+
+        '<th style="'+colS+'">Actions</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+    '</table>';
+}
+
+function _mailOpenFromBidLog(uid, folder) {
+  _mailHideBidLog();
+  _mailFolder   = folder;
+  _mailFolderNm = folder;
+  _mailOpenMessage(uid, folder);
+}
+
+function _bidMarkComplete(id) {
+  for (var i = 0; i < _bidRequests.length; i++) {
+    if (_bidRequests[i].id === id) { _bidRequests[i].status = 'complete'; break; }
+  }
+  saveBidRequests();
+  _mailRenderBidLog();
+  _mailRenderCategoryTabs();
+  _refreshBidWidget();
 }
 
 function _mailFmtDate(d) {
