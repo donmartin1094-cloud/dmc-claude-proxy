@@ -14972,6 +14972,7 @@ var _mailMessageLoading  = false;
 var _mailActiveCategory  = 'all';
 var _bidRequests         = [];
 var _mailScannedUids     = {};
+var _mailBatchScanRunning = false;
 
 function _mailGetCategory(msg) {
   var uid = msg.uid;
@@ -15477,6 +15478,7 @@ function _mailLoadMessages(folder, folderName) {
     _mailActiveCategory = 'all';
     _mailRenderCategoryTabs();
     _mailRenderList(_mailMessages, folder);
+    if (folder.toUpperCase() === 'INBOX') { _mailBatchScanBids(); }
   }).catch(function(err) {
     if (body) body.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:9px;">'+escHtml(err.message)+'</div>';
   });
@@ -15599,6 +15601,40 @@ function _mailAction(uid, folder, action) {
 
 function _mailRefresh() {
   _mailLoadMessages(_mailFolder, _mailFolderNm);
+}
+
+async function _mailBatchScanBids() {
+  if (_mailBatchScanRunning) return;
+  if (_mailFolder.toUpperCase() !== 'INBOX') return;
+  var toScan = _mailMessages.filter(function(m) {
+    return _mailGetCategory(m) === 'inbox' && !_mailScannedUids[m.uid + '_' + _mailFolder];
+  });
+  toScan.sort(function(a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
+  toScan = toScan.slice(0, 10);
+  if (!toScan.length) return;
+  _mailBatchScanRunning = true;
+  var total = toScan.length;
+  var done  = 0;
+  var stat  = document.getElementById('mailStatus');
+  function _bsStatus() {
+    if (!stat) return;
+    stat.textContent = done < total
+      ? '🔍 Scanning ' + (total - done) + ' of ' + total + ' for bids…'
+      : _mailMessages.length + ' messages';
+  }
+  _bsStatus();
+  for (var i = 0; i < toScan.length; i++) {
+    var m = toScan[i];
+    await _mailClassifyBidRequest(m, m.uid, _mailFolder);
+    done++;
+    _bsStatus();
+    if (i < toScan.length - 1) {
+      await new Promise(function(resolve) { setTimeout(resolve, 500); });
+    }
+  }
+  _mailBatchScanRunning = false;
+  if (stat) stat.textContent = _mailMessages.length + ' messages';
+  _refreshBidWidget();
 }
 
 function _mailShowBidLog() {
