@@ -5890,7 +5890,7 @@ function _homeLowbedSectionHtml() {
 
   var bodyHtml = jobGroups.length === 0
     ? '<div style="text-align:center;padding:16px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No active lowbed moves</div>'
-    : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 8px 8px;">' +
+    : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 8px 8px;align-items:start;">' +
         jobGroups.map(function(jg) {
           var jMoves = jg.moves;
           var gId = jg.key;
@@ -5970,7 +5970,7 @@ function _homeLowbedSectionHtml() {
 
   var hdr = '<div style="position:sticky;top:0;z-index:1;background:var(--asphalt-mid);padding:6px 12px;' +
     'border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;">' +
-    '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;letter-spacing:2px;color:#a78bfa;">🚚 LOWBED MOVES</span>' +
+    '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;letter-spacing:2px;color:#a78bfa;">🚚 JOBS & LOWBED MOVES</span>' +
     '<div style="display:flex;align-items:center;gap:5px;">' +
       '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + manualMoves.length + ' moves</span>' +
       (_homeIsAdmin() ? '<button onclick="_lbManualMovePick()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:3px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;font-weight:700;">+ Move</button>' : '') +
