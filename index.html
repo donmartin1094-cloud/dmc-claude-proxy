@@ -1885,6 +1885,86 @@
   .inv-att-viewer-title { flex:1; font-size:13px; font-weight:600; color:var(--white); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .inv-att-viewer-body { flex:1; overflow:auto; display:flex; align-items:center; justify-content:center; padding:16px; }
 
+  /* ── Invoice Tracker v2 — Weekly Grid ── */
+  .inv2-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--asphalt-mid); }
+  .inv2-header { padding:16px 24px 12px; border-bottom:1px solid var(--asphalt-light); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .inv2-search-bar { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .inv2-search-input { background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius); color:var(--white); font-family:'DM Sans',sans-serif; font-size:12px; padding:6px 10px; outline:none; min-width:260px; transition:border-color 0.15s; }
+  .inv2-search-input:focus { border-color:var(--stripe); }
+  .inv2-grid-scroll { flex:1; overflow:auto; padding:12px 16px 24px; }
+  .inv2-grid { display:grid; border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); overflow:hidden; }
+  .inv2-corner-cell { background:var(--asphalt-mid); padding:8px 10px; border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); }
+  .inv2-day-head { background:var(--asphalt); padding:8px 10px; text-align:center; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); }
+  .inv2-day-head.inv2-today { color:var(--stripe); border-bottom:2px solid var(--stripe); }
+  .inv2-foreman-cell { background:var(--asphalt-mid); padding:10px 12px; font-family:'DM Sans',sans-serif; font-size:11px; font-weight:600; color:var(--white); border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); display:flex; align-items:flex-start; }
+  .inv2-day-cell { background:var(--asphalt); padding:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:flex-start; border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); min-height:60px; }
+  .inv2-cell-empty { background:rgba(0,0,0,0.15); }
+  /* Card */
+  .inv2-card { background:var(--asphalt-mid); border:1px solid var(--asphalt-light); border-radius:var(--radius); padding:9px; flex:1; min-width:230px; font-family:'DM Sans',sans-serif; font-size:11px; color:var(--white); }
+  .inv2-card-header { margin-bottom:7px; }
+  .inv2-header-top { display:flex; align-items:center; gap:5px; margin-bottom:3px; }
+  .inv2-job-no { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:1px; color:var(--stripe); flex-shrink:0; }
+  .inv2-gc-name { font-size:10px; color:var(--concrete-dim); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .inv2-header-acts { display:flex; gap:2px; margin-left:auto; flex-shrink:0; }
+  .inv2-icon-btn { background:none; border:none; cursor:pointer; font-size:11px; padding:1px 3px; opacity:0.6; transition:opacity 0.1s; }
+  .inv2-icon-btn:hover { opacity:1; }
+  .inv2-del-btn { color:var(--red); }
+  .inv2-project-name { font-size:11px; font-weight:600; color:var(--white); line-height:1.3; margin-bottom:1px; }
+  .inv2-supplier-name { font-size:10px; color:var(--concrete-dim); margin-bottom:4px; }
+  .inv2-inv-meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .inv2-inv-badge { font-family:'DM Mono',monospace; font-size:9px; background:rgba(90,180,245,0.1); border:1px solid rgba(90,180,245,0.25); color:#5ab4f5; border-radius:3px; padding:1px 6px; cursor:text; }
+  .inv2-status-btns { display:flex; gap:4px; margin-left:auto; }
+  .inv2-status-btn { font-family:'DM Mono',monospace; font-size:8px; padding:2px 6px; border-radius:3px; border:1px solid var(--asphalt-light); background:none; color:var(--concrete-dim); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .inv2-status-btn:hover { border-color:var(--concrete-dim); color:var(--white); }
+  .inv2-status-printed  { background:rgba(90,180,245,0.12); border-color:rgba(90,180,245,0.4); color:#5ab4f5; }
+  .inv2-status-approved { background:rgba(126,203,143,0.12); border-color:rgba(126,203,143,0.4); color:#7ecb8f; }
+  /* Mix section */
+  .inv2-mix-section { margin-bottom:5px; }
+  .inv2-mix-header { display:grid; grid-template-columns:3fr 1.2fr 1.2fr 1.2fr 14px; gap:3px; padding:2px 0 3px; border-bottom:1px solid var(--asphalt-light); font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); }
+  .inv2-mix-row { display:grid; grid-template-columns:3fr 1.2fr 1.2fr 1.2fr 14px; gap:3px; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04); align-items:center; }
+  .inv2-mix-type { font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .inv2-mix-num { font-family:'DM Mono',monospace; font-size:10px; text-align:right; }
+  .inv2-mix-total-cell { color:var(--stripe); }
+  .inv2-mix-del { background:none; border:none; cursor:pointer; color:var(--concrete-dim); font-size:10px; padding:0; line-height:1; }
+  .inv2-mix-del:hover { color:var(--red); }
+  .inv2-add-mix { width:100%; background:none; border:1px dashed var(--asphalt-light); border-radius:3px; color:var(--concrete-dim); font-family:'DM Mono',monospace; font-size:8px; padding:3px; cursor:pointer; margin-top:4px; transition:all 0.15s; }
+  .inv2-add-mix:hover { border-color:var(--stripe); color:var(--stripe); }
+  /* Perforated divider */
+  .inv2-perf-wrap { display:flex; justify-content:center; margin:7px 0; }
+  .inv2-perf-line { width:60%; border-top:2px dashed var(--asphalt-light); position:relative; }
+  .inv2-perf-line::before, .inv2-perf-line::after { content:''; position:absolute; top:-5px; width:8px; height:8px; background:var(--asphalt); border-radius:50%; border:1px solid var(--asphalt-light); }
+  .inv2-perf-line::before { left:-4px; }
+  .inv2-perf-line::after  { right:-4px; }
+  /* Bottom section */
+  .inv2-bottom { display:flex; gap:8px; }
+  .inv2-trucking { flex:1; min-width:0; }
+  .inv2-truck-hdr { font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); margin-bottom:4px; }
+  .inv2-truck-row { display:flex; align-items:center; gap:4px; margin-bottom:2px; font-size:10px; }
+  .inv2-truck-icon { font-size:9px; flex-shrink:0; }
+  .inv2-truck-lbl { color:var(--concrete-dim); font-size:10px; min-width:44px; }
+  .inv2-truck-count { font-family:'DM Mono',monospace; font-size:10px; color:var(--white); min-width:16px; text-align:right; }
+  .inv2-truck-cost { font-family:'DM Mono',monospace; font-size:10px; color:var(--white); flex:1; text-align:right; }
+  .inv2-billing { width:110px; flex-shrink:0; display:flex; flex-direction:column; gap:3px; }
+  .inv2-billing-lbl { font-family:'DM Mono',monospace; font-size:7px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); display:block; margin-bottom:1px; }
+  .inv2-billed-row, .inv2-approved-row { display:flex; flex-direction:column; }
+  .inv2-billed-amt { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:1px; color:var(--stripe); line-height:1.1; }
+  .inv2-billed-differ { color:var(--red); text-decoration:line-through; text-decoration-color:var(--red); }
+  .inv2-approved-amt { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:1px; color:#7ecb8f; line-height:1.1; }
+  .inv2-diff-row { font-family:'DM Mono',monospace; font-size:8px; }
+  .inv2-notes-wrap { flex:1; }
+  .inv2-notes { display:block; font-size:10px; color:var(--concrete-dim); font-style:italic; word-break:break-word; cursor:text; min-height:16px; }
+  .inv2-att-row { margin-top:3px; }
+  .inv2-att-btn { background:none; border:1px solid var(--asphalt-light); border-radius:3px; color:var(--concrete-dim); font-size:10px; padding:2px 7px; cursor:pointer; transition:all 0.15s; }
+  .inv2-att-btn:hover { border-color:var(--stripe); color:var(--stripe); }
+  /* Inline editing */
+  .inv2-editable { display:inline-block; border-radius:2px; cursor:text; min-width:12px; transition:background 0.1s; }
+  .inv2-editable:hover { background:rgba(255,255,255,0.07); }
+  .inv2-inline-input { background:rgba(245,197,24,0.08); border:1px solid rgba(245,197,24,0.45); border-radius:3px; color:var(--white); font-family:'DM Sans',sans-serif; font-size:11px; padding:2px 4px; width:100%; box-sizing:border-box; outline:none; }
+  textarea.inv2-inline-input { resize:vertical; min-height:32px; }
+  /* Total bar */
+  .inv2-total-bar { margin:0 16px 16px; padding:10px 18px; background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .inv2-total-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); }
+
   /* ── Bid Main View redesign ── */
   .bid-main-toolbar { display:flex; align-items:center; gap:10px; padding:14px 24px; border-bottom:2px solid var(--asphalt-light); background:var(--asphalt-mid); flex-shrink:0; }
   .bid-main-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; color:var(--white); flex:1; }
@@ -14165,8 +14245,6 @@ function chatConvId(members) {
 // ═══════════════════════════════════════════════════════
 const INVOICES_KEY = 'pavescope_invoices';
 let invoiceList = JSON.parse(localStorage.getItem(INVOICES_KEY) || '[]');
-let invoiceMonthOffset = 0; // months from current month
-let invSearchQuery = '';
 
 function saveInvoiceList() {
   // Strip any legacy base64 data before saving — files now live in Firebase Storage
@@ -14270,544 +14348,6 @@ function clearDemoInvoices() {
   if (activeTab === 'apMix') renderInvoiceTracker();
   if (activeTab === 'apAnalytics') renderApAnalytics();
   pushNotif('info', '🗑 Demo Data Cleared', 'All demo invoices have been removed.', null);
-}
-
-
-function invMonthLabel(offset) {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + offset);
-  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-}
-
-function invMonthKey(offset) {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-}
-
-function invFmt(n) {
-  const v = parseFloat(n);
-  if (isNaN(v)) return '—';
-  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function invFmtTons(n) {
-  const v = parseFloat((n || '').toString().replace(/,/g, ''));
-  if (isNaN(v)) return n || '';
-  return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
-}
-
-function invFmtDate(dateStr) {
-  if (!dateStr) return '—';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
-  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-}
-
-function renderInvoiceTracker() {
-  const wrap = document.getElementById('invoiceView');
-  if (!wrap) return;
-  const monthKey = invMonthKey(invoiceMonthOffset);
-  const label = invMonthLabel(invoiceMonthOffset);
-
-  const rows = invoiceList
-    .filter(inv => inv.dateOfWork && inv.dateOfWork.startsWith(monthKey))
-    .filter(inv => {
-      if (!invSearchQuery) return true;
-      const q = invSearchQuery.toLowerCase();
-      return (inv.dateOfWork||'').toLowerCase().includes(q)
-          || (inv.jobNo||'').toLowerCase().includes(q)
-          || (inv.foreman||'').toLowerCase().includes(q)
-          || (inv.supplier||'').toLowerCase().includes(q)
-          || (inv.jobName||'').toLowerCase().includes(q)
-          || (inv.invoiceNo||'').toLowerCase().includes(q);
-    })
-    .sort((a, b) => a.dateOfWork.localeCompare(b.dateOfWork));
-
-  const invoiceTotals = {};
-  rows.forEach(r => {
-    const k = r.invoiceNo || r.id;
-    r.mixItems.forEach(m => { invoiceTotals[k] = (invoiceTotals[k] || 0) + (parseFloat(m.itemTotal) || 0); });
-  });
-
-  const lbl = (t) => `<div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:3px;text-align:center;display:block;width:100%;">${t}</div>`;
-  const ediv = (id, field, val, extra='') => `<div contenteditable="true" onblur="invInlineEdit('${id}','${field}',this.innerText.trim())" onclick="event.stopPropagation()" style="outline:none;border-bottom:1px dashed transparent;cursor:text;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--white);${extra}" onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'">${escHtml(val||'')}</div>`;
-  const emix = (id, mi, field, val, extra='') => `<div contenteditable="true" onblur="invMixInlineEdit('${id}',${mi},'${field}',this.innerText.trim()${field==='itemTotal'?".replace(/[^0-9.]/g,'')":""})" onclick="event.stopPropagation()" style="outline:none;border-bottom:1px dashed transparent;cursor:text;${extra}" onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'">${escHtml(field==='itemTotal' ? invFmtTons(val) : (val||''))}</div>`;
-
-  let cardsHtml = '';
-  if (!rows.length) {
-    cardsHtml = `<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:13px;">No invoices for ${label}.<br>Click + Add Invoice to get started.</div>`;
-  } else {
-    rows.forEach(inv => {
-      const invKey = inv.invoiceNo || inv.id;
-      const invTotal = invoiceTotals[invKey] || 0;
-
-      // Build expandable detail rows for all mix items
-      const detailRows = inv.mixItems.map((m, mi) => {
-        const iv = parseFloat(m.itemTotal) || 0;
-        const pct = invTotal > 0 ? (iv / invTotal * 100).toFixed(1) : '0.0';
-        return `<tr>
-          <td style="width:35%;">${emix(inv.id, mi, 'mixType', m.mixType, "font-family:'DM Sans',sans-serif;font-size:12px;color:var(--white);")}</td>
-          <td style="width:20%;font-family:'DM Mono',monospace;font-size:11px;color:var(--white);">${invFmt(m.mixPrice)}</td>
-          <td style="width:20%;">${emix(inv.id, mi, 'itemTotal', m.itemTotal, "font-family:'DM Mono',monospace;font-size:11px;color:var(--white);")}</td>
-          <td style="width:25%;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <div style="flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--stripe);border-radius:2px;"></div></div>
-              <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);min-width:34px;">${pct}%</span>
-            </div>
-          </td>
-        </tr>`;
-      }).join('');
-
-      cardsHtml += `<div class="inv-card" id="inv-card-${inv.id}" onclick="invToggleExpand('${inv.id}')">
-        <div class="inv-card-scroll">
-        <table class="inv-card-table">
-          <tbody>
-            <tr class="inv-card-header-row">
-              <td style="vertical-align:top;">
-                <div style="font-weight:700;font-size:13px;white-space:nowrap;color:var(--white);">${invFmtDate(inv.dateOfWork)}</div>
-                <div style="font-family:'DM Sans',sans-serif;font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(inv.foreman||'—')}</div>
-                <div style="margin-top:5px;">
-                  <div style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.6px;color:var(--concrete-dim);margin-bottom:2px;">Job #</div>
-                  <div contenteditable="true" onblur="invInlineEdit('${inv.id}','jobNo',this.innerText.trim())" onclick="event.stopPropagation()" style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;color:var(--stripe);outline:none;border-bottom:1px dashed transparent;cursor:text;line-height:1.1;" onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'">${escHtml(inv.jobNo||'—')}</div>
-                </div>
-              </td>
-              <td style="vertical-align:top;">${lbl('Supplier')}${ediv(inv.id,'supplier',inv.supplier)}</td>
-              <td style="vertical-align:top;">${lbl('Job Name')}${ediv(inv.id,'jobName',inv.jobName)}</td>
-              <td style="vertical-align:top;">
-                ${lbl('Mix Summary')}
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                  <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);">${inv.mixItems.length} mix${inv.mixItems.length!==1?'es':''}</div>
-                  <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1px;color:var(--white);">${invFmtTons(invTotal)} <span style="font-size:10px;font-family:'DM Mono',monospace;color:var(--concrete-dim);">tons</span></div>
-                  <div class="inv-expand-hint"></div>
-                </div>
-              </td>
-              <td class="center" style="vertical-align:top;">
-                ${lbl('Printed')}
-                <button class="inv-status-btn ${inv.printed?'printed-on':'off'}" onclick="event.stopPropagation();invToggleStatus('${inv.id}','printed')">${inv.printed?'✔ Done':'🖨 Print'}</button>
-              </td>
-              <td class="center" style="vertical-align:top;">
-                ${lbl('Approved')}
-                <button class="inv-status-btn ${inv.approved?'approved-on':'off'}" onclick="event.stopPropagation();invToggleStatus('${inv.id}','approved')">${inv.approved?'✔ Done':'✅ OK'}</button>
-              </td>
-              <td style="vertical-align:top;">
-                ${lbl('Invoice #')}
-                <div contenteditable="true" onblur="invInlineEdit('${inv.id}','invoiceNo',this.innerText.trim())" onclick="event.stopPropagation()" class="inv-badge-invoice" style="display:inline-block;outline:none;cursor:text;min-width:40px;" onfocus="this.style.opacity='0.7'">${escHtml(inv.invoiceNo||'')}</div>
-              </td>
-              <td class="right" style="vertical-align:top;white-space:nowrap;">
-                ${lbl('Printed Inv. Amt')}
-                ${(()=>{
-                  const _an = inv.approvedAmount ? parseFloat(inv.approvedAmount.replace(/[^0-9.\-]/g,''))||0 : null;
-                  const _disc = _an !== null && invTotal > 0 && _an !== invTotal;
-                  return '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:1px;' +
-                    'color:' + (_disc ? 'var(--red)' : 'var(--stripe)') + ';' +
-                    (_disc ? 'text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:2px;' : '') +
-                    '">' + invFmt(invTotal) + '</span>';
-                })()}
-              </td>
-              <td style="vertical-align:top;white-space:nowrap;min-width:100px;">
-                ${lbl('Approved Inv. Amt')}
-                <div contenteditable="true"
-                  onblur="invInlineEdit('${inv.id}','approvedAmount',this.innerText.trim())"
-                  onclick="event.stopPropagation()"
-                  style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1px;color:#7ecb8f;outline:none;border-bottom:1px dashed transparent;cursor:text;min-width:60px;"
-                  onfocus="this.style.borderBottomColor='rgba(126,203,143,0.5)'"
-                >${escHtml(inv.approvedAmount||'')}</div>
-                ${inv.approvedAmount && invTotal ? (()=>{
-                  const diff = (parseFloat(inv.approvedAmount.replace(/[^0-9.\-]/g,''))||0) - invTotal;
-                  if (diff === 0) return '';
-                  const col = diff < 0 ? 'var(--red)' : '#7ecb8f';
-                  const arrow = diff < 0 ? '▼' : '▲';
-                  return `<div style="font-family:'DM Mono',monospace;font-size:9px;color:${col};margin-top:2px;">${arrow} ${invFmt(Math.abs(diff))}</div>`;
-                })() : ''}
-              </td>
-              <td style="vertical-align:top;min-width:140px;max-width:200px;">
-                ${lbl('Notes')}
-                <div contenteditable="true"
-                  onblur="invInlineEdit('${inv.id}','invoiceNotes',this.innerText.trim())"
-                  onclick="event.stopPropagation()"
-                  style="font-family:'DM Sans',sans-serif;font-size:11px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;white-space:pre-wrap;word-break:break-word;min-height:20px;line-height:1.5;"
-                  onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
-                  placeholder="Discrepancy reason…"
-                >${escHtml(inv.invoiceNotes||'')}</div>
-              </td>
-              <td style="vertical-align:top;white-space:nowrap;min-width:120px;">
-                ${(()=>{
-                  const at  = inv.actualTrucking || {};
-                  const pt  = calcProjectedTrucking(inv);
-                  const actTotal  = (at.dmcCost||0)+(at.brkCost||0)+(at.supCost||0);
-                  const projTotal = pt.totalCost || 0;
-                  const hasAny    = actTotal || projTotal || pt.dmcCount || pt.brkCount || pt.supCount
-                                    || (at.dmcCount||0) || (at.brkCount||0) || (at.supCount||0);
-                  const diff = actTotal - projTotal;
-                  const diffColor = diff > 0 ? 'var(--red)' : diff < 0 ? '#7ecb8f' : 'var(--concrete-dim)';
-                  const diffStr   = (actTotal && diff !== 0)
-                    ? `<div style="font-family:'DM Mono',monospace;font-size:9px;color:${diffColor};margin-top:2px;">${diff>0?'\u25b2 over':'\u25bc under'} ${invFmt(Math.abs(diff))}</div>`
-                    : '';
-                  if (!hasAny) return `
-                    ${lbl('Trucking')}
-                    <div style="font-size:9px;color:var(--concrete-dim);">No data</div>
-                    <div style="font-size:8px;font-family:'DM Mono',monospace;color:var(--asphalt-light);margin-top:2px;">Add trucks on<br>schedule card</div>`;
-                  const typeRows = [
-                    ['\u{1f7e1}', pt.dmcCount, pt.dmcCost, at.dmcCount||0, at.dmcCost||0],
-                    ['\u{1f535}', pt.brkCount, pt.brkCost, at.brkCount||0, at.brkCost||0],
-                    ['\u{1f7e2}', pt.supCount, pt.supCost, at.supCount||0, at.supCost||0],
-                  ].filter(([,pc,,ac]) => pc||ac);
-                  return `
-                    ${lbl('Trucking')}
-                    <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:0 4px;align-items:baseline;row-gap:2px;">
-                      <div style="grid-column:1/3;font-family:'DM Mono',monospace;font-size:8px;color:var(--stripe);text-transform:uppercase;letter-spacing:.5px;">Proj</div>
-                      <div style="grid-column:3/5;font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:.5px;">Act</div>
-                      ${typeRows.map(([icon,pc,pcost,ac,acost]) =>
-                        `<span style="font-size:9px;">${icon}</span>
-                         <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--white);">${pc} ${pcost?invFmt(pcost):''}</span>
-                         <span style="font-size:9px;">${icon}</span>
-                         <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--white);">${ac} ${acost?invFmt(acost):''}</span>`
-                      ).join('')}
-                      <div style="grid-column:1/3;font-family:'DM Mono',monospace;font-size:10px;color:var(--stripe);font-weight:700;border-top:1px solid var(--asphalt-light);padding-top:2px;margin-top:2px;">${invFmt(projTotal)}</div>
-                      <div style="grid-column:3/5;font-family:'DM Mono',monospace;font-size:10px;color:${actTotal?'var(--white)':'var(--concrete-dim)'};border-top:1px solid var(--asphalt-light);padding-top:2px;margin-top:2px;">${actTotal?invFmt(actTotal):'—'}</div>
-                    </div>
-                    ${diffStr}`;
-                })()}
-              </td>
-              <td style="vertical-align:top;white-space:nowrap;">
-                ${(isAdmin()||canEditTab('ap')) ? `<button onclick="event.stopPropagation();openInvoiceModal('${inv.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 3px;" title="Edit">✏️</button>
-                <button onclick="event.stopPropagation();deleteInvoice('${inv.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 3px;color:var(--red);" title="Delete">✕</button>` : ''}
-                ${(inv.attachments||[]).length ? `<button onclick="event.stopPropagation();viewInvAttachments('${inv.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 3px;color:var(--stripe);" title="${(inv.attachments||[]).length} attached file${(inv.attachments||[]).length!==1?'s':''}">📎 ${(inv.attachments||[]).length}</button>` : ''}
-              </td>
-            </tr>
-          </tbody>
-          <tbody class="inv-detail-body">
-            <tr>
-              <td colspan="12" style="padding:0 9px 10px 9px;">
-                <table class="inv-detail-inner">
-                  <thead>
-                    <tr>
-                      <th style="width:35%;">Mix Type</th>
-                      <th style="width:20%;">Cost / Ton</th>
-                      <th style="width:20%;">Tonnage</th>
-                      <th style="width:25%;">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>${detailRows}</tbody>
-                </table>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>`;
-    });
-  }
-
-  const monthTotal = rows.reduce((s, r) => s + (invoiceTotals[r.invoiceNo || r.id] || 0), 0);
-  const totalBar = rows.length ? `<div style="margin-top:12px;padding:10px 18px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:space-between;">
-    <span style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Month Total — ${rows.length} invoice${rows.length!==1?'s':''}</span>
-    <span style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--stripe);">${invFmt(monthTotal)}</span>
-  </div>` : '';
-
-  wrap.innerHTML = `<div class="inv-wrap">
-    <div class="inv-header" style="flex-direction:column;align-items:center;gap:12px;">
-      <div style="text-align:center;">
-        <div class="inv-title" style="text-align:center;">🧾 Sales Invoice &amp; Trucking Tracker</div>
-        <div class="inv-sub" style="text-align:center;">Monthly invoice log — sorted by date of work</div>
-        <div class="inv-search-bar">
-          <input class="inv-search-input" type="text" placeholder="Search by date, job #, foreman, or supplier…" value="${escHtml(invSearchQuery)}" oninput="invSetSearch(this.value)" />
-          ${invSearchQuery ? `<button class="inv-btn-ghost" onclick="invSetSearch('')" style="padding:5px 10px;font-size:11px;">✕ Clear</button>` : ''}
-        </div>
-      </div>
-      <div class="inv-month-nav">
-        <button class="inv-btn-ghost" onclick="invoiceMonthOffset--;renderInvoiceTracker();">◀</button>
-        <div class="inv-month-label">${label}</div>
-        <button class="inv-btn-ghost" onclick="invoiceMonthOffset++;renderInvoiceTracker();">▶</button>
-        <button class="inv-btn-ghost" onclick="invoiceMonthOffset=0;renderInvoiceTracker();">Today</button>
-      </div>
-    </div>
-    <div class="inv-toolbar">
-      ${(isAdmin()||canEditTab('ap')) ? '<button class="inv-btn" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : ''}
-      <div style="flex:1;"></div>
-      ${invSearchQuery ? `<span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--stripe);margin-right:10px;">🔍 Filtered: ${rows.length} result${rows.length!==1?'s':''}</span>` : ''}
-      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);">${rows.length} invoice${rows.length!==1?'s':''} · ${label}</span>
-    </div>
-    <div class="inv-scroll" style="padding:14px 20px 28px;">${cardsHtml}${totalBar}</div>
-  </div>`;
-}
-
-function invToggleExpand(invId) {
-  const card = document.getElementById('inv-card-' + invId);
-  if (!card) return;
-  card.classList.toggle('inv-card-expanded');
-}
-
-function invSetSearch(val) {
-  invSearchQuery = val;
-  renderInvoiceTracker();
-  // Re-focus the search input after re-render
-  const inp = document.querySelector('.inv-search-input');
-  if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
-}
-
-function openInvoiceModal(id, prefill) {
-  const isEdit = !!id;
-  const inv = isEdit ? invoiceList.find(i => i.id === id) : null;
-  const p = prefill || {};
-  const mixItems = inv?.mixItems || (p.mixItems && p.mixItems.length ? p.mixItems : [{ mixType:'', mixPrice:'', itemTotal:'' }]);
-
-  const supplierOptions = suppliersList.map(s => `<option value="${escHtml(s.name)}">`).join('');
-
-  const mixOptions = mixTypesList.map(m => `<option value="${escHtml(m.desc)}">${escHtml(m.displayName||m.desc)}</option>`).join('');
-
-  const mixRowHtml = (m, i) => `
-    <div class="inv-mix-row" id="invMixRow-${i}">
-      <div><label class="inv-form-label">Mix Type</label>
-        <input class="inv-input" id="invMixType-${i}" list="invMixList" placeholder="e.g. 12.5mm Surface" value="${escHtml(m.mixType||'')}" style="width:100%;" />
-        <datalist id="invMixList">${mixOptions}</datalist></div>
-      <div><label class="inv-form-label">Tonnage (tons)</label>
-        <input class="inv-input" id="invTonQty-${i}" type="number" step="0.01" placeholder="0.00" value="${escHtml(m.tonQty||'')}" style="width:100%;" oninput="invCalcTotal(${i})" /></div>
-      <div><label class="inv-form-label">Price / Ton ($)</label>
-        <input class="inv-input" id="invMixPrice-${i}" type="number" step="0.01" placeholder="0.00" value="${escHtml(m.mixPrice||'')}" style="width:100%;" oninput="invCalcTotal(${i})" /></div>
-      <div><label class="inv-form-label">Item Total ($)</label>
-        <input class="inv-input" id="invItemTotal-${i}" type="number" step="0.01" placeholder="0.00" value="${escHtml(m.itemTotal||'')}" style="width:100%;background:rgba(126,203,143,0.06);" /></div>
-      ${i > 0 ? `<button onclick="removeInvMixRow(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>` : '<div></div>'}
-    </div>`;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'invModal';
-  overlay.className = 'inv-modal-overlay';
-  overlay.innerHTML = `
-    <div class="inv-modal">
-      <div class="inv-modal-title">${isEdit ? 'Edit' : 'New'} Invoice Entry</div>
-      <div class="inv-form-grid">
-        <div>
-          <label class="inv-form-label">Date of Work *</label>
-          <input class="inv-input" id="invDate" type="date" value="${inv?.dateOfWork || p.dateOfWork || ''}" style="width:100%;" />
-        </div>
-        <div>
-          <label class="inv-form-label">Invoice #</label>
-          <input class="inv-input" id="invNo" value="${escHtml(inv?.invoiceNo||'')}" placeholder="e.g. INV-20241" style="width:100%;" />
-        </div>
-        <div>
-          <label class="inv-form-label">Foreman</label>
-          <input class="inv-input" id="invForeman" value="${escHtml(inv?.foreman || p.foreman || '')}" placeholder="Foreman name" style="width:100%;" />
-        </div>
-        <div>
-          <label class="inv-form-label">Job #</label>
-          <input class="inv-input" id="invJobNo" value="${escHtml(inv?.jobNo || p.jobNo || '')}" placeholder="e.g. 2024-001" style="width:100%;" />
-        </div>
-        <div class="inv-form-full">
-          <label class="inv-form-label">Job Name</label>
-          <input class="inv-input" id="invJobName" value="${escHtml(inv?.jobName || p.jobName || '')}" placeholder="e.g. Granite State — Route 3" style="width:100%;" />
-        </div>
-        <div class="inv-form-full">
-          <label class="inv-form-label">Supplier</label>
-          <input class="inv-input" id="invSupplier" list="invSupplierList" value="${escHtml(inv?.supplier || p.supplier || '')}" placeholder="Select or type supplier" style="width:100%;" />
-          <datalist id="invSupplierList">${supplierOptions}</datalist>
-        </div>
-      </div>
-      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types on this Invoice</div>
-      <div id="invMixRows">${mixItems.map((m,i)=>mixRowHtml(m,i)).join('')}</div>
-      <button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:16px;font-size:11px;">+ Add Mix Type</button>
-      <!-- Actual Trucking Costs -->
-      <div style="margin-top:16px;margin-bottom:4px;">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">🚛 Actual Trucking Costs</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">
-          <div>
-            <label class="inv-form-label">DMC Trucks (actual #)</label>
-            <input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="${inv?.actualTrucking?.dmcCount || p.truckCount || ''}" style="width:100%;" />
-          </div>
-          <div>
-            <label class="inv-form-label">DMC Truck Cost ($)</label>
-            <input class="inv-input" id="invActDmcCost" type="number" min="0" step="0.01" placeholder="0.00" value="${inv?.actualTrucking?.dmcCost||''}" style="width:100%;" />
-          </div>
-          <div style="display:flex;align-items:flex-end;">
-            <button onclick="autoFillActualDmc()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;" title="Fill from projected">↙ Use Projected</button>
-          </div>
-          <div>
-            <label class="inv-form-label">Broker Trucks (actual #)</label>
-            <input class="inv-input" id="invActBrkCount" type="number" min="0" step="1" placeholder="0" value="${inv?.actualTrucking?.brkCount||''}" style="width:100%;" />
-          </div>
-          <div>
-            <label class="inv-form-label">Broker Truck Cost ($)</label>
-            <input class="inv-input" id="invActBrkCost" type="number" min="0" step="0.01" placeholder="0.00" value="${inv?.actualTrucking?.brkCost||''}" style="width:100%;" />
-          </div>
-          <div style="display:flex;align-items:flex-end;">
-            <button onclick="autoFillActualBrk()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;" title="Fill from projected">↙ Use Projected</button>
-          </div>
-          <div>
-            <label class="inv-form-label">Supplier Trucks (actual #)</label>
-            <input class="inv-input" id="invActSupCount" type="number" min="0" step="1" placeholder="0" value="${inv?.actualTrucking?.supCount||''}" style="width:100%;" />
-          </div>
-          <div>
-            <label class="inv-form-label">Supplier Truck Cost ($)</label>
-            <input class="inv-input" id="invActSupCost" type="number" min="0" step="0.01" placeholder="0.00" value="${inv?.actualTrucking?.supCost||''}" style="width:100%;" />
-          </div>
-          <div style="display:flex;align-items:flex-end;">
-            <button onclick="autoFillActualSup()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;" title="Fill from projected">↙ Use Projected</button>
-          </div>
-        </div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);line-height:1.7;">
-          Enter actual counts and costs paid. Use <strong style="color:var(--stripe);">↙ Use Projected</strong> to pre-fill from schedule projections.
-        </div>
-      </div>
-      <!-- ── File Attachments ── -->
-      <div style="margin-top:16px;margin-bottom:4px;">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">📎 Attached Invoice Files</div>
-        <div class="inv-att-zone" id="invAttZone"
-          ondragover="event.preventDefault();this.classList.add('drag-over')"
-          ondragleave="this.classList.remove('drag-over')"
-          ondrop="event.preventDefault();this.classList.remove('drag-over');invHandleFiles(event.dataTransfer.files)">
-          <input type="file" id="invAttInput" multiple accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
-            onchange="invHandleFiles(this.files)" />
-          <div style="font-size:13px;color:var(--concrete-dim);">📂 Drop files here or <strong style="color:var(--stripe);">click to browse</strong></div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);margin-top:4px;">PDF · Word (.docx) · Images — mix tickets, trucking invoices, delivery slips</div>
-        </div>
-        <div id="invAttList"></div>
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-        <button onclick="document.getElementById('invModal').remove()" class="inv-btn-ghost">Cancel</button>
-        <button onclick="saveInvoiceEntry(${isEdit ? JSON.stringify(id) : 'null'})" class="inv-btn">Save Invoice</button>
-      </div>
-    </div>`;
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
-  overlay._mixCount = mixItems.length;
-  // Seed attachments from existing invoice
-  window._invAttachments = (inv?.attachments || []).map(a => ({...a}));
-  invRenderAttList();
-}
-
-let _invMixCount = 1;
-function addInvMixRow() {
-  const wrap = document.getElementById('invMixRows');
-  if (!wrap) return;
-  _invMixCount = wrap.querySelectorAll('.inv-mix-row').length;
-  const mixOptions = mixTypesList.map(m => `<option value="${escHtml(m.desc)}">${escHtml(m.displayName||m.desc)}</option>`).join('');
-  const div = document.createElement('div');
-  div.innerHTML = `<div class="inv-mix-row" id="invMixRow-${_invMixCount}">
-    <div><label class="inv-form-label">Mix Type</label>
-      <input class="inv-input" id="invMixType-${_invMixCount}" list="invMixList${_invMixCount}" placeholder="e.g. 12.5mm Surface" style="width:100%;" />
-      <datalist id="invMixList${_invMixCount}">${mixOptions}</datalist></div>
-    <div><label class="inv-form-label">Tonnage (tons)</label>
-      <input class="inv-input" id="invTonQty-${_invMixCount}" type="number" step="0.01" placeholder="0.00" style="width:100%;" oninput="invCalcTotal(${_invMixCount})" /></div>
-    <div><label class="inv-form-label">Price / Ton ($)</label>
-      <input class="inv-input" id="invMixPrice-${_invMixCount}" type="number" step="0.01" placeholder="0.00" style="width:100%;" oninput="invCalcTotal(${_invMixCount})" /></div>
-    <div><label class="inv-form-label">Item Total ($)</label>
-      <input class="inv-input" id="invItemTotal-${_invMixCount}" type="number" step="0.01" placeholder="0.00" style="width:100%;background:rgba(126,203,143,0.06);" /></div>
-    <button onclick="this.closest('.inv-mix-row').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>
-  </div>`;
-  wrap.appendChild(div.firstElementChild);
-}
-
-function removeInvMixRow(i) {
-  document.getElementById('invMixRow-' + i)?.remove();
-}
-
-function invCalcTotal(i) {
-  var tonQty   = parseFloat(document.getElementById('invTonQty-'   + i)?.value) || 0;
-  var mixPrice = parseFloat(document.getElementById('invMixPrice-' + i)?.value) || 0;
-  var totalEl  = document.getElementById('invItemTotal-' + i);
-  if (totalEl && tonQty > 0 && mixPrice > 0) {
-    totalEl.value = (tonQty * mixPrice).toFixed(2);
-  }
-}
-
-function invToggleStatus(id, field) {
-  const inv = invoiceList.find(i => i.id === id);
-  if (!inv) return;
-  inv[field] = !inv[field];
-  inv.updatedAt = Date.now();
-  saveInvoiceList();
-  renderInvoiceTracker();
-}
-
-function invMixInlineEdit(invId, mixIdx, field, value) {
-  const inv = invoiceList.find(i => i.id === invId);
-  if (!inv || !inv.mixItems[mixIdx]) return;
-  inv.mixItems[mixIdx][field] = value;
-  inv.updatedAt = Date.now();
-  saveInvoiceList();
-}
-
-function invInlineEdit(id, field, value) {
-  const inv = invoiceList.find(i => i.id === id);
-  if (!inv) return;
-  inv[field] = value;
-  inv.updatedAt = Date.now();
-  saveInvoiceList();
-  // Re-render only if the date changed (affects sort order)
-  if (field === 'dateOfWork') renderInvoiceTracker();
-}
-
-function saveInvoiceEntry(editId) {
-  const date = document.getElementById('invDate')?.value;
-  if (!date) { alert('Date of Work is required.'); return; }
-
-  const mixRows = document.getElementById('invMixRows')?.querySelectorAll('.inv-mix-row') || [];
-  const mixItems = [];
-  mixRows.forEach((row, i) => {
-    const typeEl   = row.querySelector('[id^=invMixType-]');
-    const tonQtyEl = row.querySelector('[id^=invTonQty-]');
-    const priceEl  = row.querySelector('[id^=invMixPrice-]');
-    const totalEl  = row.querySelector('[id^=invItemTotal-]');
-    const mixType  = typeEl?.value.trim() || '';
-    const tonQty   = tonQtyEl?.value.trim() || '';
-    const mixPrice = priceEl?.value.trim() || '';
-    const tonQtyN  = parseFloat(tonQty) || 0;
-    const priceN   = parseFloat(mixPrice) || 0;
-    const itemTotal = (tonQtyN > 0 && priceN > 0)
-      ? (tonQtyN * priceN).toFixed(2)
-      : (totalEl?.value.trim() || '');
-    if (mixType || itemTotal) mixItems.push({ mixType, tonQty, mixPrice, itemTotal });
-  });
-
-  if (!mixItems.length) { alert('Add at least one mix type entry.'); return; }
-
-  const jn = document.getElementById('invJobName')?.value.trim() || '';
-  const entry = {
-    id: editId || Date.now().toString(),
-    dateOfWork: date,
-    invoiceNo:  document.getElementById('invNo')?.value.trim() || '',
-    foreman:    document.getElementById('invForeman')?.value.trim() || '',
-    jobNo:      document.getElementById('invJobNo')?.value.trim() || '',
-    jobName:    jn,
-    gcName:     jn.includes(' — ') ? jn.split(' — ')[0].trim() : '',
-    supplier:   document.getElementById('invSupplier')?.value.trim() || '',
-    mixItems,
-    actualTrucking: {
-      dmcCount: parseFloat(document.getElementById('invActDmcCount')?.value) || 0,
-      dmcCost:  parseFloat(document.getElementById('invActDmcCost')?.value)  || 0,
-      brkCount: parseFloat(document.getElementById('invActBrkCount')?.value) || 0,
-      brkCost:  parseFloat(document.getElementById('invActBrkCost')?.value)  || 0,
-      supCount: parseFloat(document.getElementById('invActSupCount')?.value) || 0,
-      supCost:  parseFloat(document.getElementById('invActSupCost')?.value)  || 0,
-    },
-    updatedAt: Date.now(),
-    attachments: window._invAttachments || [],
-    approvedAmount: editId ? (invoiceList.find(i=>i.id===editId)?.approvedAmount||'') : '',
-    invoiceNotes:   editId ? (invoiceList.find(i=>i.id===editId)?.invoiceNotes||'')   : '',
-  };
-
-  if (editId) {
-    const idx = invoiceList.findIndex(i => i.id === editId);
-    if (idx >= 0) invoiceList[idx] = entry;
-    else invoiceList.push(entry);
-  } else {
-    invoiceList.push(entry);
-  }
-
-  saveInvoiceList();
-  document.getElementById('invModal')?.remove();
-  renderInvoiceTracker();
-}
-
-function deleteInvoice(id) {
-  if (!confirm('Delete this invoice entry?')) return;
-  invoiceList = invoiceList.filter(i => i.id !== id);
-  saveInvoiceList();
-  renderInvoiceTracker();
 }
 
 // ── Schedule → Invoice field mapper ──────────────────────────────────────────
@@ -29623,7 +29163,6 @@ loadSavedTheme();
 
   window._xbRemap=(btn,action)=>{ _map[btn]=action; localStorage.setItem('dmc_xbox_map',JSON.stringify(_map)); };
   _checkLocalStorageSize();
-  window._xbReset=()=>{ _map=Object.assign({},DEFAULT_MAP); localStorage.removeItem('dmc_xbox_map'); document.getElementById('_xbMapper')?.remove(); _openMapper(); };
   window._openMapper = _openMapper;
 
   // ── HUD: button hint bar (shows when controller connected) ────────────

@@ -3423,3 +3423,704 @@ function _ccConfirmAltLocation(blockIdx, dateKey, sessionKey) {
 
   _ccCheckAllDone(ov, sessionKey);
 }
+
+// ═══════════════════════════════════════════════════════
+// INVOICE TRACKER — Weekly Grid UI
+// ═══════════════════════════════════════════════════════
+
+// ── State ─────────────────────────────────────────────────────────────────────
+var invoiceWeekOffset = 0;
+var invSearchQuery = '';
+var _invMixCount = 1;
+
+// ── Format helpers ────────────────────────────────────────────────────────────
+function invFmt(n) {
+  var v = parseFloat(n);
+  if (isNaN(v)) return '—';
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function invFmtTons(n) {
+  var v = parseFloat((n || '').toString().replace(/,/g, ''));
+  if (isNaN(v)) return n || '';
+  return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function invFmtDate(dateStr) {
+  if (!dateStr) return '—';
+  var parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ── Week range helpers ─────────────────────────────────────────────────────────
+function invWeekRange(offset) {
+  var today = new Date();
+  var dow = today.getDay();
+  var diffToMon = (dow === 0) ? -6 : 1 - dow;
+  var mon = new Date(today);
+  mon.setDate(today.getDate() + diffToMon + (offset * 7));
+  mon.setHours(0, 0, 0, 0);
+  var days = [];
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    var yr = d.getFullYear();
+    var mo = String(d.getMonth() + 1).padStart(2, '0');
+    var dy = String(d.getDate()).padStart(2, '0');
+    days.push({
+      key:   yr + '-' + mo + '-' + dy,
+      label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+      dow:   d.getDay()
+    });
+  }
+  return days; // days[0]=Mon … days[6]=Sun
+}
+
+function invWeekLabel(offset) {
+  var days = invWeekRange(offset);
+  var mp = days[0].key.split('-');
+  var fp = days[4].key.split('-');
+  var mon = new Date(parseInt(mp[0]), parseInt(mp[1]) - 1, parseInt(mp[2]));
+  var fri = new Date(parseInt(fp[0]), parseInt(fp[1]) - 1, parseInt(fp[2]));
+  return mon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    + ' – '
+    + fri.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Billed total: sum of mix item totals + supplier truck cost ─────────────────
+function invCardBilledTotal(inv) {
+  var mix = (inv.mixItems || []).reduce(function(s, m) {
+    return s + (parseFloat(m.itemTotal) || 0);
+  }, 0);
+  return mix + (((inv.actualTrucking || {}).supCost) || 0);
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────────
+function invSetSearch(val) {
+  invSearchQuery = val;
+  renderInvoiceTracker();
+  var inp = document.querySelector('.inv2-search-input');
+  if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+
+// ── Inline edit helpers ────────────────────────────────────────────────────────
+function invInlineEdit(id, field, value) {
+  var inv = invoiceList.find(function(i) { return i.id === id; });
+  if (!inv) return;
+  inv[field] = value;
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  if (field === 'dateOfWork') renderInvoiceTracker();
+  else _invRefreshBilled(id);
+}
+
+function invMixInlineEdit(invId, mixIdx, field, value) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv || !inv.mixItems[mixIdx]) return;
+  inv.mixItems[mixIdx][field] = value;
+  if (field === 'tonQty' || field === 'mixPrice') {
+    var t = parseFloat(inv.mixItems[mixIdx].tonQty) || 0;
+    var p = parseFloat(inv.mixItems[mixIdx].mixPrice) || 0;
+    if (t > 0 && p > 0) inv.mixItems[mixIdx].itemTotal = (t * p).toFixed(2);
+  }
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  _invRefreshBilled(invId);
+}
+
+function invTruckInlineEdit(id, field, value) {
+  var inv = invoiceList.find(function(i) { return i.id === id; });
+  if (!inv) return;
+  if (!inv.actualTrucking) inv.actualTrucking = {};
+  inv.actualTrucking[field] = parseFloat(value) || 0;
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  _invRefreshBilled(id);
+}
+
+// ── Live DOM refresh helpers ───────────────────────────────────────────────────
+function _invRefreshBilled(invId) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  var total = invCardBilledTotal(inv);
+  var billedEl = document.querySelector('[data-billed-for="' + invId + '"]');
+  if (billedEl) billedEl.textContent = invFmt(total);
+  var diffEl = document.querySelector('[data-billed-diff-for="' + invId + '"]');
+  if (diffEl) {
+    var appAmt = inv.approvedAmount
+      ? parseFloat((inv.approvedAmount + '').replace(/[^0-9.\-]/g, '')) || 0
+      : null;
+    if (appAmt !== null && Math.abs(appAmt - total) > 0.005) {
+      var diff = appAmt - total;
+      diffEl.textContent = (diff > 0 ? '▲ ' : '▼ ') + invFmt(Math.abs(diff));
+      diffEl.style.color = diff > 0 ? '#7ecb8f' : 'var(--red)';
+      diffEl.style.display = '';
+    } else {
+      diffEl.style.display = 'none';
+    }
+  }
+}
+
+// ── Inline editing activation ──────────────────────────────────────────────────
+function invActivateEdit(el) {
+  if (el.querySelector('input,textarea')) return;
+
+  var invId   = el.dataset.inv;
+  var field   = el.dataset.field;
+  var mi      = (el.dataset.mi !== undefined && el.dataset.mi !== '') ? el.dataset.mi : null;
+  var isTruck = el.dataset.truck === '1';
+  var isArea  = el.dataset.area === '1';
+  var isNum   = el.dataset.num === '1';
+
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+
+  var rawVal;
+  if (isTruck) {
+    rawVal = (inv.actualTrucking || {})[field];
+  } else if (mi !== null) {
+    rawVal = ((inv.mixItems || [])[parseInt(mi)] || {})[field];
+  } else {
+    rawVal = inv[field];
+  }
+  if (rawVal === undefined || rawVal === null) rawVal = '';
+  if (isNum && typeof rawVal === 'string') rawVal = rawVal.replace(/[^0-9.\-]/g, '');
+
+  var inp = isArea ? document.createElement('textarea') : document.createElement('input');
+  inp.className = 'inv2-inline-input';
+  if (!isArea) {
+    inp.type = isNum ? 'number' : 'text';
+    if (isNum) { inp.step = '0.01'; inp.min = '0'; }
+  } else {
+    inp.rows = 2;
+  }
+  inp.value = rawVal;
+  el.innerHTML = '';
+  el.appendChild(inp);
+  inp.focus();
+  if (inp.select) inp.select();
+
+  var saved = false;
+
+  function _dispFromInv(updInv) {
+    var stored;
+    if (isTruck)          stored = (updInv.actualTrucking || {})[field];
+    else if (mi !== null) stored = ((updInv.mixItems || [])[parseInt(mi)] || {})[field];
+    else                  stored = updInv[field];
+    if (stored === undefined || stored === null || stored === '') return '—';
+    var countFields = { dmcCount: 1, brkCount: 1, supCount: 1, tonQty: 1 };
+    if (isNum && !countFields[field]) return invFmt(parseFloat(stored) || 0);
+    return String(stored);
+  }
+
+  function doSave() {
+    if (saved) return;
+    saved = true;
+    var val = inp.value.trim();
+    if (isTruck)          invTruckInlineEdit(invId, field, val);
+    else if (mi !== null) invMixInlineEdit(invId, parseInt(mi), field, val);
+    else                  invInlineEdit(invId, field, val);
+    var updInv = invoiceList.find(function(i) { return i.id === invId; });
+    el.textContent = updInv ? _dispFromInv(updInv) : (val || '—');
+  }
+
+  inp.onblur = doSave;
+  inp.onkeydown = function(e) {
+    if (e.key === 'Enter' && !isArea) { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') {
+      saved = true;
+      inp.onblur = null;
+      var origInv = invoiceList.find(function(i) { return i.id === invId; });
+      el.textContent = origInv ? _dispFromInv(origInv) : '—';
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      inp.blur();
+      var card = el.closest('.inv2-card');
+      if (!card) return;
+      var all = Array.from(card.querySelectorAll('.inv2-editable'));
+      var idx = all.indexOf(el);
+      var next = all[(idx + 1) % all.length];
+      if (next && next !== el) setTimeout(function() { next.click(); }, 30);
+    }
+  };
+}
+
+// ── Mix row HTML builder (card render + add/remove) ───────────────────────────
+function _invMixRowsHtml(inv) {
+  var canEdit = (typeof isAdmin === 'function' && isAdmin())
+             || (typeof canEditTab === 'function' && canEditTab('ap'));
+  return (inv.mixItems || []).map(function(m, mi) {
+    var rowTotal = (m.itemTotal && parseFloat(m.itemTotal)) ? invFmt(parseFloat(m.itemTotal)) : '—';
+    return '<div class="inv2-mix-row" data-mix-row="' + inv.id + '-' + mi + '">'
+      + '<span class="inv2-editable inv2-mix-type" data-inv="' + inv.id + '" data-field="mixType" data-mi="' + mi + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(m.mixType || '—') + '</span>'
+      + '<span class="inv2-editable inv2-mix-num" data-inv="' + inv.id + '" data-field="tonQty" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.tonQty || '—') + '</span>'
+      + '<span class="inv2-editable inv2-mix-num" data-inv="' + inv.id + '" data-field="mixPrice" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.mixPrice && parseFloat(m.mixPrice) ? invFmt(parseFloat(m.mixPrice)) : '—') + '</span>'
+      + '<span class="inv2-editable inv2-mix-num inv2-mix-total-cell" data-inv="' + inv.id + '" data-field="itemTotal" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + rowTotal + '</span>'
+      + (canEdit && inv.mixItems.length > 1
+          ? '<button class="inv2-mix-del" onclick="event.stopPropagation();invRemoveMixRowFromCard(\'' + inv.id + '\',' + mi + ')" title="Remove">✕</button>'
+          : '<span></span>')
+      + '</div>';
+  }).join('');
+}
+
+function invAddMixRowToCard(invId) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  inv.mixItems.push({ mixType: '', tonQty: '', mixPrice: '', itemTotal: '' });
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  var mb = document.querySelector('[data-mix-body="' + invId + '"]');
+  if (mb) mb.innerHTML = _invMixRowsHtml(inv);
+  _invRefreshBilled(invId);
+}
+
+function invRemoveMixRowFromCard(invId, mi) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv || inv.mixItems.length <= 1) return;
+  inv.mixItems.splice(mi, 1);
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  var mb = document.querySelector('[data-mix-body="' + invId + '"]');
+  if (mb) mb.innerHTML = _invMixRowsHtml(inv);
+  _invRefreshBilled(invId);
+}
+
+// ── Status toggles (printed / approved) ───────────────────────────────────────
+function invToggleStatus(id, field) {
+  var inv = invoiceList.find(function(i) { return i.id === id; });
+  if (!inv) return;
+  inv[field] = !inv[field];
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  renderInvoiceTracker();
+}
+
+// ── Delete invoice ─────────────────────────────────────────────────────────────
+function deleteInvoice(id) {
+  if (!confirm('Delete this invoice entry?')) return;
+  invoiceList = invoiceList.filter(function(i) { return i.id !== id; });
+  saveInvoiceList();
+  renderInvoiceTracker();
+}
+
+// ── Single card renderer ───────────────────────────────────────────────────────
+function _invRenderCard(inv) {
+  var at       = inv.actualTrucking || {};
+  var billed   = invCardBilledTotal(inv);
+  var attCount = (inv.attachments || []).length;
+  var canEdit  = (typeof isAdmin === 'function' && isAdmin())
+              || (typeof canEditTab === 'function' && canEditTab('ap'));
+  var appRaw   = inv.approvedAmount
+    ? parseFloat((inv.approvedAmount + '').replace(/[^0-9.\-]/g, '')) || 0
+    : null;
+  var differs  = appRaw !== null && Math.abs(appRaw - billed) > 0.005;
+  var diff     = differs ? (appRaw - billed) : null;
+
+  function edSpan(field, val, cls) {
+    return '<span class="inv2-editable' + (cls ? ' ' + cls : '') + '" data-inv="' + inv.id + '" data-field="' + field + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(val || '—') + '</span>';
+  }
+  function edTruckCount(field, val) {
+    return '<span class="inv2-editable inv2-truck-count" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val || '—') + '</span>';
+  }
+  function edTruckCost(field, val) {
+    return '<span class="inv2-editable inv2-truck-cost" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val && parseFloat(val) ? invFmt(parseFloat(val)) : '—') + '</span>';
+  }
+
+  return '<div class="inv2-card" id="inv2-card-' + inv.id + '">'
+
+    // ── HEADER ──────────────────────────────────────────────────────────────
+    + '<div class="inv2-card-header">'
+    +   '<div class="inv2-header-top">'
+    +     '<span class="inv2-job-no">' + edSpan('jobNo', inv.jobNo) + '</span>'
+    +     '<span class="inv2-gc-name">' + edSpan('gcName', inv.gcName) + '</span>'
+    +     (canEdit
+            ? '<div class="inv2-header-acts">'
+                + '<button class="inv2-icon-btn" onclick="event.stopPropagation();openInvoiceModal(\'' + inv.id + '\')" title="Edit in modal">✏️</button>'
+                + '<button class="inv2-icon-btn inv2-del-btn" onclick="event.stopPropagation();deleteInvoice(\'' + inv.id + '\')" title="Delete">✕</button>'
+                + '</div>'
+            : '')
+    +   '</div>'
+    +   '<div class="inv2-project-name">' + edSpan('jobName', inv.jobName) + '</div>'
+    +   '<div class="inv2-supplier-name">' + edSpan('supplier', inv.supplier) + '</div>'
+    +   '<div class="inv2-inv-meta">'
+    +     '<span class="inv2-inv-badge">' + edSpan('invoiceNo', inv.invoiceNo || 'INV #') + '</span>'
+    +     '<div class="inv2-status-btns">'
+    +       '<button class="inv2-status-btn' + (inv.printed ? ' inv2-status-printed' : '') + '" onclick="event.stopPropagation();invToggleStatus(\'' + inv.id + '\',\'printed\')">' + (inv.printed ? '✔ Printed' : '🖨 Print') + '</button>'
+    +       '<button class="inv2-status-btn' + (inv.approved ? ' inv2-status-approved' : '') + '" onclick="event.stopPropagation();invToggleStatus(\'' + inv.id + '\',\'approved\')">' + (inv.approved ? '✔ Approved' : '✅ Approve') + '</button>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+
+    // ── MIX SECTION ─────────────────────────────────────────────────────────
+    + '<div class="inv2-mix-section">'
+    +   '<div class="inv2-mix-header">'
+    +     '<span>Mix Type</span><span>Tons</span><span>$/ton</span><span>Total</span><span></span>'
+    +   '</div>'
+    +   '<div data-mix-body="' + inv.id + '">' + _invMixRowsHtml(inv) + '</div>'
+    +   (canEdit ? '<button class="inv2-add-mix" onclick="event.stopPropagation();invAddMixRowToCard(\'' + inv.id + '\')">+ Add Mix Type</button>' : '')
+    + '</div>'
+
+    // ── PERFORATED DIVIDER ───────────────────────────────────────────────────
+    + '<div class="inv2-perf-wrap"><div class="inv2-perf-line"></div></div>'
+
+    // ── BOTTOM ──────────────────────────────────────────────────────────────
+    + '<div class="inv2-bottom">'
+
+    +   '<div class="inv2-trucking">'
+    +     '<div class="inv2-truck-hdr">Trucking</div>'
+    +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟡</span><span class="inv2-truck-lbl">DMC</span>' + edTruckCount('dmcCount', at.dmcCount) + edTruckCost('dmcCost', at.dmcCost) + '</div>'
+    +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🔵</span><span class="inv2-truck-lbl">Broker</span>' + edTruckCount('brkCount', at.brkCount) + edTruckCost('brkCost', at.brkCost) + '</div>'
+    +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟢</span><span class="inv2-truck-lbl">Supplier</span>' + edTruckCount('supCount', at.supCount) + edTruckCost('supCost', at.supCost) + '</div>'
+    +   '</div>'
+
+    +   '<div class="inv2-billing">'
+    +     '<div class="inv2-billed-row">'
+    +       '<span class="inv2-billing-lbl">Billed</span>'
+    +       '<span class="inv2-billed-amt' + (differs ? ' inv2-billed-differ' : '') + '" data-billed-for="' + inv.id + '">' + invFmt(billed) + '</span>'
+    +     '</div>'
+    +     '<div class="inv2-approved-row">'
+    +       '<span class="inv2-billing-lbl">Approved</span>'
+    +       '<span class="inv2-editable inv2-approved-amt" data-inv="' + inv.id + '" data-field="approvedAmount" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">'
+    +         (appRaw !== null ? invFmt(appRaw) : '—')
+    +       '</span>'
+    +     '</div>'
+    +     '<div class="inv2-diff-row" data-billed-diff-for="' + inv.id + '" style="'
+    +         (diff !== null ? 'color:' + (diff > 0 ? '#7ecb8f' : 'var(--red)') + ';' : 'display:none;') + '">'
+    +       (diff !== null ? (diff > 0 ? '▲ ' : '▼ ') + invFmt(Math.abs(diff)) : '')
+    +     '</div>'
+    +     '<div class="inv2-notes-wrap">'
+    +       '<span class="inv2-editable inv2-notes" data-inv="' + inv.id + '" data-field="invoiceNotes" data-area="1" onclick="invActivateEdit(this)" title="Click to add notes">'
+    +         escHtml(inv.invoiceNotes || 'Notes…')
+    +       '</span>'
+    +     '</div>'
+    +     '<div class="inv2-att-row">'
+    +       '<button class="inv2-att-btn" onclick="event.stopPropagation();' + (attCount ? 'viewInvAttachments(\'' + inv.id + '\')' : 'openInvoiceModal(\'' + inv.id + '\')') + '" title="' + (attCount ? attCount + ' file' + (attCount > 1 ? 's' : '') : 'Attach files') + '">'
+    +         '📎' + (attCount ? ' ' + attCount : '')
+    +       '</button>'
+    +     '</div>'
+    +   '</div>'
+
+    + '</div>' // .inv2-bottom
+  + '</div>'; // .inv2-card
+}
+
+// ── Main render ────────────────────────────────────────────────────────────────
+function renderInvoiceTracker() {
+  var wrap = document.getElementById('invoiceView');
+  if (!wrap) return;
+
+  var days  = invWeekRange(invoiceWeekOffset);
+  var label = invWeekLabel(invoiceWeekOffset);
+
+  var n = new Date();
+  var todayKey = n.getFullYear() + '-'
+    + String(n.getMonth() + 1).padStart(2, '0') + '-'
+    + String(n.getDate()).padStart(2, '0');
+
+  var weekKeySet = {};
+  days.forEach(function(d) { weekKeySet[d.key] = true; });
+  var rows = invoiceList.filter(function(inv) {
+    if (!weekKeySet[inv.dateOfWork]) return false;
+    if (!invSearchQuery) return true;
+    var q = invSearchQuery.toLowerCase();
+    return (inv.dateOfWork || '').toLowerCase().indexOf(q) >= 0
+        || (inv.jobNo     || '').toLowerCase().indexOf(q) >= 0
+        || (inv.foreman   || '').toLowerCase().indexOf(q) >= 0
+        || (inv.supplier  || '').toLowerCase().indexOf(q) >= 0
+        || (inv.jobName   || '').toLowerCase().indexOf(q) >= 0
+        || (inv.invoiceNo || '').toLowerCase().indexOf(q) >= 0;
+  });
+
+  var activeDays = days.slice(0, 5);
+  if (rows.some(function(inv) { return inv.dateOfWork === days[5].key; })) activeDays.push(days[5]);
+  if (rows.some(function(inv) { return inv.dateOfWork === days[6].key; })) activeDays.push(days[6]);
+
+  var foremanSeen = {};
+  rows.forEach(function(inv) { foremanSeen[inv.foreman || '(No Foreman)'] = true; });
+  var roster = (typeof foremanRoster !== 'undefined' && Array.isArray(foremanRoster)) ? foremanRoster : [];
+  var foremans = Object.keys(foremanSeen).sort(function(a, b) {
+    var ai = roster.indexOf(a), bi = roster.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b);
+  });
+
+  var weekBilled = rows.reduce(function(s, inv) { return s + invCardBilledTotal(inv); }, 0);
+  var weekApproved = 0, hasApproved = false;
+  rows.forEach(function(inv) {
+    var a = inv.approvedAmount
+      ? parseFloat((inv.approvedAmount + '').replace(/[^0-9.\-]/g, '')) || 0
+      : null;
+    if (a !== null) { weekApproved += a; hasApproved = true; }
+  });
+
+  var canEdit = (typeof isAdmin === 'function' && isAdmin())
+             || (typeof canEditTab === 'function' && canEditTab('ap'));
+
+  var gridCols = '140px ' + activeDays.map(function() { return 'minmax(260px,1fr)'; }).join(' ');
+
+  var gridHtml;
+  if (!rows.length) {
+    gridHtml = '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">'
+      + 'No invoices this week.'
+      + (canEdit ? '<br><button class="inv-btn" style="margin-top:16px;" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : '')
+      + '</div>';
+  } else {
+    var hdr = '<div class="inv2-corner-cell"></div>'
+      + activeDays.map(function(day) {
+          return '<div class="inv2-day-head' + (day.key === todayKey ? ' inv2-today' : '') + '">' + day.label + '</div>';
+        }).join('');
+
+    var dataRows = foremans.map(function(foreman) {
+      var row = '<div class="inv2-foreman-cell"><span>' + escHtml(foreman) + '</span></div>';
+      row += activeDays.map(function(day) {
+        var cellInvs = rows.filter(function(inv) {
+          return (inv.foreman || '(No Foreman)') === foreman && inv.dateOfWork === day.key;
+        });
+        return '<div class="inv2-day-cell' + (cellInvs.length === 0 ? ' inv2-cell-empty' : '') + '">'
+          + cellInvs.map(function(inv) { return _invRenderCard(inv); }).join('')
+          + '</div>';
+      }).join('');
+      return row;
+    }).join('');
+
+    gridHtml = '<div class="inv2-grid" style="grid-template-columns:' + gridCols + ';">'
+      + hdr + dataRows + '</div>';
+  }
+
+  var totalBar = rows.length
+    ? '<div class="inv2-total-bar">'
+    +   '<span class="inv2-total-lbl">Week Total &mdash; ' + rows.length + ' invoice' + (rows.length !== 1 ? 's' : '') + '</span>'
+    +   '<div style="display:flex;gap:20px;align-items:baseline;">'
+    +     '<div><span style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Billed</span>'
+    +       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:var(--stripe);">' + invFmt(weekBilled) + '</div></div>'
+    +     (hasApproved
+            ? '<div><span style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Approved</span>'
+                + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:#7ecb8f;">' + invFmt(weekApproved) + '</div></div>'
+            : '')
+    +   '</div>'
+    + '</div>'
+    : '';
+
+  wrap.innerHTML = '<div class="inv2-wrap">'
+    + '<div class="inv2-header">'
+    +   '<div style="text-align:center;">'
+    +     '<div class="inv-title" style="text-align:center;">🧾 Sales Invoice &amp; Trucking Tracker</div>'
+    +     '<div class="inv-sub" style="text-align:center;">Weekly grid — foremen &times; days</div>'
+    +     '<div class="inv2-search-bar">'
+    +       '<input class="inv2-search-input" type="text" placeholder="Search by date, job #, foreman, or supplier…" value="' + escHtml(invSearchQuery) + '" oninput="invSetSearch(this.value)" />'
+    +       (invSearchQuery ? '<button class="inv-btn-ghost" onclick="invSetSearch(\'\')" style="padding:5px 10px;font-size:11px;">✕ Clear</button>' : '')
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="inv-month-nav">'
+    +     '<button class="inv-btn-ghost" onclick="invoiceWeekOffset--;renderInvoiceTracker();">◀</button>'
+    +     '<div class="inv-month-label">' + label + '</div>'
+    +     '<button class="inv-btn-ghost" onclick="invoiceWeekOffset++;renderInvoiceTracker();">▶</button>'
+    +     '<button class="inv-btn-ghost" onclick="invoiceWeekOffset=0;renderInvoiceTracker();">This Week</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="inv-toolbar">'
+    +   (invSearchQuery ? '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);margin-right:10px;">🔍 ' + rows.length + ' result' + (rows.length !== 1 ? 's' : '') + '</span>' : '')
+    +   (canEdit ? '<button class="inv-btn" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : '')
+    + '</div>'
+    + '<div class="inv2-grid-scroll">' + gridHtml + '</div>'
+    + totalBar
+    + '</div>';
+}
+
+// ── Modal (initial creation only — all editing is inline on cards) ─────────────
+function openInvoiceModal(id, prefill) {
+  var isEdit  = !!id;
+  var inv     = isEdit ? invoiceList.find(function(i) { return i.id === id; }) : null;
+  var p       = prefill || {};
+  var mixItems = (inv && inv.mixItems)
+    ? inv.mixItems
+    : (p.mixItems && p.mixItems.length ? p.mixItems : [{ mixType: '', mixPrice: '', itemTotal: '' }]);
+
+  var supplierOptions = (typeof suppliersList !== 'undefined' ? suppliersList : []).map(function(s) {
+    return '<option value="' + escHtml(s.name) + '">';
+  }).join('');
+  var mixOptions = (typeof mixTypesList !== 'undefined' ? mixTypesList : []).map(function(m) {
+    return '<option value="' + escHtml(m.desc) + '">' + escHtml(m.displayName || m.desc) + '</option>';
+  }).join('');
+
+  function mixRowHtml(m, i) {
+    return '<div class="inv-mix-row" id="invMixRow-' + i + '">'
+      + '<div><label class="inv-form-label">Mix Type</label>'
+      +   '<input class="inv-input" id="invMixType-' + i + '" list="invMixList" placeholder="e.g. 12.5mm Surface" value="' + escHtml(m.mixType || '') + '" style="width:100%;" />'
+      +   '<datalist id="invMixList">' + mixOptions + '</datalist></div>'
+      + '<div><label class="inv-form-label">Tonnage (tons)</label>'
+      +   '<input class="inv-input" id="invTonQty-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.tonQty || '') + '" style="width:100%;" oninput="invCalcTotal(' + i + ')" /></div>'
+      + '<div><label class="inv-form-label">Price / Ton ($)</label>'
+      +   '<input class="inv-input" id="invMixPrice-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.mixPrice || '') + '" style="width:100%;" oninput="invCalcTotal(' + i + ')" /></div>'
+      + '<div><label class="inv-form-label">Item Total ($)</label>'
+      +   '<input class="inv-input" id="invItemTotal-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.itemTotal || '') + '" style="width:100%;background:rgba(126,203,143,0.06);" /></div>'
+      + (i > 0 ? '<button onclick="removeInvMixRow(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>' : '<div></div>')
+      + '</div>';
+  }
+
+  var at = (inv && inv.actualTrucking) || {};
+  var overlay = document.createElement('div');
+  overlay.id = 'invModal';
+  overlay.className = 'inv-modal-overlay';
+  overlay.innerHTML = '<div class="inv-modal">'
+    + '<div class="inv-modal-title">' + (isEdit ? 'Edit' : 'New') + ' Invoice Entry</div>'
+    + '<div class="inv-form-grid">'
+    +   '<div><label class="inv-form-label">Date of Work *</label>'
+    +     '<input class="inv-input" id="invDate" type="date" value="' + ((inv && inv.dateOfWork) || p.dateOfWork || '') + '" style="width:100%;" /></div>'
+    +   '<div><label class="inv-form-label">Invoice #</label>'
+    +     '<input class="inv-input" id="invNo" value="' + escHtml((inv && inv.invoiceNo) || '') + '" placeholder="e.g. INV-20241" style="width:100%;" /></div>'
+    +   '<div><label class="inv-form-label">Foreman</label>'
+    +     '<input class="inv-input" id="invForeman" value="' + escHtml((inv && inv.foreman) || p.foreman || '') + '" placeholder="Foreman name" style="width:100%;" /></div>'
+    +   '<div><label class="inv-form-label">Job #</label>'
+    +     '<input class="inv-input" id="invJobNo" value="' + escHtml((inv && inv.jobNo) || p.jobNo || '') + '" placeholder="e.g. 2024-001" style="width:100%;" /></div>'
+    +   '<div class="inv-form-full"><label class="inv-form-label">Job Name</label>'
+    +     '<input class="inv-input" id="invJobName" value="' + escHtml((inv && inv.jobName) || p.jobName || '') + '" placeholder="e.g. Granite State — Route 3" style="width:100%;" /></div>'
+    +   '<div class="inv-form-full"><label class="inv-form-label">Supplier</label>'
+    +     '<input class="inv-input" id="invSupplier" list="invSupplierList" value="' + escHtml((inv && inv.supplier) || p.supplier || '') + '" placeholder="Select or type supplier" style="width:100%;" />'
+    +     '<datalist id="invSupplierList">' + supplierOptions + '</datalist></div>'
+    + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types on this Invoice</div>'
+    + '<div id="invMixRows">' + mixItems.map(function(m, i) { return mixRowHtml(m, i); }).join('') + '</div>'
+    + '<button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:16px;font-size:11px;">+ Add Mix Type</button>'
+    + '<div style="margin-top:16px;">'
+    +   '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">🚛 Actual Trucking Costs</div>'
+    +   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">'
+    +     '<div><label class="inv-form-label">DMC Trucks (actual #)</label><input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="' + (at.dmcCount || p.truckCount || '') + '" style="width:100%;" /></div>'
+    +     '<div><label class="inv-form-label">DMC Truck Cost ($)</label><input class="inv-input" id="invActDmcCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.dmcCost || '') + '" style="width:100%;" /></div>'
+    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualDmc()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
+    +     '<div><label class="inv-form-label">Broker Trucks (actual #)</label><input class="inv-input" id="invActBrkCount" type="number" min="0" step="1" placeholder="0" value="' + (at.brkCount || '') + '" style="width:100%;" /></div>'
+    +     '<div><label class="inv-form-label">Broker Truck Cost ($)</label><input class="inv-input" id="invActBrkCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.brkCost || '') + '" style="width:100%;" /></div>'
+    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualBrk()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
+    +     '<div><label class="inv-form-label">Supplier Trucks (actual #)</label><input class="inv-input" id="invActSupCount" type="number" min="0" step="1" placeholder="0" value="' + (at.supCount || '') + '" style="width:100%;" /></div>'
+    +     '<div><label class="inv-form-label">Supplier Truck Cost ($)</label><input class="inv-input" id="invActSupCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.supCost || '') + '" style="width:100%;" /></div>'
+    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualSup()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
+    +   '</div>'
+    + '</div>'
+    + '<div style="margin-top:16px;">'
+    +   '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">📎 Attached Invoice Files</div>'
+    +   '<div class="inv-att-zone" id="invAttZone"'
+    +     ' ondragover="event.preventDefault();this.classList.add(\'drag-over\')"'
+    +     ' ondragleave="this.classList.remove(\'drag-over\')"'
+    +     ' ondrop="event.preventDefault();this.classList.remove(\'drag-over\');invHandleFiles(event.dataTransfer.files)">'
+    +     '<input type="file" id="invAttInput" multiple accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" onchange="invHandleFiles(this.files)" />'
+    +     '<div style="font-size:13px;color:var(--concrete-dim);">📂 Drop files here or <strong style="color:var(--stripe);">click to browse</strong></div>'
+    +     '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:4px;">PDF · Word (.docx) · Images</div>'
+    +   '</div>'
+    +   '<div id="invAttList"></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">'
+    +   '<button onclick="document.getElementById(\'invModal\').remove()" class="inv-btn-ghost">Cancel</button>'
+    +   '<button onclick="saveInvoiceEntry(' + (isEdit ? JSON.stringify(id) : 'null') + ')" class="inv-btn">Save Invoice</button>'
+    + '</div>'
+    + '</div>';
+
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  overlay._mixCount = mixItems.length;
+  window._invAttachments = ((inv && inv.attachments) || []).map(function(a) { return Object.assign({}, a); });
+  if (typeof invRenderAttList === 'function') invRenderAttList();
+}
+
+function addInvMixRow() {
+  var wrap = document.getElementById('invMixRows');
+  if (!wrap) return;
+  _invMixCount = wrap.querySelectorAll('.inv-mix-row').length;
+  var mixOptions = (typeof mixTypesList !== 'undefined' ? mixTypesList : []).map(function(m) {
+    return '<option value="' + escHtml(m.desc) + '">' + escHtml(m.displayName || m.desc) + '</option>';
+  }).join('');
+  var div = document.createElement('div');
+  div.innerHTML = '<div class="inv-mix-row" id="invMixRow-' + _invMixCount + '">'
+    + '<div><label class="inv-form-label">Mix Type</label>'
+    +   '<input class="inv-input" id="invMixType-' + _invMixCount + '" list="invMixList' + _invMixCount + '" placeholder="e.g. 12.5mm Surface" style="width:100%;" />'
+    +   '<datalist id="invMixList' + _invMixCount + '">' + mixOptions + '</datalist></div>'
+    + '<div><label class="inv-form-label">Tonnage (tons)</label>'
+    +   '<input class="inv-input" id="invTonQty-' + _invMixCount + '" type="number" step="0.01" placeholder="0.00" style="width:100%;" oninput="invCalcTotal(' + _invMixCount + ')" /></div>'
+    + '<div><label class="inv-form-label">Price / Ton ($)</label>'
+    +   '<input class="inv-input" id="invMixPrice-' + _invMixCount + '" type="number" step="0.01" placeholder="0.00" style="width:100%;" oninput="invCalcTotal(' + _invMixCount + ')" /></div>'
+    + '<div><label class="inv-form-label">Item Total ($)</label>'
+    +   '<input class="inv-input" id="invItemTotal-' + _invMixCount + '" type="number" step="0.01" placeholder="0.00" style="width:100%;background:rgba(126,203,143,0.06);" /></div>'
+    + '<button onclick="this.closest(\'.inv-mix-row\').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>'
+    + '</div>';
+  wrap.appendChild(div.firstElementChild);
+}
+
+function removeInvMixRow(i) {
+  var el = document.getElementById('invMixRow-' + i);
+  if (el) el.remove();
+}
+
+function invCalcTotal(i) {
+  var tEl = document.getElementById('invTonQty-' + i);
+  var pEl = document.getElementById('invMixPrice-' + i);
+  var rEl = document.getElementById('invItemTotal-' + i);
+  var t = tEl ? (parseFloat(tEl.value) || 0) : 0;
+  var p = pEl ? (parseFloat(pEl.value) || 0) : 0;
+  if (rEl && t > 0 && p > 0) rEl.value = (t * p).toFixed(2);
+}
+
+function saveInvoiceEntry(editId) {
+  var dateEl = document.getElementById('invDate');
+  var date   = dateEl && dateEl.value;
+  if (!date) { alert('Date of Work is required.'); return; }
+
+  var mixRowEls = document.getElementById('invMixRows');
+  var mixRows   = mixRowEls ? mixRowEls.querySelectorAll('.inv-mix-row') : [];
+  var mixItems  = [];
+  Array.from(mixRows).forEach(function(row) {
+    var typeEl  = row.querySelector('[id^=invMixType-]');
+    var tonEl   = row.querySelector('[id^=invTonQty-]');
+    var priceEl = row.querySelector('[id^=invMixPrice-]');
+    var totEl   = row.querySelector('[id^=invItemTotal-]');
+    var mixType  = typeEl  ? typeEl.value.trim()  : '';
+    var tonQty   = tonEl   ? tonEl.value.trim()   : '';
+    var mixPrice = priceEl ? priceEl.value.trim() : '';
+    var tN = parseFloat(tonQty) || 0, pN = parseFloat(mixPrice) || 0;
+    var itemTotal = (tN > 0 && pN > 0) ? (tN * pN).toFixed(2) : (totEl ? totEl.value.trim() : '');
+    if (mixType || itemTotal) mixItems.push({ mixType: mixType, tonQty: tonQty, mixPrice: mixPrice, itemTotal: itemTotal });
+  });
+  if (!mixItems.length) { alert('Add at least one mix type entry.'); return; }
+
+  function gv(elId) { var el = document.getElementById(elId); return el ? el.value.trim() : ''; }
+  function gn(elId) { var el = document.getElementById(elId); return el ? (parseFloat(el.value) || 0) : 0; }
+
+  var jn       = gv('invJobName');
+  var existing = editId ? invoiceList.find(function(i) { return i.id === editId; }) : null;
+  var entry    = {
+    id:          editId || Date.now().toString(),
+    dateOfWork:  date,
+    invoiceNo:   gv('invNo'),
+    foreman:     gv('invForeman'),
+    jobNo:       gv('invJobNo'),
+    jobName:     jn,
+    gcName:      jn.indexOf(' — ') >= 0 ? jn.split(' — ')[0].trim() : '',
+    supplier:    gv('invSupplier'),
+    mixItems:    mixItems,
+    actualTrucking: {
+      dmcCount: gn('invActDmcCount'), dmcCost: gn('invActDmcCost'),
+      brkCount: gn('invActBrkCount'), brkCost: gn('invActBrkCost'),
+      supCount: gn('invActSupCount'), supCost: gn('invActSupCost')
+    },
+    updatedAt:      Date.now(),
+    attachments:    window._invAttachments || [],
+    approvedAmount: existing ? (existing.approvedAmount || '') : '',
+    invoiceNotes:   existing ? (existing.invoiceNotes   || '') : ''
+  };
+
+  if (editId) {
+    var idx = -1;
+    for (var k = 0; k < invoiceList.length; k++) { if (invoiceList[k].id === editId) { idx = k; break; } }
+    if (idx >= 0) invoiceList[idx] = entry; else invoiceList.push(entry);
+  } else {
+    invoiceList.push(entry);
+  }
+
+  saveInvoiceList();
+  var modal = document.getElementById('invModal');
+  if (modal) modal.remove();
+  renderInvoiceTracker();
+}
