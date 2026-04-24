@@ -5094,7 +5094,8 @@ const HOME_WIDGETS_DEF = [
   { id:'atowbills',       label:"Andy's Towing Bills",  icon:'🧾', desc:'Pending towing bills and totals',                                             defaultOn:true  },
   { id:'fleetstatus',     label:'Fleet Status',          icon:'🔧', desc:'Equipment status with filter and sort controls',                                defaultOn:true  },
   { id:'equipalerts',     label:'Equipment Alerts',      icon:'🔔', desc:'Status-change alerts for fleet equipment',                                      defaultOn:true  },
-  { id:'bidrequests',     label:'Bid Requests',           icon:'📋', desc:'Open bid requests with urgency and due date tracking',                           defaultOn:true  },
+  { id:'bidrequests',        label:'Bid Requests',        icon:'📋', desc:'Open bid requests with urgency and due date tracking',          defaultOn:true  },
+  { id:'schedulingrequests', label:'Scheduling Requests', icon:'📅', desc:'Emails requesting to schedule or coordinate paving/construction work', defaultOn:true  },
 ];
 
 function getHomePrefs() {
@@ -6212,6 +6213,64 @@ function _refreshBidWidget() {
   if (body) body.innerHTML = _bidCardsHtml();
 }
 
+function _schedUrgencyDate(sr) {
+  var dates = [sr.requestedDate, sr.deadline].filter(Boolean).map(function(d) { return new Date(d); });
+  if (!dates.length) return null;
+  return new Date(Math.min.apply(null, dates));
+}
+
+function _schedCardsHtml() {
+  var open = _schedulingRequests.filter(function(s) { return s.status === 'open'; });
+  var now  = new Date();
+  if (!open.length) return '<div style="padding:14px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(155,148,136,0.35);text-align:center;">No open scheduling requests</div>';
+  return open.map(function(s) {
+    var borderColor = 'rgba(155,148,136,0.3)';
+    var urgDate = _schedUrgencyDate(s);
+    if (urgDate) {
+      var days = Math.ceil((urgDate - now) / 86400000);
+      if      (days <= 3) borderColor = '#e57373';
+      else if (days <= 7) borderColor = 'var(--stripe)';
+      else                borderColor = '#81c784';
+    }
+    var dateTxt = urgDate
+      ? urgDate.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+      : 'No date';
+    return '<div style="border-left:3px solid '+borderColor+';display:flex;">'+
+      '<div style="flex:1;padding:9px 12px;cursor:pointer;" onclick="switchTab(\'mail\');_mailOpenFromSchedLog('+s.emailUid+',\''+escHtml(s.folder)+'\')">'+
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(s.from)+'</div>'+
+        (s.company ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:1px;">'+escHtml(s.company)+'</div>' : '')+
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:rgba(255,255,255,0.6);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">'+escHtml(s.jobDescription||s.subject)+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+borderColor+';margin-top:4px;">'+escHtml(dateTxt)+'</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;padding:0 10px;flex-shrink:0;">'+
+        '<button onclick="event.stopPropagation();_bidMarkSchedulingComplete(\''+escHtml(s.id)+'\')"'+
+          ' style="background:none;border:1px solid rgba(129,199,132,0.4);border-radius:var(--radius);padding:3px 8px;color:#81c784;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;white-space:nowrap;">'+
+          '✓ Done</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="height:1px;background:rgba(255,255,255,0.04);"></div>';
+  }).join('');
+}
+
+function widgetSchedulingRequests() {
+  var openCount = _schedulingRequests.filter(function(s) { return s.status === 'open'; }).length;
+  var badge = openCount > 0
+    ? ' <span style="background:#e57373;color:#fff;font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;border-radius:8px;padding:1px 7px;">'+openCount+'</span>'
+    : '';
+  return '<div class="home-widget">'+
+    '<div class="home-widget-header">'+
+      '<div class="home-widget-title">📅 Scheduling Requests'+badge+'</div>'+
+      '<button class="home-widget-action" onclick="event.stopPropagation();switchTab(\'mail\');_mailShowSchedLog()">View All</button>'+
+    '</div>'+
+    '<div class="home-widget-body" style="padding:0;max-height:320px;overflow-y:auto;" id="homeSchedRequestsWidgetBody">'+_schedCardsHtml()+'</div>'+
+  '</div>';
+}
+
+function _refreshSchedWidget() {
+  var body = document.getElementById('homeSchedRequestsWidgetBody');
+  if (body) body.innerHTML = _schedCardsHtml();
+}
+
 function _refreshFleetWidgets() {
   var fsBody = document.getElementById('homeFleetWidgetBody');
   if (fsBody) {
@@ -6939,8 +6998,9 @@ function buildWidget(id, displayName, pos) {
       case 'atowbills':      html = widgetATowBills(); break;
       case 'fleetstatus':    html = widgetFleetStatus(); break;
       case 'equipalerts':    html = widgetEquipAlerts(); break;
-      case 'bidrequests':    html = widgetBidRequests(); break;
-      default:                return '';
+      case 'bidrequests':        html = widgetBidRequests(); break;
+      case 'schedulingrequests': html = widgetSchedulingRequests(); break;
+      default:                   return '';
     }
     // Apply stored size + freeform position
     const _hwPrefs = getHomePrefs();
@@ -14970,14 +15030,18 @@ var _mailOpenUid         = null;
 var _mailFolderLoading   = false;
 var _mailMessageLoading  = false;
 var _mailActiveCategory  = 'all';
-var _bidRequests         = [];
-var _mailScannedUids     = {};
+var _bidRequests          = [];
+var _schedulingRequests   = [];
+var _mailScannedUids      = {};
 var _mailBatchScanRunning = false;
 
 function _mailGetCategory(msg) {
   var uid = msg.uid;
   for (var i = 0; i < _bidRequests.length; i++) {
     if (_bidRequests[i].emailUid === uid && _bidRequests[i].status !== undefined) return 'bidrequests';
+  }
+  for (var j = 0; j < _schedulingRequests.length; j++) {
+    if (_schedulingRequests[j].emailUid === uid && _schedulingRequests[j].status !== undefined) return 'schedulingrequests';
   }
   var subj = (msg.subject || '').toLowerCase();
   var purchaseKw = ['order','receipt','invoice','payment','tracking','shipping','confirmation','your purchase'];
@@ -15026,9 +15090,10 @@ function _mailRenderCategoryTabs() {
     { id:'inbox',       label:'Inbox' },
     { id:'promotions',  label:'Promos' },
     { id:'purchases',   label:'Purchases' },
-    { id:'bidrequests', label:'Bids' }
+    { id:'bidrequests',        label:'Bids' },
+    { id:'schedulingrequests', label:'Sched' }
   ];
-  var counts = { all: _mailMessages.length, inbox: 0, promotions: 0, purchases: 0, bidrequests: 0 };
+  var counts = { all: _mailMessages.length, inbox: 0, promotions: 0, purchases: 0, bidrequests: 0, schedulingrequests: 0 };
   _mailMessages.forEach(function(m) {
     var cat = _mailGetCategory(m);
     if (counts[cat] !== undefined) counts[cat]++;
@@ -15078,6 +15143,29 @@ function saveBidRequests() {
   localStorage.setItem('dmc_bid_requests', JSON.stringify(_bidRequests));
   _checkLocalStorageSize();
   try { fbSet('bid_requests', _bidRequests); } catch(e) {}
+  localStorage.setItem('dmc_mail_scanned_uids', JSON.stringify(_mailScannedUids));
+  _checkLocalStorageSize();
+}
+
+async function loadSchedulingRequests() {
+  try {
+    var saved = await fbGet('scheduling_requests', null);
+    if (saved && Array.isArray(saved)) {
+      _schedulingRequests = saved;
+    } else {
+      var loc = localStorage.getItem('dmc_scheduling_requests');
+      _schedulingRequests = loc ? JSON.parse(loc) : [];
+    }
+  } catch(e) {
+    var loc2 = localStorage.getItem('dmc_scheduling_requests');
+    _schedulingRequests = loc2 ? JSON.parse(loc2) : [];
+  }
+}
+
+function saveSchedulingRequests() {
+  localStorage.setItem('dmc_scheduling_requests', JSON.stringify(_schedulingRequests));
+  _checkLocalStorageSize();
+  try { fbSet('scheduling_requests', _schedulingRequests); } catch(e) {}
   localStorage.setItem('dmc_mail_scanned_uids', JSON.stringify(_mailScannedUids));
   _checkLocalStorageSize();
 }
@@ -15137,6 +15225,62 @@ async function _mailClassifyBidRequest(msg, uid, folder) {
   }
 }
 
+async function _mailClassifySchedulingRequest(msg, uid, folder) {
+  var cacheKey = uid + '_' + folder + '_sched';
+  if (_mailScannedUids[cacheKey]) return;
+  _mailScannedUids[cacheKey] = true;
+  var fromStr  = msg.from ? ((msg.from.name || '') + ' ' + (msg.from.address || '')).trim() : '';
+  var bodyText = (msg.text || '').slice(0, 1200);
+  if (!bodyText && msg.html) {
+    bodyText = msg.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
+  }
+  var railBase = _mailRailBase();
+  try {
+    var res = await fetch(railBase + '/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role: 'user', content:
+          'You are helping a paving/asphalt construction company identify scheduling requests.\n' +
+          'Does this email contain a request to schedule, coordinate, or confirm timing for construction or paving work?\n' +
+          'From: ' + fromStr + '\nSubject: ' + (msg.subject || '') + '\nBody: ' + bodyText + '\n\n' +
+          'Return ONLY valid JSON — no prose:\n' +
+          '{"isSchedulingRequest":true,"requestor":"name","company":"company name","jobDescription":"one sentence","requestedDate":"YYYY-MM-DD or null","deadline":"YYYY-MM-DD or null"}\n' +
+          'OR\n{"isSchedulingRequest":false}'
+        }]
+      })
+    });
+    if (!res.ok) { saveSchedulingRequests(); return; }
+    var data  = await res.json();
+    var text  = (data.content || []).map(function(b) { return b.text || ''; }).join('').trim();
+    var match = text.match(/\{[\s\S]*\}/);
+    if (!match) { saveSchedulingRequests(); return; }
+    var parsed = JSON.parse(match[0]);
+    if (!parsed.isSchedulingRequest) { saveSchedulingRequests(); return; }
+    var sr = {
+      id:             'sr_' + Date.now().toString(),
+      emailUid:       uid,
+      folder:         folder,
+      from:           msg.from ? (msg.from.name || msg.from.address || '') : '',
+      company:        parsed.company || '',
+      subject:        msg.subject || '',
+      dateRequested:  msg.date || new Date().toISOString(),
+      requestedDate:  (parsed.requestedDate && parsed.requestedDate !== 'null') ? parsed.requestedDate : null,
+      deadline:       (parsed.deadline && parsed.deadline !== 'null') ? parsed.deadline : null,
+      jobDescription: parsed.jobDescription || '',
+      status:         'open'
+    };
+    _schedulingRequests.unshift(sr);
+    saveSchedulingRequests();
+    pushNotif('info', 'Scheduling Request Detected', (sr.company || sr.from) + ' — ' + sr.jobDescription);
+    _mailRenderCategoryTabs();
+  } catch(e) {
+    saveSchedulingRequests();
+  }
+}
+
 function escapeSrcdoc(html) {
   return (html || '')
     .replace(/&/g, '&amp;')
@@ -15182,7 +15326,7 @@ function renderMail() {
     _checkLocalStorageSize();
     if (acct.email) localStorage.setItem('dmc_mail_user', acct.email);
     _checkLocalStorageSize();
-    if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); loadBidRequests(); }
+    if (!wrap.querySelector('#mailApp')) { _mailBuildApp(wrap, acct); loadBidRequests(); loadSchedulingRequests(); }
     _mailLoadFolders();
   } catch(err) {
     console.error('[Mail] render crash:', err);
@@ -15350,6 +15494,10 @@ function _mailBuildApp(wrap, acct) {
           ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Bid requests log">'+
           '📋 Bid Log'+
         '</button>'+
+        '<button onclick="_mailShowSchedLog()"'+
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Scheduling requests log">'+
+          '📅 Sched Log'+
+        '</button>'+
       '</div>'+
 
       // 3-panel body
@@ -15393,6 +15541,23 @@ function _mailBuildApp(wrap, acct) {
           '</button>'+
         '</div>'+
         '<div id="mailBidLogBody" data-show-all="0" style="flex:1;overflow-y:auto;"></div>'+
+      '</div>'+
+
+      // Scheduling Log panel
+      '<div id="mailSchedLog" style="display:none;flex:1;flex-direction:column;overflow:hidden;">'+
+        '<div style="flex-shrink:0;padding:8px 16px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;gap:10px;background:var(--asphalt-mid);">'+
+          '<button onclick="_mailHideBidLog()"'+
+            ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+            '← Back'+
+          '</button>'+
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:2px;color:var(--white);">📅 Scheduling Requests Log</div>'+
+          '<div style="flex:1;"></div>'+
+          '<button id="_schedLogToggleBtn" onclick="_mailToggleShowAllSched()"'+
+            ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+            'Show Completed'+
+          '</button>'+
+        '</div>'+
+        '<div id="mailSchedLogBody" data-show-all="0" style="flex:1;overflow-y:auto;"></div>'+
       '</div>'+
 
     '</div>';
@@ -15551,6 +15716,7 @@ function _mailOpenMessage(uid, folder) {
     _mailMessageLoading = false;
     if (hasAtt) { _mailRenderAttachments(msg.attachments, uid, folder); }
     _mailClassifyBidRequest(msg, uid, folder);
+    _mailClassifySchedulingRequest(msg, uid, folder);
   }).catch(function(err) {
     _mailMessageLoading = false;
     if (v) v.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(err.message)+'</div>';
@@ -15607,10 +15773,13 @@ async function _mailBatchScanBids() {
   if (_mailBatchScanRunning) return;
   if (_mailFolder.toUpperCase() !== 'INBOX') return;
   var toScan = _mailMessages.filter(function(m) {
-    return _mailGetCategory(m) === 'inbox' && !_mailScannedUids[m.uid + '_' + _mailFolder];
+    if (_mailGetCategory(m) !== 'inbox') return false;
+    var needsBid   = !_mailScannedUids[m.uid + '_' + _mailFolder];
+    var needsSched = !_mailScannedUids[m.uid + '_' + _mailFolder + '_sched'];
+    return needsBid || needsSched;
   });
   toScan.sort(function(a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
-  toScan = toScan.slice(0, 10);
+  toScan = toScan.slice(0, 20);
   if (!toScan.length) return;
   _mailBatchScanRunning = true;
   var total = toScan.length;
@@ -15619,13 +15788,14 @@ async function _mailBatchScanBids() {
   function _bsStatus() {
     if (!stat) return;
     stat.textContent = done < total
-      ? '🔍 Scanning ' + (total - done) + ' of ' + total + ' for bids…'
+      ? '🔍 Scanning ' + (total - done) + ' of ' + total + ' for bids & scheduling…'
       : _mailMessages.length + ' messages';
   }
   _bsStatus();
   for (var i = 0; i < toScan.length; i++) {
     var m = toScan[i];
     await _mailClassifyBidRequest(m, m.uid, _mailFolder);
+    await _mailClassifySchedulingRequest(m, m.uid, _mailFolder);
     done++;
     _bsStatus();
     if (i < toScan.length - 1) {
@@ -15635,6 +15805,7 @@ async function _mailBatchScanBids() {
   _mailBatchScanRunning = false;
   if (stat) stat.textContent = _mailMessages.length + ' messages';
   _refreshBidWidget();
+  _refreshSchedWidget();
 }
 
 function _mailShowBidLog() {
@@ -15647,8 +15818,10 @@ function _mailShowBidLog() {
 function _mailHideBidLog() {
   var panels = document.getElementById('mailPanels');
   var log    = document.getElementById('mailBidLog');
+  var slog   = document.getElementById('mailSchedLog');
   if (panels) panels.style.display = '';
   if (log)    log.style.display = 'none';
+  if (slog)   slog.style.display = 'none';
 }
 
 function _mailToggleShowAllBids() {
@@ -15724,6 +15897,93 @@ function _bidMarkComplete(id) {
   _mailRenderBidLog();
   _mailRenderCategoryTabs();
   _refreshBidWidget();
+}
+
+function _bidMarkSchedulingComplete(id) {
+  for (var i = 0; i < _schedulingRequests.length; i++) {
+    if (_schedulingRequests[i].id === id) { _schedulingRequests[i].status = 'complete'; break; }
+  }
+  saveSchedulingRequests();
+  _mailRenderSchedLog();
+  _mailRenderCategoryTabs();
+  _refreshSchedWidget();
+}
+
+function _mailShowSchedLog() {
+  var panels = document.getElementById('mailPanels');
+  var log    = document.getElementById('mailBidLog');
+  var slog   = document.getElementById('mailSchedLog');
+  if (panels) panels.style.display = 'none';
+  if (log)    log.style.display = 'none';
+  if (slog)   { slog.style.display = 'flex'; _mailRenderSchedLog(); }
+}
+
+function _mailToggleShowAllSched() {
+  var el  = document.getElementById('mailSchedLogBody');
+  var btn = document.getElementById('_schedLogToggleBtn');
+  if (!el) return;
+  el.dataset.showAll = el.dataset.showAll === '1' ? '0' : '1';
+  if (btn) btn.textContent = el.dataset.showAll === '1' ? 'Hide Completed' : 'Show Completed';
+  _mailRenderSchedLog();
+}
+
+function _mailRenderSchedLog() {
+  var el = document.getElementById('mailSchedLogBody');
+  if (!el) return;
+  var showAll = el.dataset.showAll === '1';
+  var list = showAll ? _schedulingRequests : _schedulingRequests.filter(function(s) { return s.status === 'open'; });
+  if (!list.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">'+(showAll ? 'No scheduling requests yet.' : 'No open scheduling requests.')+'</div>';
+    return;
+  }
+  var colS  = 'padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);border-bottom:2px solid var(--asphalt-light);white-space:nowrap;text-align:left;';
+  var cellS = 'padding:9px 12px;font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;';
+  var dimS  = 'padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;white-space:nowrap;';
+  var rows = list.map(function(s) {
+    var dateReq  = s.dateRequested ? new Date(s.dateRequested).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    var reqDate  = s.requestedDate ? new Date(s.requestedDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    var dlTxt    = s.deadline ? new Date(s.deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    var stColor  = s.status === 'open' ? 'var(--stripe)' : 'var(--concrete-dim)';
+    var stLabel  = s.status === 'open' ? '● Open' : '✓ Done';
+    return '<tr onmouseover="this.style.background=\'rgba(255,255,255,0.03)\'" onmouseout="this.style.background=\'transparent\'">'+
+      '<td style="'+cellS+'">'+escHtml(s.from)+'</td>'+
+      '<td style="'+cellS+'">'+escHtml(s.company||'—')+'</td>'+
+      '<td style="'+cellS+';max-width:260px;">'+escHtml(s.jobDescription||s.subject)+'</td>'+
+      '<td style="'+dimS+'">'+escHtml(dateReq)+'</td>'+
+      '<td style="'+dimS+'">'+escHtml(reqDate)+'</td>'+
+      '<td style="'+dimS+'">'+escHtml(dlTxt)+'</td>'+
+      '<td style="padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:'+stColor+';border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;">'+stLabel+'</td>'+
+      '<td style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top;white-space:nowrap;">'+
+        '<button onclick="_mailOpenFromSchedLog('+s.emailUid+',\''+escHtml(s.folder)+'\')"'+
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:3px 8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;margin-right:4px;">↗ Open</button>'+
+        (s.status === 'open'
+          ? '<button onclick="_bidMarkSchedulingComplete(\''+escHtml(s.id)+'\')"'+
+              ' style="background:none;border:1px solid rgba(129,199,132,0.4);border-radius:var(--radius);padding:3px 8px;color:#81c784;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">✓ Done</button>'
+          : '')+
+      '</td>'+
+    '</tr>';
+  }).join('');
+  el.innerHTML =
+    '<table style="width:100%;border-collapse:collapse;">'+
+      '<thead><tr>'+
+        '<th style="'+colS+'">Requestor</th>'+
+        '<th style="'+colS+'">Company</th>'+
+        '<th style="'+colS+'">Job Description</th>'+
+        '<th style="'+colS+'">Received</th>'+
+        '<th style="'+colS+'">Req. Start</th>'+
+        '<th style="'+colS+'">Deadline</th>'+
+        '<th style="'+colS+'">Status</th>'+
+        '<th style="'+colS+'">Actions</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+    '</table>';
+}
+
+function _mailOpenFromSchedLog(uid, folder) {
+  _mailHideBidLog();
+  _mailFolder   = folder;
+  _mailFolderNm = folder;
+  _mailOpenMessage(uid, folder);
 }
 
 function _mailFmtDate(d) {
