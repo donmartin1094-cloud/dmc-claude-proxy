@@ -8397,14 +8397,23 @@ function openTruckingModal(key, slot) {
 function renderTruckRows(group) {
   const el = document.getElementById(`tm-${group}-rows`);
   if (!el) return;
-  el.innerHTML = _truckingRows[group].map((name, i) => `
-    <div class="trucking-truck-row">
-      <input class="trucking-truck-input" value="${escHtml(name)}"
-        placeholder="Truck / company name…"
-        oninput="_truckingRows['${group}'][${i}]=this.value;"
-        onkeydown="if(event.key==='Enter'){addTruckRow('${group}');}" />
+  const useDrop = group === 'broker' && truckingBrokersList.length > 0;
+  el.innerHTML = _truckingRows[group].map((name, i) => {
+    const field = useDrop
+      ? `<select class="trucking-truck-input" style="flex:1;"
+            onchange="_truckingRows['${group}'][${i}]=this.value;">
+           <option value="">— select broker —</option>
+           ${truckingBrokersList.map(b => `<option value="${escHtml(b)}"${b===name?' selected':''}>${escHtml(b)}</option>`).join('')}
+         </select>`
+      : `<input class="trucking-truck-input" value="${escHtml(name)}"
+           placeholder="Truck / company name…"
+           oninput="_truckingRows['${group}'][${i}]=this.value;"
+           onkeydown="if(event.key==='Enter'){addTruckRow('${group}');}" />`;
+    return `<div class="trucking-truck-row">
+      ${field}
       <button class="trucking-truck-del" onclick="removeTruckRow('${group}',${i})" title="Remove">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function addTruckRow(group) {
