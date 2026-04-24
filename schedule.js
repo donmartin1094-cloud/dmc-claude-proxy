@@ -2671,9 +2671,9 @@ function renderExtraBlock(key, idx, ex, isLast) {
     }
 
     if (f.buttons) {
-      const cur = fields[f.key] || '';
+      const cur = fields[f.key];
       const btnsHtml = f.buttons.map(b => {
-        const active = cur === b;
+        const active = b === 'Others' ? _isQTROthers(cur) : cur === b;
         return `<button class="sched-field-toggle ${active?'sched-field-toggle-on':''}"
           style="${active?`color:${fc};border-color:${fc}99;background:rgba(255,255,255,0.15);`:`color:${fc}50;border-color:${fc}25;`}"
           onclick="toggleSchedFieldBtn('${key}','${slot}','${f.key}','${b.replace(/'/g,"\\'")}',this)"
@@ -4185,9 +4185,9 @@ function renderSchedule() {
           }
 
           if (f.buttons) {
-            const cur = fields[f.key] || '';
+            const cur = fields[f.key];
             const btnsHtml = f.buttons.map(b => {
-              const active = cur === b;
+              const active = b === 'Others' ? _isQTROthers(cur) : cur === b;
               return `<button class="sched-field-toggle ${active?'sched-field-toggle-on':''}"
                 style="${active?`color:${fc};border-color:${fc}99;background:rgba(255,255,255,0.15);`:`color:${fc}50;border-color:${fc}25;`}"
                 ${canEdit ? `onclick="toggleSchedFieldBtn('${key}','${slot}','${f.key}','${b.replace(/'/g,"\\'")}',this)"` : 'disabled style="cursor:default;opacity:0.6;"'}
@@ -5942,6 +5942,8 @@ function showQueueMiniTooltip(e, itemId) {
         try { val = JSON.parse(val).join(', '); } catch(e2) {}
       } else if (f.key === 'trucking') {
         try { const td = JSON.parse(val); val = Object.entries(td).filter(([,v2])=>v2).map(([k,v2])=>`${k}: ${v2}`).join(', '); } catch(e2) {}
+      } else if (f.key === 'qc' || f.key === 'tack' || f.key === 'rubber') {
+        val = _qtrFieldStr(val);
       }
       if (!val) return '';
       return `<div class="qmc-tooltip-row"><span class="qmc-tooltip-label">${escHtml(f.label.replace(':',''))}</span><span class="qmc-tooltip-val">${escHtml(String(val))}</span></div>`;
