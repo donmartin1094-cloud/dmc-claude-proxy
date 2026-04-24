@@ -812,6 +812,15 @@ var foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringi
 function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); _checkLocalStorageSize(); fbSet('foremans', foremanRoster); }
 var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second foreman
 
+// ── Trucking Brokers roster ──
+const TRUCKING_BROKERS_KEY = 'pavescope_trucking_brokers';
+var truckingBrokersList = JSON.parse(localStorage.getItem(TRUCKING_BROKERS_KEY) || '[]');
+function saveTruckingBrokersList() {
+  localStorage.setItem(TRUCKING_BROKERS_KEY, JSON.stringify(truckingBrokersList));
+  _checkLocalStorageSize();
+  fbSet('truckingBrokers', truckingBrokersList);
+}
+
 
 // ── Rental Crews ────────────────────────────────────────────────────────────
 // Shape: [{ id, name, contact, notes }]

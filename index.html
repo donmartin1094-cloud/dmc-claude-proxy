@@ -2775,6 +2775,7 @@
             <button class="btn btn-ghost btn-sm" id="rtab-suppliers" onclick="switchRosterTab('suppliers')">🏭 Suppliers</button>
             <button class="btn btn-ghost btn-sm" id="rtab-authorities" onclick="switchRosterTab('authorities')">🏛 Awarding Authorities</button>
             <button class="btn btn-ghost btn-sm" id="rtab-specialactions" onclick="switchRosterTab('specialactions')">⚡ Special Actions</button>
+            <button class="btn btn-ghost btn-sm" id="rtab-truckingbrokers" onclick="switchRosterTab('truckingbrokers')">🔵 Trucking Brokers</button>
           </div>
           <div id="stng-roster-content"></div>
           <div id="stng-authorities-list" style="display:none;"></div>
@@ -26847,7 +26848,7 @@ function renderSettingsScheduleColors() {
 }
 
 function switchRosterTab(type) {
-  ['foremans','employees','rentalcrews','equipment','material','suppliers','authorities','specialactions'].forEach(t => {
+  ['foremans','employees','rentalcrews','equipment','material','suppliers','authorities','specialactions','truckingbrokers'].forEach(t => {
     const btn = document.getElementById('rtab-' + t);
     if (btn) { btn.style.borderColor = t===type ? 'var(--stripe)' : ''; btn.style.color = t===type ? 'var(--stripe)' : ''; }
   });
@@ -26923,6 +26924,12 @@ function switchRosterTab(type) {
     if (empEl && typeof renderSettingsEmployees === 'function') {
       renderSettingsEmployees(empEl);
     }
+    return;
+  }
+
+  // Trucking Brokers tab
+  if (type === 'truckingbrokers') {
+    renderSettingsTruckingBrokers(rosterEl);
     return;
   }
 
@@ -27108,6 +27115,48 @@ function stngAddForeman() {
   }
   if (inp) inp.value = '';
   renderSettingsForemans(document.getElementById('stng-roster-content'));
+}
+
+function renderSettingsTruckingBrokers(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">
+      Brokers listed here appear in the <strong style="color:var(--white);">Schedule Trucking Modal</strong> and on Invoice cards.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="stng-truckingbrokers-chips">
+      ${truckingBrokersList.map((b, i) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;">
+          <span style="font-size:16px;">🔵</span>
+          <div contenteditable="true"
+            style="flex:1;font-size:13px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;"
+            onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
+            onblur="truckingBrokersList[${i}]=this.innerText.trim()||truckingBrokersList[${i}];saveTruckingBrokersList();this.style.borderBottomColor='transparent'"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+          >${escHtml(b)}</div>
+          <button onclick="truckingBrokersList.splice(${i},1);saveTruckingBrokersList();switchRosterTab('truckingbrokers');"
+            style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:13px;padding:0 3px;transition:color 0.1s;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--concrete-dim)'"
+            title="Remove ${escHtml(b)}">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input class="form-input" id="stng-new-truckingbroker" placeholder="New broker name…" style="flex:1;" />
+      <button class="btn btn-primary btn-sm" onclick="stngAddTruckingBroker()">+ Add</button>
+    </div>`;
+  const inp = el.querySelector('#stng-new-truckingbroker');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') stngAddTruckingBroker(); });
+}
+
+function stngAddTruckingBroker() {
+  const inp = document.getElementById('stng-new-truckingbroker');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); return; }
+  if (!truckingBrokersList.includes(name)) {
+    truckingBrokersList.push(name);
+    saveTruckingBrokersList();
+  }
+  if (inp) inp.value = '';
+  renderSettingsTruckingBrokers(document.getElementById('stng-roster-content'));
 }
 
 function stngAddRosterItem(type, inputId) {
