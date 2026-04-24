@@ -822,6 +822,42 @@ function saveTruckingBrokersList() {
 }
 
 
+// ── Subcontractor rosters ────────────────────────────────────────────────────
+const MILLING_SUBS_KEY = 'pavescope_milling_subs';
+var millingSubsList = (function(){ try { const p = JSON.parse(localStorage.getItem(MILLING_SUBS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+function saveMillingSubsList() { localStorage.setItem(MILLING_SUBS_KEY, JSON.stringify(millingSubsList)); _checkLocalStorageSize(); try { if (db) fbSet('milling_subs', millingSubsList); } catch(e) {} }
+
+const QC_SUBS_KEY = 'pavescope_qc_subs';
+var qcSubsList = (function(){ try { const p = JSON.parse(localStorage.getItem(QC_SUBS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+function saveQcSubsList() { localStorage.setItem(QC_SUBS_KEY, JSON.stringify(qcSubsList)); _checkLocalStorageSize(); try { if (db) fbSet('qc_subs', qcSubsList); } catch(e) {} }
+
+const TACK_SUBS_KEY = 'pavescope_tack_subs';
+var tackSubsList = (function(){ try { const p = JSON.parse(localStorage.getItem(TACK_SUBS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+function saveTackSubsList() { localStorage.setItem(TACK_SUBS_KEY, JSON.stringify(tackSubsList)); _checkLocalStorageSize(); try { if (db) fbSet('tack_subs', tackSubsList); } catch(e) {} }
+
+const RUBBER_SUBS_KEY = 'pavescope_rubber_subs';
+var rubberSubsList = (function(){ try { const p = JSON.parse(localStorage.getItem(RUBBER_SUBS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+function saveRubberSubsList() { localStorage.setItem(RUBBER_SUBS_KEY, JSON.stringify(rubberSubsList)); _checkLocalStorageSize(); try { if (db) fbSet('rubber_subs', rubberSubsList); } catch(e) {} }
+
+const TOWING_SUBS_KEY = 'pavescope_towing_subs';
+var towingSubsList = (function(){ try { const raw = localStorage.getItem(TOWING_SUBS_KEY); if (raw === null) return ["Andy's Towing LLC"]; const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch(e) { return ["Andy's Towing LLC"]; } })();
+function saveTowingSubsList() { localStorage.setItem(TOWING_SUBS_KEY, JSON.stringify(towingSubsList)); _checkLocalStorageSize(); try { if (db) fbSet('towing_subs', towingSubsList); } catch(e) {} }
+
+const ANDY_RATES_2026 = {
+  '55-Ton Lowbed':          { rate: 185, type: 'hourly', min: 2 },
+  '40-Ton Landoll':         { rate: 185, type: 'hourly', min: 2 },
+  'High Flat Trailer':      { rate: 160, type: 'hourly', min: 2 },
+  'Step Deck Trailer':      { rate: 160, type: 'hourly', min: 2 },
+  'Stretch Trailer':        { rate: 185, type: 'hourly', min: 2 },
+  'Heavy-Duty Ramp Truck':  { rate: 150, type: 'hourly', min: 2 },
+  'Medium-Duty Ramp Truck': { rate: 130, type: 'hourly', min: 2 },
+  'Heavy-Duty Towing':      { rate: 225, type: 'hourly', min: 2 },
+  'Medium-Duty Towing':     { rate: 175, type: 'hourly', min: 2 },
+  '50-Ton Rotator':         { rate: 500, type: 'hourly', min: 2 },
+  'Roadside Assistance':    { rate: 75,  type: 'flat',   min: null },
+  'Pilot Car':              { rate: 100, type: 'hourly', min: 4 }
+};
+
 // ── Rental Crews ────────────────────────────────────────────────────────────
 // Shape: [{ id, name, contact, notes }]
 const RENTAL_CREWS_KEY = 'pavescope_rental_crews';
@@ -1895,14 +1931,133 @@ function _saIsLocationAction(saInfo) {
   return lbl.indexOf('milling') >= 0 || lbl.indexOf('grader') >= 0;
 }
 
+function _saIsMillingAction(saInfo) {
+  return (saInfo && saInfo.label || '').toLowerCase().indexOf('milling') >= 0;
+}
+
+function _saIsInternalGrader(label) {
+  return /steve/i.test(label);
+}
+
+function _saIsSubGrader(label) {
+  return /grader/i.test(label) && !_saIsInternalGrader(label);
+}
+
+function _saLocString(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  return raw.location || '';
+}
+
+function _saLocDisplay(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  var loc = raw.location || '';
+  var sub = raw.subCompany || '';
+  return loc + (sub ? ' [' + sub + ']' : '');
+}
+
 function _saIsVacationAction(saInfo) {
   return (saInfo && saInfo.label || '').toLowerCase().indexOf('vacation') >= 0;
+}
+
+// ── QC / Tack / Rubber "Others" sub tracking ─────────────────────────────────
+
+function _isQTROthers(val) {
+  if (!val) return false;
+  if (typeof val === 'string') return val === 'Others';
+  return val.type === 'Others';
+}
+
+function _qtrFieldStr(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (val.type === 'Others') return val.subCompany ? 'Others (' + val.subCompany + ')' : 'Others';
+  return val.type || '';
+}
+
+function openQTROthersPicker(key, slot, field, triggerEl) {
+  document.getElementById('qtrOthersPicker')?.remove();
+  var fieldLabel = field === 'qc' ? 'QC' : field === 'tack' ? 'Tack' : 'Rubber';
+
+  var subList = [];
+  if (field === 'qc') {
+    subList = (typeof qcSubsList !== 'undefined') ? qcSubsList : [];
+  } else if (field === 'tack') {
+    var ts = (typeof tackSubsList !== 'undefined') ? tackSubsList : [];
+    var rs = (typeof rubberSubsList !== 'undefined') ? rubberSubsList : [];
+    subList = ts.concat(rs.filter(function(s) { return ts.indexOf(s) < 0; }));
+  } else {
+    var rs2 = (typeof rubberSubsList !== 'undefined') ? rubberSubsList : [];
+    var ts2 = (typeof tackSubsList !== 'undefined') ? tackSubsList : [];
+    subList = rs2.concat(ts2.filter(function(s) { return rs2.indexOf(s) < 0; }));
+  }
+
+  // Pre-fill subCompany if already set to Others
+  var cur = (schedData[key] && schedData[key][slot] && schedData[key][slot].fields) ? schedData[key][slot].fields[field] : null;
+  var preSelected = (_isQTROthers(cur) && cur.subCompany) ? cur.subCompany : '';
+
+  var subOptsHtml = subList.length > 0
+    ? '<select id="qtrSubSel" style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;box-sizing:border-box;">' +
+        '<option value="">— select sub company —</option>' +
+        subList.map(function(s) { var sel = (s === preSelected) ? ' selected' : ''; return '<option value="' + escHtml(s) + '"' + sel + '>' + escHtml(s) + '</option>'; }).join('') +
+      '</select>'
+    : '<input id="qtrSubSel" type="text" value="' + escHtml(preSelected) + '" placeholder="Sub company name…" style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;box-sizing:border-box;outline:none;" />';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'qtrOthersPicker';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:22px;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--stripe);margin-bottom:4px;">' + fieldLabel + ' — Others</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--concrete-dim);margin-bottom:14px;">Select the subcontractor performing ' + fieldLabel.toLowerCase() + '.</div>' +
+      subOptsHtml +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">' +
+        '<button onclick="document.getElementById(\'qtrOthersPicker\').remove()"' +
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:8px 18px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">' +
+          'Cancel</button>' +
+        '<button id="qtrOthersConfirm"' +
+          ' style="background:#1a3000;border:1px solid rgba(134,239,172,0.5);border-radius:var(--radius);padding:8px 18px;color:#86efac;font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:800;cursor:pointer;">' +
+          '✅ Save</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  setTimeout(function() { document.getElementById('qtrSubSel')?.focus(); }, 60);
+
+  document.getElementById('qtrOthersConfirm').onclick = function() {
+    var subEl = document.getElementById('qtrSubSel');
+    var subCompany = subEl ? (subEl.value || '').trim() : '';
+    if (!schedData[key]) schedData[key] = {};
+    if (!schedData[key][slot]) schedData[key][slot] = { type: 'blank', fields: {} };
+    if (!schedData[key][slot].fields) schedData[key][slot].fields = {};
+    schedData[key][slot].fields[field] = { type: 'Others', subCompany: subCompany, cost: 0, invoiceNo: '' };
+    saveSchedData();
+    document.getElementById('qtrOthersPicker')?.remove();
+    renderSchedule();
+  };
+
+  overlay.addEventListener('mousedown', function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
 }
 
 function openSALocationPicker(key, slot, saId, onConfirm) {
   document.getElementById('saLocPicker')?.remove();
   var saInfo = specialActions.find(function(s) { return s.id === saId; });
   if (!saInfo) return;
+
+  var isMilling = _saIsMillingAction(saInfo);
+  var subDropHtml = (isMilling && typeof millingSubsList !== 'undefined' && millingSubsList.length > 0)
+    ? '<div style="margin-top:10px;">' +
+        '<label style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Subcontractor (optional)</label>' +
+        '<select id="saLocSubSel" style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;box-sizing:border-box;">' +
+          '<option value="">— DMC (internal) —</option>' +
+          millingSubsList.map(function(s) { return '<option value="' + escHtml(s) + '">' + escHtml(s) + '</option>'; }).join('') +
+        '</select>' +
+      '</div>'
+    : '';
 
   var overlay = document.createElement('div');
   overlay.id = 'saLocPicker';
@@ -1918,6 +2073,7 @@ function openSALocationPicker(key, slot, saId, onConfirm) {
           ' oninput="saLocFilter(this.value)" onkeydown="saLocKeydown(event)" />' +
         '<div id="saLocSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:10001;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-top:none;border-radius:0 0 var(--radius) var(--radius);max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"></div>' +
       '</div>' +
+      subDropHtml +
       '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">' +
         '<button onclick="document.getElementById(\'saLocPicker\').remove()"' +
           ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:8px 18px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">' +
@@ -1933,7 +2089,10 @@ function openSALocationPicker(key, slot, saId, onConfirm) {
 
   document.getElementById('saLocConfirm').onclick = function() {
     var loc = (document.getElementById('saLocInput')?.value || '').trim();
-    if (onConfirm) { onConfirm(loc); } else { _commitSAWithLocation(key, slot, saId, loc); }
+    var subSel = document.getElementById('saLocSubSel');
+    var subCompany = subSel ? (subSel.value || '') : '';
+    var result = isMilling ? { location: loc, subCompany: subCompany } : loc;
+    if (onConfirm) { onConfirm(result); } else { _commitSAWithLocation(key, slot, saId, result); }
     document.getElementById('saLocPicker')?.remove();
   };
 
@@ -2583,7 +2742,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
           if (_saIsVacationAction(sa) && !canSeeVacation()) return '';
           const chipLabel1 = (_saIsVacationAction(sa) && fields._vacationPerson)
             ? fields._vacationPerson + ' on vacation'
-            : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
+            : (fields._saLocations?.[sid] ? sa.label + ' — ' + _saLocDisplay(fields._saLocations[sid]) : sa.label);
           return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
             ${chipLabel1}
             <button style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:10px;padding:0;line-height:1;"
@@ -4094,7 +4253,7 @@ function renderSchedule() {
                 if (_saIsVacationAction(sa) && !canSeeVacation()) return '';
                 const chipLabel2 = (_saIsVacationAction(sa) && fields._vacationPerson)
                   ? fields._vacationPerson + ' on vacation'
-                  : (fields._saLocations?.[sid] ? sa.label + ' — ' + fields._saLocations[sid] : sa.label);
+                  : (fields._saLocations?.[sid] ? sa.label + ' — ' + _saLocDisplay(fields._saLocations[sid]) : sa.label);
                 return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
                   ${chipLabel2}
                   ${canEdit ? `<button style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:10px;padding:0;line-height:1;"
@@ -4254,7 +4413,7 @@ function renderSchedule() {
               const chipColor   = _graderChip ? '#000'                 : '#fff';
               const xColor      = _graderChip ? 'rgba(0,0,0,0.55)'    : 'rgba(255,255,255,0.7)';
               const saLoc       = dn.dayNoteSALocations?.[sid];
-              const chipLabel   = (saLoc && _saIsVacationAction(sa)) ? saLoc + ' on vacation' : (saLoc ? sa.label + ' — ' + saLoc : sa.label);
+              const chipLabel   = (saLoc && _saIsVacationAction(sa)) ? _saLocString(saLoc) + ' on vacation' : (saLoc ? sa.label + ' — ' + _saLocDisplay(saLoc) : sa.label);
               return `<span class="sched-day-note-sa-chip" style="background:${chipBg};border:${chipBorder};color:${chipColor};">
                 ${chipLabel}
                 ${canEditSched?`<button style="background:none;border:none;cursor:pointer;font-size:9px;padding:0 0 0 2px;line-height:1;color:${xColor};"
@@ -4929,12 +5088,27 @@ function toggleSchedFieldBtn(key, slot, field, value, el) {
   if (!schedData[key][slot]) schedData[key][slot]={type:'blank',fields:{}};
   if (!schedData[key][slot].fields) schedData[key][slot].fields={};
   const cur = schedData[key][slot].fields[field];
-  schedData[key][slot].fields[field] = (cur === value) ? '' : value;
-  saveSchedData();
+
+  var _QTR = ['qc','tack','rubber'];
+  if (_QTR.indexOf(field) >= 0 && value === 'Others') {
+    if (_isQTROthers(cur)) {
+      schedData[key][slot].fields[field] = '';
+      saveSchedData();
+    } else {
+      openQTROthersPicker(key, slot, field, el);
+      return;
+    }
+  } else {
+    schedData[key][slot].fields[field] = (cur === value) ? '' : value;
+    saveSchedData();
+  }
+
   // Update button states in-place
   const row = el.closest('.sched-field');
   row.querySelectorAll('.sched-field-toggle').forEach(btn => {
-    const isActive = btn.textContent.trim() === schedData[key][slot].fields[field];
+    const fieldVal = schedData[key][slot].fields[field];
+    const btnTxt = btn.textContent.trim();
+    const isActive = _isQTROthers(fieldVal) ? btnTxt === 'Others' : btnTxt === fieldVal;
     btn.classList.toggle('sched-field-toggle-on', isActive);
   });
 }
@@ -6839,7 +7013,7 @@ function buildDocxXml(f, foreman, orderDate) {
 
   var operators = v('operators') ? v('operators').split(',').filter(Boolean) : [];
   var equipList = v('equipment') ? v('equipment').split(',').filter(Boolean) : [];
-  var qcVal = v('qc'); var tackVal = v('tack'); var rubberVal = v('rubber');
+  var qcVal = _qtrFieldStr(v('qc')); var tackVal = _qtrFieldStr(v('tack')); var rubberVal = _qtrFieldStr(v('rubber'));
   var CHECK = '&#9746;'; var UNCHECK = '&#9744;';
 
   function lbl(t) { return makeRun(t, {bold:true, size:18}); }
@@ -7116,8 +7290,8 @@ function openDJApprovalPanel() {
           ${f.plant ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">🏭 ${escHtml(f.plant)}</span>` : ''}
           ${matSummary !== '—' ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">🪨 ${escHtml(matSummary)}</span>` : ''}
           ${td.numTrucks||td.trucks ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">🚛 ${escHtml(String(td.numTrucks||td.trucks||'?'))} trucks</span>` : ''}
-          ${f.tack ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">🟡 Tack: ${escHtml(String(f.tack))}</span>` : ''}
-          ${f.rubber ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">⚫ Rubber: ${escHtml(String(f.rubber))}</span>` : ''}
+          ${f.tack ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">🟡 Tack: ${escHtml(_qtrFieldStr(f.tack))}</span>` : ''}
+          ${f.rubber ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">⚫ Rubber: ${escHtml(_qtrFieldStr(f.rubber))}</span>` : ''}
         </div>
         <div id="djrow_extra_${i}"></div>
       </div>`;
@@ -7162,7 +7336,7 @@ function djReviewBlock(dateKey, slot, rowIdx) {
     <div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:12px 14px;font-size:12px;display:flex;flex-direction:column;gap:6px;">
       <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Full Block Details</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-        ${Object.entries({ 'Plant': f.plant, 'Contact': f.contact, 'QC': f.qc, 'Tack': f.tack, 'Rubber': f.rubber, 'Equipment': f.equipment, 'Operators': f.operators, 'Notes': f.notes }).map(([k,v]) =>
+        ${Object.entries({ 'Plant': f.plant, 'Contact': f.contact, 'QC': _qtrFieldStr(f.qc), 'Tack': _qtrFieldStr(f.tack), 'Rubber': _qtrFieldStr(f.rubber), 'Equipment': f.equipment, 'Operators': f.operators, 'Notes': f.notes }).map(([k,v]) =>
           v ? `<div><span style="color:var(--concrete-dim);">${k}: </span><span style="color:var(--white);">${escHtml(String(v))}</span></div>` : ''
         ).join('')}
       </div>
@@ -7186,8 +7360,10 @@ function djApproveAndGenerate(dateKey, slot, rowIdx) {
   buildAndSaveForemansReport(dateKey, slot, bdata, f);
 
   // Build tack & rubber if applicable
-  const hasTack   = f.tack   && String(f.tack).trim()   && String(f.tack).trim()   !== 'None';
-  const hasRubber = f.rubber && String(f.rubber).trim() && String(f.rubber).trim() !== 'None';
+  const _tackStr = _qtrFieldStr(f.tack);
+  const _rubStr  = _qtrFieldStr(f.rubber);
+  const hasTack   = _tackStr && _tackStr !== 'None';
+  const hasRubber = _rubStr  && _rubStr  !== 'None';
   if (hasTack || hasRubber) {
     buildAndSaveTackRubber(dateKey, slot, f);
   }
@@ -7233,8 +7409,10 @@ function buildAndSaveForemansReport(dateKey, slot, bdata, f) {
   const spacing    = td.spacing    || '';
 
   // Tack & Rubber
-  const tackGallons  = (f.tack   && f.tack   !== 'Others' && f.tack   !== 'None') ? f.tack   : '';
-  const rubberLinFt  = (f.rubber && f.rubber !== 'Others' && f.rubber !== 'None') ? f.rubber : '';
+  const _fTackStr   = _qtrFieldStr(f.tack);
+  const _fRubStr    = _qtrFieldStr(f.rubber);
+  const tackGallons  = (_fTackStr   && !_isQTROthers(f.tack)   && _fTackStr   !== 'None') ? _fTackStr   : '';
+  const rubberLinFt  = (_fRubStr    && !_isQTROthers(f.rubber)  && _fRubStr    !== 'None') ? _fRubStr    : '';
 
   // Build the DOCX document using the existing makeRun/makeDocx infrastructure
   const xml = buildForemansReportDocx({
@@ -7247,7 +7425,7 @@ function buildAndSaveForemansReport(dateKey, slot, bdata, f) {
     operators: f.operators || '', equipment: f.equipment || '',
     matItems, truckList, numTrucks, loadTime, spacing,
     tackGallons, rubberLinFt,
-    tack: f.tack || '', rubber: f.rubber || '',
+    tack: _qtrFieldStr(f.tack), rubber: _qtrFieldStr(f.rubber),
     notes: (schedData[dateKey]?.dayNote || '') + (f.notes ? '\n' + f.notes : ''),
   });
 
@@ -7422,8 +7600,10 @@ function buildAndSaveTackRubber(dateKey, slot, f) {
     projectName = jobNameFull.split(' \u2014 ').slice(1).join(' \u2014 ');
   } else { projectName = jobNameFull; }
 
-  const hasTack   = f.tack   && String(f.tack).trim()   !== '' && String(f.tack).trim()   !== 'None';
-  const hasRubber = f.rubber && String(f.rubber).trim() !== '' && String(f.rubber).trim() !== 'None';
+  const _trTackStr   = _qtrFieldStr(f.tack);
+  const _trRubStr    = _qtrFieldStr(f.rubber);
+  const hasTack   = _trTackStr   && _trTackStr   !== 'None';
+  const hasRubber = _trRubStr    && _trRubStr    !== 'None';
 
   // We build a plain DOCX matching the ticket layout
   const tr = (row, label, value, bold) => `
@@ -7436,13 +7616,13 @@ ${makeP(makeRun(value||'',{size:20}))}
   const tackSection = hasTack ? `
 ${tr(null,'TACK COAT','',true)}
 ${tr(null,'MATERIAL','TACK COAT')}
-${tr(null,'GALLONS',String(f.tack||''))}
+${tr(null,'GALLONS',_trTackStr)}
 ` : '';
 
   const rubberSection = hasRubber ? `
 ${tr(null,'HOT RUBBER','',true)}
 ${tr(null,'MATERIAL','HOT RUBBER')}
-${tr(null,'LINEAL FEET',String(f.rubber||''))}
+${tr(null,'LINEAL FEET',_trRubStr)}
 ` : '';
 
   const tableXml = `
@@ -10446,19 +10626,33 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
           ${job.allEquipment?.length?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:#5ab4f5;margin-top:3px;">All equipment: ${job.allEquipment.map(e=>(_EQ_ICONS[e.type]||'📦')+' '+e.name).join(' · ')}</div>`:''}
         </div>
         ${(job.moves||[]).map((mv,mi) =>
-          `<div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-            <div style="flex-shrink:0;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:var(--concrete-dim);padding-top:2px;">MOVE ${mi+1}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">
-                ${(mv.equipment||[]).map(eq=>`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.28);border-radius:10px;padding:3px 8px;font-family:'DM Mono',monospace;font-size:9px;color:var(--stripe);">${_EQ_ICONS[eq.type]||'📦'} ${eq.name}</span>`).join('')}
+          `<div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+              <div style="flex-shrink:0;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:var(--concrete-dim);padding-top:2px;">MOVE ${mi+1}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">
+                  ${(mv.equipment||[]).map(eq=>`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.28);border-radius:10px;padding:3px 8px;font-family:'DM Mono',monospace;font-size:9px;color:var(--stripe);">${_EQ_ICONS[eq.type]||'📦'} ${eq.name}</span>`).join('')}
+                </div>
+                ${mv.notes?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${mv.notes}</div>`:''}
               </div>
-              ${mv.notes?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${mv.notes}</div>`:''}
-            </div>
-            <div style="flex-shrink:0;display:flex;align-items:center;gap:6px;">
               <select id="_lbDrv_${ji}_${mi}" style="background:#1a1a1a;border:1px solid #444;border-radius:4px;color:var(--white);font-family:'DM Mono',monospace;font-size:10px;padding:5px 8px;">
                 <option value="">— Assign driver —</option>
                 ${driverList.map(d=>`<option value="${d}"${mv.assignedDriver===d?' selected':''}>${d}</option>`).join('')}
               </select>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-left:4px;">
+              <select id="_lbSvcType_${ji}_${mi}" onchange="_lbUpdateCost(${ji},${mi})" style="background:#1a1a1a;border:1px solid #555;border-radius:4px;color:var(--white);font-family:'DM Mono',monospace;font-size:10px;padding:4px 7px;">
+                <option value="">— Service type —</option>
+                ${Object.keys(ANDY_RATES_2026).map(k=>`<option value="${k}"${mv.serviceType===k?' selected':''}>${k}</option>`).join('')}
+              </select>
+              <select id="_lbTowCo_${ji}_${mi}" style="background:#1a1a1a;border:1px solid #555;border-radius:4px;color:var(--white);font-family:'DM Mono',monospace;font-size:10px;padding:4px 7px;">
+                <option value="">— Towing company —</option>
+                ${towingSubsList.map(s=>`<option value="${s}"${mv.towingCompany===s?' selected':''}>${s}</option>`).join('')}
+              </select>
+              <input id="_lbHrs_${ji}_${mi}" type="number" min="1" step="0.5" value="${mv.estHours||2}" placeholder="Hrs" onchange="_lbUpdateCost(${ji},${mi})" style="width:52px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:var(--white);font-family:'DM Mono',monospace;font-size:10px;padding:4px 6px;" title="Estimated hours" />
+              <span id="_lbCostDisp_${ji}_${mi}" style="font-family:'DM Mono',monospace;font-size:10px;color:#7ecb8f;min-width:36px;">${mv.estCost ? '$'+mv.estCost : '—'}</span>
+              <input id="_lbActCost_${ji}_${mi}" type="number" min="0" step="1" value="${mv.actualCost||''}" placeholder="Actual $" style="width:70px;background:#111;border:1px solid #444;border-radius:4px;color:#888;font-family:'DM Mono',monospace;font-size:10px;padding:4px 6px;" title="Actual cost (fill post-job)" />
+              <input id="_lbInvNo_${ji}_${mi}" type="text" value="${mv.towingInvoiceNo||''}" placeholder="Inv #" style="width:65px;background:#111;border:1px solid #444;border-radius:4px;color:#888;font-family:'DM Mono',monospace;font-size:10px;padding:4px 6px;" title="Towing invoice number" />
             </div>
           </div>`
         ).join('')}
@@ -10482,13 +10676,59 @@ Keep replies concise (2-4 sentences). Confirm actions taken.`;
       </div>`;
     document.body.appendChild(ov);
 
+    window._lbUpdateCost = function(ji, mi) {
+      var svcSel  = document.getElementById('_lbSvcType_'+ji+'_'+mi);
+      var hrInp   = document.getElementById('_lbHrs_'+ji+'_'+mi);
+      var disp    = document.getElementById('_lbCostDisp_'+ji+'_'+mi);
+      if (!svcSel || !disp) return;
+      var rate = ANDY_RATES_2026[svcSel.value];
+      if (!rate) { disp.textContent = '—'; return; }
+      if (rate.type === 'flat') {
+        if (hrInp) hrInp.style.display = 'none';
+        disp.textContent = '$' + rate.rate;
+      } else {
+        if (hrInp) hrInp.style.display = '';
+        var hrs = parseFloat(hrInp ? hrInp.value : 2) || 2;
+        var billHrs = Math.max(hrs, rate.min || 2);
+        disp.textContent = '$' + (rate.rate * billHrs).toFixed(0);
+      }
+    };
+
+    // Initialize cost displays for moves that already have serviceType set
+    (plan.jobs||[]).forEach(function(job,ji) {
+      (job.moves||[]).forEach(function(mv,mi) { if (mv.serviceType) window._lbUpdateCost(ji, mi); });
+    });
+
     window._lbVerifySend = async function(adminOverride) {
-      // Collect driver assignments from dropdowns
+      // Collect driver + service detail fields from dropdowns/inputs
       (plan.jobs||[]).forEach((job,ji) => {
         (job.moves||[]).forEach((mv,mi) => {
-          const sel = document.getElementById(`_lbDrv_${ji}_${mi}`);
-          mv.assignedDriver = sel?.value || null;
-          mv.status = mv.assignedDriver ? 'assigned' : 'unassigned';
+          const drvSel  = document.getElementById(`_lbDrv_${ji}_${mi}`);
+          const svcSel  = document.getElementById(`_lbSvcType_${ji}_${mi}`);
+          const towSel  = document.getElementById(`_lbTowCo_${ji}_${mi}`);
+          const hrsInp  = document.getElementById(`_lbHrs_${ji}_${mi}`);
+          const actInp  = document.getElementById(`_lbActCost_${ji}_${mi}`);
+          const invInp  = document.getElementById(`_lbInvNo_${ji}_${mi}`);
+          mv.assignedDriver  = drvSel?.value || null;
+          mv.status          = mv.assignedDriver ? 'assigned' : 'unassigned';
+          mv.serviceType     = svcSel?.value  || mv.serviceType     || '';
+          mv.towingCompany   = towSel?.value  || mv.towingCompany   || '';
+          mv.actualCost      = parseFloat(actInp?.value)  || mv.actualCost  || 0;
+          mv.towingInvoiceNo = invInp?.value  || mv.towingInvoiceNo || '';
+          const rate = ANDY_RATES_2026[mv.serviceType];
+          if (rate) {
+            if (rate.type === 'flat') {
+              mv.estCost  = rate.rate;
+              mv.estHours = null;
+            } else {
+              var hrs = parseFloat(hrsInp?.value) || 2;
+              mv.estHours = hrs;
+              mv.estCost  = parseFloat((rate.rate * Math.max(hrs, rate.min || 2)).toFixed(2));
+            }
+          } else {
+            mv.estHours = parseFloat(hrsInp?.value) || mv.estHours || null;
+            mv.estCost  = mv.estCost || 0;
+          }
         });
       });
 

@@ -3949,6 +3949,212 @@ function _invRenderCard(inv) {
   + '</div>'; // .inv2-card
 }
 
+// ── Subcontractor period collector (Part 3a) ───────────────────────────────────
+function _invGetSubsForPeriod(dayKeys) {
+  var results = [];
+  var keySet  = {};
+  dayKeys.forEach(function(k) { keySet[k] = true; });
+  var sched = (typeof schedData !== 'undefined') ? schedData : {};
+  var sas   = (typeof specialActions !== 'undefined') ? specialActions : [];
+
+  // Day-level SA chips: Milling and sub Grading
+  dayKeys.forEach(function(dateKey) {
+    var dn    = sched[dateKey] || {};
+    var saIds = dn.dayNoteSA || [];
+    var locs  = dn.dayNoteSALocations || {};
+    saIds.forEach(function(sid) {
+      var sa = sas.find(function(s) { return s.id === sid; });
+      if (!sa) return;
+      var rawLoc = locs[sid];
+      var locStr = (rawLoc && typeof rawLoc === 'object') ? (rawLoc.location || '') : (rawLoc || '');
+      var subCo  = (rawLoc && typeof rawLoc === 'object') ? (rawLoc.subCompany || '') : '';
+
+      if ((typeof _saIsMillingAction === 'function') && _saIsMillingAction(sa)) {
+        if (subCo) {
+          results.push({ date: dateKey, type: 'Milling', subCompany: subCo, jobRef: locStr,
+            estCost: 0, actualCost: 0, invoiceNo: '', id: 'mill_' + dateKey + '_' + sid });
+        }
+        return;
+      }
+      if ((typeof _saIsSubGrader === 'function') && _saIsSubGrader(sa.label)) {
+        results.push({ date: dateKey, type: 'Grading', subCompany: sa.label, jobRef: locStr,
+          estCost: 0, actualCost: 0, invoiceNo: '', id: 'grad_' + dateKey + '_' + sid });
+      }
+    });
+  });
+
+  // Block-level fields: QC, Tack, Rubber (Others only)
+  var QTR_MAP = { qc: 'QC', tack: 'Tack', rubber: 'Rubber' };
+  dayKeys.forEach(function(dateKey) {
+    var day = sched[dateKey] || {};
+    var slots = ['top', 'bottom'];
+    if (Array.isArray(day.extras)) {
+      day.extras.forEach(function(ex, xi) { slots.push('extra_' + xi); });
+    }
+    slots.forEach(function(slot) {
+      var bdata = null;
+      if (slot === 'top' || slot === 'bottom') {
+        bdata = day[slot];
+      } else {
+        var xi = parseInt(slot.replace('extra_', ''));
+        bdata = (day.extras && day.extras[xi]) ? day.extras[xi].data : null;
+      }
+      if (!bdata || !bdata.fields) return;
+      var f = bdata.fields;
+      var jobRef = f.jobName || (f.jobNum ? '#' + f.jobNum : '') || '';
+      Object.keys(QTR_MAP).forEach(function(fk) {
+        var val = f[fk];
+        if (typeof _isQTROthers === 'function' ? _isQTROthers(val) : (val === 'Others' || (val && val.type === 'Others'))) {
+          var sub = (val && typeof val === 'object') ? val : { type: 'Others', subCompany: '', cost: 0, invoiceNo: '' };
+          results.push({ date: dateKey, type: QTR_MAP[fk], subCompany: sub.subCompany || '',
+            jobRef: jobRef, estCost: sub.cost || 0, actualCost: sub.cost || 0,
+            invoiceNo: sub.invoiceNo || '', id: fk + '_' + dateKey + '_' + slot,
+            _fk: fk, _slot: slot });
+        }
+      });
+    });
+  });
+
+  // Lowbed plan moves
+  try {
+    var plan = JSON.parse(localStorage.getItem('dmc_lowbed_plan') || 'null');
+    if (plan && Array.isArray(plan.jobs)) {
+      plan.jobs.forEach(function(job) {
+        if (!keySet[job.date]) return;
+        (job.moves || []).forEach(function(mv, mi) {
+          if (!mv.serviceType && !mv.towingCompany) return;
+          results.push({ date: job.date, type: 'Lowbed',
+            subCompany: mv.towingCompany || '', _serviceType: mv.serviceType || '',
+            jobRef: (job.jobName || '') + (job.jobNum ? ' #' + job.jobNum : ''),
+            estCost: mv.estCost || 0, actualCost: mv.actualCost || 0,
+            invoiceNo: mv.towingInvoiceNo || '', id: 'lb_' + job.date + '_' + mi,
+            _lbDate: job.date, _lbMoveIdx: mi });
+        });
+      });
+    }
+  } catch(e) {}
+
+  return results;
+}
+
+// ── Sub card renderer (Part 3c) ────────────────────────────────────────────────
+var _SUB_ICONS = { Milling: '⛏️', Grading: '🏗️', QC: '✅', Tack: '🟡', Rubber: '🔴', Lowbed: '🚛' };
+
+function _invRenderSubCard(sub) {
+  var canEdit = (typeof isAdmin === 'function' && isAdmin())
+             || (typeof canEditTab === 'function' && canEditTab('ap'));
+  var icon = _SUB_ICONS[sub.type] || '🔧';
+  var html = '<div class="inv2-card" style="border-color:rgba(90,180,245,0.35);">';
+  html += '<div class="inv2-truck-row">'
+    + '<span class="inv2-truck-icon">' + icon + '</span>'
+    + '<span style="flex:1;font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:var(--white);">' + escHtml(sub.subCompany || '—') + '</span>'
+    + '</div>';
+  if (sub._serviceType) {
+    html += '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:2px;">' + escHtml(sub._serviceType) + '</div>';
+  }
+  if (sub.jobRef) {
+    html += '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:4px;">' + escHtml(sub.jobRef) + '</div>';
+  }
+  html += '<div class="inv2-truck-row">'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Est:</span>'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);margin-left:4px;">' + (sub.estCost ? invFmt(sub.estCost) : '—') + '</span>'
+    + '</div>';
+  if (canEdit) {
+    html += '<div class="inv2-truck-row" style="margin-top:4px;">'
+      + '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Actual:</span>'
+      + '<input type="number" min="0" step="1" value="' + (sub.actualCost || '') + '" placeholder="0"'
+      + ' data-subid="' + escHtml(sub.id) + '" onchange="invSubCostUpdate(this)"'
+      + ' style="width:66px;background:rgba(0,0,0,0.25);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;padding:2px 5px;margin-left:4px;" />'
+      + '</div>';
+    html += '<div class="inv2-truck-row" style="margin-top:2px;">'
+      + '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Inv #:</span>'
+      + '<input type="text" value="' + escHtml(sub.invoiceNo || '') + '" placeholder="—"'
+      + ' data-subid="' + escHtml(sub.id) + '" onchange="invSubInvNoUpdate(this)"'
+      + ' style="flex:1;background:rgba(0,0,0,0.25);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;padding:2px 5px;margin-left:4px;" />'
+      + '</div>';
+  } else {
+    if (sub.actualCost) {
+      html += '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;">Actual: ' + invFmt(sub.actualCost) + '</div>';
+    }
+    if (sub.invoiceNo) {
+      html += '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Inv #: ' + escHtml(sub.invoiceNo) + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+// Sub inline edit save helpers
+function invSubCostUpdate(el) {
+  var id = el.dataset.subid || '';
+  var val = parseFloat(el.value) || 0;
+  var sched = (typeof schedData !== 'undefined') ? schedData : null;
+  if (id.startsWith('lb_')) {
+    try {
+      var parts = id.split('_'); // lb_YYYY-MM-DD_moveIdx
+      var lbDate = parts[1]; var mi = parseInt(parts[2]);
+      var plan = JSON.parse(localStorage.getItem('dmc_lowbed_plan') || 'null');
+      if (plan) {
+        var job = (plan.jobs || []).find(function(j) { return j.date === lbDate; });
+        if (job && job.moves && job.moves[mi]) {
+          job.moves[mi].actualCost = val;
+          localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+          if (typeof fbSet === 'function') try { fbSet('lowbed_plan', plan); } catch(e) {}
+        }
+      }
+    } catch(e) {}
+    return;
+  }
+  // QTR sub: id = 'fk_YYYY-MM-DD_slot'
+  var m = id.match(/^(qc|tack|rubber)_(\d{4}-\d{2}-\d{2})_(.+)$/);
+  if (m && sched) {
+    var fk = m[1], dk = m[2], sl = m[3];
+    var bdata = _invSubGetBlockData(sched, dk, sl);
+    if (bdata && bdata.fields && bdata.fields[fk] && typeof bdata.fields[fk] === 'object') {
+      bdata.fields[fk].cost = val;
+      if (typeof saveSchedData === 'function') saveSchedData();
+    }
+  }
+}
+
+function invSubInvNoUpdate(el) {
+  var id = el.dataset.subid || '';
+  var val = el.value.trim();
+  var sched = (typeof schedData !== 'undefined') ? schedData : null;
+  if (id.startsWith('lb_')) {
+    try {
+      var parts = id.split('_');
+      var lbDate = parts[1]; var mi = parseInt(parts[2]);
+      var plan = JSON.parse(localStorage.getItem('dmc_lowbed_plan') || 'null');
+      if (plan) {
+        var job = (plan.jobs || []).find(function(j) { return j.date === lbDate; });
+        if (job && job.moves && job.moves[mi]) {
+          job.moves[mi].towingInvoiceNo = val;
+          localStorage.setItem('dmc_lowbed_plan', JSON.stringify(plan));
+          if (typeof fbSet === 'function') try { fbSet('lowbed_plan', plan); } catch(e) {}
+        }
+      }
+    } catch(e) {}
+    return;
+  }
+  var m = id.match(/^(qc|tack|rubber)_(\d{4}-\d{2}-\d{2})_(.+)$/);
+  if (m && sched) {
+    var fk = m[1], dk = m[2], sl = m[3];
+    var bdata = _invSubGetBlockData(sched, dk, sl);
+    if (bdata && bdata.fields && bdata.fields[fk] && typeof bdata.fields[fk] === 'object') {
+      bdata.fields[fk].invoiceNo = val;
+      if (typeof saveSchedData === 'function') saveSchedData();
+    }
+  }
+}
+
+function _invSubGetBlockData(sched, dateKey, slot) {
+  var day = sched[dateKey] || {};
+  if (slot === 'top' || slot === 'bottom') return day[slot];
+  var xi = parseInt(slot.replace('extra_', ''));
+  return (day.extras && day.extras[xi]) ? day.extras[xi].data : null;
+}
+
 // ── Main render ────────────────────────────────────────────────────────────────
 function renderInvoiceTracker() {
   if (!_invMigrationDone) { _invMigrateBrokerRows(); _invMigrationDone = true; }
@@ -4031,8 +4237,33 @@ function renderInvoiceTracker() {
       return row;
     }).join('');
 
+    // Sub rows (Part 3b)
+    var subItems   = _invGetSubsForPeriod(activeDays.map(function(d) { return d.key; }));
+    var _SUB_ORDER = ['Milling', 'Grading', 'QC', 'Tack', 'Rubber', 'Lowbed'];
+    var subByType  = {};
+    subItems.forEach(function(sub) {
+      if (!subByType[sub.type]) subByType[sub.type] = {};
+      if (!subByType[sub.type][sub.date]) subByType[sub.type][sub.date] = [];
+      subByType[sub.type][sub.date].push(sub);
+    });
+    var subRows = '';
+    if (subItems.length > 0) {
+      subRows += '<div class="inv2-sub-divider">Subcontractors</div>';
+      _SUB_ORDER.forEach(function(typeName) {
+        if (!subByType[typeName]) return;
+        var row = '<div class="inv2-foreman-cell inv2-sub-type-lbl"><span>' + escHtml(typeName) + '</span></div>';
+        row += activeDays.map(function(day) {
+          var daySubs = (subByType[typeName] && subByType[typeName][day.key]) || [];
+          return '<div class="inv2-day-cell' + (daySubs.length === 0 ? ' inv2-cell-empty' : '') + '">'
+            + daySubs.map(function(sub) { return _invRenderSubCard(sub); }).join('')
+            + '</div>';
+        }).join('');
+        subRows += row;
+      });
+    }
+
     gridHtml = '<div class="inv2-grid" style="grid-template-columns:' + gridCols + ';">'
-      + hdr + dataRows + '</div>';
+      + hdr + dataRows + subRows + '</div>';
   }
 
   var totalBar = rows.length

@@ -1961,6 +1961,9 @@
   .inv2-editable:hover { background:rgba(255,255,255,0.07); }
   .inv2-inline-input { background:rgba(245,197,24,0.08); border:1px solid rgba(245,197,24,0.45); border-radius:3px; color:var(--white); font-family:'DM Sans',sans-serif; font-size:11px; padding:2px 4px; width:100%; box-sizing:border-box; outline:none; }
   textarea.inv2-inline-input { resize:vertical; min-height:32px; }
+  /* Sub divider row */
+  .inv2-sub-divider { grid-column:1/-1; background:rgba(90,180,245,0.08); border-top:1px solid rgba(90,180,245,0.25); border-bottom:1px solid rgba(90,180,245,0.15); padding:5px 14px; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:rgba(90,180,245,0.7); }
+  .inv2-sub-type-lbl { background:rgba(90,180,245,0.05); color:rgba(90,180,245,0.8); font-size:11px; }
   /* Total bar */
   .inv2-total-bar { margin:0 16px 16px; padding:10px 18px; background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
   .inv2-total-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); }
@@ -2776,6 +2779,11 @@
             <button class="btn btn-ghost btn-sm" id="rtab-authorities" onclick="switchRosterTab('authorities')">🏛 Awarding Authorities</button>
             <button class="btn btn-ghost btn-sm" id="rtab-specialactions" onclick="switchRosterTab('specialactions')">⚡ Special Actions</button>
             <button class="btn btn-ghost btn-sm" id="rtab-truckingbrokers" onclick="switchRosterTab('truckingbrokers')">🔵 Trucking Brokers</button>
+            <button class="btn btn-ghost btn-sm" id="rtab-millingsubs" onclick="switchRosterTab('millingsubs')">⛏️ Milling Subs</button>
+            <button class="btn btn-ghost btn-sm" id="rtab-qcsubs" onclick="switchRosterTab('qcsubs')">✅ QC Subs</button>
+            <button class="btn btn-ghost btn-sm" id="rtab-tacksubs" onclick="switchRosterTab('tacksubs')">🟡 Tack Subs</button>
+            <button class="btn btn-ghost btn-sm" id="rtab-rubbersubs" onclick="switchRosterTab('rubbersubs')">🔴 Rubber Subs</button>
+            <button class="btn btn-ghost btn-sm" id="rtab-towingsubs" onclick="switchRosterTab('towingsubs')">🚛 Towing Subs</button>
           </div>
           <div id="stng-roster-content"></div>
           <div id="stng-authorities-list" style="display:none;"></div>
@@ -26848,7 +26856,7 @@ function renderSettingsScheduleColors() {
 }
 
 function switchRosterTab(type) {
-  ['foremans','employees','rentalcrews','equipment','material','suppliers','authorities','specialactions','truckingbrokers'].forEach(t => {
+  ['foremans','employees','rentalcrews','equipment','material','suppliers','authorities','specialactions','truckingbrokers','millingsubs','qcsubs','tacksubs','rubbersubs','towingsubs'].forEach(t => {
     const btn = document.getElementById('rtab-' + t);
     if (btn) { btn.style.borderColor = t===type ? 'var(--stripe)' : ''; btn.style.color = t===type ? 'var(--stripe)' : ''; }
   });
@@ -26932,6 +26940,13 @@ function switchRosterTab(type) {
     renderSettingsTruckingBrokers(rosterEl);
     return;
   }
+
+  // Subcontractor roster tabs
+  if (type === 'millingsubs') { renderSettingsMillingSubs(rosterEl); return; }
+  if (type === 'qcsubs')      { renderSettingsQcSubs(rosterEl);      return; }
+  if (type === 'tacksubs')    { renderSettingsTackSubs(rosterEl);    return; }
+  if (type === 'rubbersubs')  { renderSettingsRubberSubs(rosterEl);  return; }
+  if (type === 'towingsubs')  { renderSettingsTowingSubs(rosterEl);  return; }
 
   const list = operatorsList;
   const inputId = 'stng-roster-new-op';
@@ -27157,6 +27172,197 @@ function stngAddTruckingBroker() {
   }
   if (inp) inp.value = '';
   renderSettingsTruckingBrokers(document.getElementById('stng-roster-content'));
+}
+
+
+function renderSettingsMillingSubs(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">
+      Milling subcontractors — used for schedule chips and invoice reporting.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="stng-millingsubs-chips">
+      ${millingSubsList.map((b, i) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;">
+          <span style="font-size:16px;">⛏️</span>
+          <div contenteditable="true"
+            style="flex:1;font-size:13px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;"
+            onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
+            onblur="millingSubsList[${i}]=this.innerText.trim()||millingSubsList[${i}];saveMillingSubsList();this.style.borderBottomColor='transparent'"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+          >${escHtml(b)}</div>
+          <button onclick="millingSubsList.splice(${i},1);saveMillingSubsList();switchRosterTab('millingsubs');"
+            style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:13px;padding:0 3px;transition:color 0.1s;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--concrete-dim)'"
+            title="Remove ${escHtml(b)}">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input class="form-input" id="stng-new-millingsub" placeholder="New milling sub name…" style="flex:1;" />
+      <button class="btn btn-primary btn-sm" onclick="stngAddMillingSub()">+ Add</button>
+    </div>`;
+  const inp = el.querySelector('#stng-new-millingsub');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') stngAddMillingSub(); });
+}
+function stngAddMillingSub() {
+  const inp = document.getElementById('stng-new-millingsub');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); return; }
+  if (!millingSubsList.includes(name)) { millingSubsList.push(name); saveMillingSubsList(); }
+  if (inp) inp.value = '';
+  renderSettingsMillingSubs(document.getElementById('stng-roster-content'));
+}
+
+function renderSettingsQcSubs(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">
+      QC subcontractors — used for schedule and invoice reporting.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="stng-qcsubs-chips">
+      ${qcSubsList.map((b, i) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;">
+          <span style="font-size:16px;">✅</span>
+          <div contenteditable="true"
+            style="flex:1;font-size:13px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;"
+            onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
+            onblur="qcSubsList[${i}]=this.innerText.trim()||qcSubsList[${i}];saveQcSubsList();this.style.borderBottomColor='transparent'"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+          >${escHtml(b)}</div>
+          <button onclick="qcSubsList.splice(${i},1);saveQcSubsList();switchRosterTab('qcsubs');"
+            style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:13px;padding:0 3px;transition:color 0.1s;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--concrete-dim)'"
+            title="Remove ${escHtml(b)}">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input class="form-input" id="stng-new-qcsub" placeholder="New QC sub name…" style="flex:1;" />
+      <button class="btn btn-primary btn-sm" onclick="stngAddQcSub()">+ Add</button>
+    </div>`;
+  const inp = el.querySelector('#stng-new-qcsub');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') stngAddQcSub(); });
+}
+function stngAddQcSub() {
+  const inp = document.getElementById('stng-new-qcsub');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); return; }
+  if (!qcSubsList.includes(name)) { qcSubsList.push(name); saveQcSubsList(); }
+  if (inp) inp.value = '';
+  renderSettingsQcSubs(document.getElementById('stng-roster-content'));
+}
+
+function renderSettingsTackSubs(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">
+      Tack coat subcontractors — used for schedule and invoice reporting.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="stng-tacksubs-chips">
+      ${tackSubsList.map((b, i) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;">
+          <span style="font-size:16px;">🟡</span>
+          <div contenteditable="true"
+            style="flex:1;font-size:13px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;"
+            onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
+            onblur="tackSubsList[${i}]=this.innerText.trim()||tackSubsList[${i}];saveTackSubsList();this.style.borderBottomColor='transparent'"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+          >${escHtml(b)}</div>
+          <button onclick="tackSubsList.splice(${i},1);saveTackSubsList();switchRosterTab('tacksubs');"
+            style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:13px;padding:0 3px;transition:color 0.1s;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--concrete-dim)'"
+            title="Remove ${escHtml(b)}">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input class="form-input" id="stng-new-tacksub" placeholder="New tack sub name…" style="flex:1;" />
+      <button class="btn btn-primary btn-sm" onclick="stngAddTackSub()">+ Add</button>
+    </div>`;
+  const inp = el.querySelector('#stng-new-tacksub');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') stngAddTackSub(); });
+}
+function stngAddTackSub() {
+  const inp = document.getElementById('stng-new-tacksub');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); return; }
+  if (!tackSubsList.includes(name)) { tackSubsList.push(name); saveTackSubsList(); }
+  if (inp) inp.value = '';
+  renderSettingsTackSubs(document.getElementById('stng-roster-content'));
+}
+
+function renderSettingsRubberSubs(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">
+      Rubber crack seal subcontractors — used for schedule and invoice reporting.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="stng-rubbersubs-chips">
+      ${rubberSubsList.map((b, i) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;">
+          <span style="font-size:16px;">🔴</span>
+          <div contenteditable="true"
+            style="flex:1;font-size:13px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;"
+            onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
+            onblur="rubberSubsList[${i}]=this.innerText.trim()||rubberSubsList[${i}];saveRubberSubsList();this.style.borderBottomColor='transparent'"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+          >${escHtml(b)}</div>
+          <button onclick="rubberSubsList.splice(${i},1);saveRubberSubsList();switchRosterTab('rubbersubs');"
+            style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:13px;padding:0 3px;transition:color 0.1s;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--concrete-dim)'"
+            title="Remove ${escHtml(b)}">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input class="form-input" id="stng-new-rubbersub" placeholder="New rubber sub name…" style="flex:1;" />
+      <button class="btn btn-primary btn-sm" onclick="stngAddRubberSub()">+ Add</button>
+    </div>`;
+  const inp = el.querySelector('#stng-new-rubbersub');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') stngAddRubberSub(); });
+}
+function stngAddRubberSub() {
+  const inp = document.getElementById('stng-new-rubbersub');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); return; }
+  if (!rubberSubsList.includes(name)) { rubberSubsList.push(name); saveRubberSubsList(); }
+  if (inp) inp.value = '';
+  renderSettingsRubberSubs(document.getElementById('stng-roster-content'));
+}
+
+function renderSettingsTowingSubs(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">
+      Towing / lowbed companies — used for lowbed plan and invoice reporting.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" id="stng-towingsubs-chips">
+      ${towingSubsList.map((b, i) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;">
+          <span style="font-size:16px;">🚛</span>
+          <div contenteditable="true"
+            style="flex:1;font-size:13px;color:var(--white);outline:none;border-bottom:1px dashed transparent;cursor:text;"
+            onfocus="this.style.borderBottomColor='rgba(245,197,24,0.5)'"
+            onblur="towingSubsList[${i}]=this.innerText.trim()||towingSubsList[${i}];saveTowingSubsList();this.style.borderBottomColor='transparent'"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+          >${escHtml(b)}</div>
+          <button onclick="towingSubsList.splice(${i},1);saveTowingSubsList();switchRosterTab('towingsubs');"
+            style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:13px;padding:0 3px;transition:color 0.1s;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--concrete-dim)'"
+            title="Remove ${escHtml(b)}">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input class="form-input" id="stng-new-towingsub" placeholder="New towing company name…" style="flex:1;" />
+      <button class="btn btn-primary btn-sm" onclick="stngAddTowingSub()">+ Add</button>
+    </div>`;
+  const inp = el.querySelector('#stng-new-towingsub');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') stngAddTowingSub(); });
+}
+function stngAddTowingSub() {
+  const inp = document.getElementById('stng-new-towingsub');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); return; }
+  if (!towingSubsList.includes(name)) { towingSubsList.push(name); saveTowingSubsList(); }
+  if (inp) inp.value = '';
+  renderSettingsTowingSubs(document.getElementById('stng-roster-content'));
 }
 
 function stngAddRosterItem(type, inputId) {
