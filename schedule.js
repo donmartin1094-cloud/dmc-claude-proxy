@@ -8516,11 +8516,14 @@ function autoFillActualDmc() {
 function autoFillActualBrk() {
   const id = _getInvModalEditId();
   const inv = id ? invoiceList.find(i => i.id === id) : null;
-  const pt = inv ? calcProjectedTrucking(inv) : { brkCount:0, brkCost:0 };
-  const cEl = document.getElementById('invActBrkCount');
-  const vEl = document.getElementById('invActBrkCost');
-  if (cEl) cEl.value = pt.brkCount || '';
-  if (vEl) vEl.value = pt.brkCost  ? pt.brkCost.toFixed(2) : '';
+  const pt = inv ? calcProjectedTrucking(inv) : { brokerBreakdown: {} };
+  const bd = pt.brokerBreakdown || {};
+  if (typeof _invModalBrkRows !== 'undefined') {
+    _invModalBrkRows = Object.keys(bd).map(function(name) {
+      return { name: name, count: bd[name].count || 0, cost: parseFloat((bd[name].cost || 0).toFixed(2)) };
+    });
+    if (typeof renderInvModalBrkRows === 'function') renderInvModalBrkRows();
+  }
 }
 function autoFillActualSup() {
   const id = _getInvModalEditId();

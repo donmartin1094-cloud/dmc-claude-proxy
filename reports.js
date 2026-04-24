@@ -2,6 +2,8 @@
 
 var reportsFolderCollapsed = {};
 var reportsDailyViewMode = {}; // { [foreman]: 'month' | 'year' } per foreman folder
+var _invMigrationDone = false;
+var _invModalBrkRows = [];
 
 // ── Reports Print / Export Utilities ─────────────────────────────────────────
 
@@ -3489,6 +3491,23 @@ function invWeekLabel(offset) {
     + fri.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// ── Migration: promote flat brkCount/brkCost to brkRows array ─────────────────
+function _invMigrateBrokerRows() {
+  var changed = false;
+  invoiceList.forEach(function(inv) {
+    if (!inv.actualTrucking) return;
+    if (!inv.actualTrucking.brkRows) {
+      var count = inv.actualTrucking.brkCount || 0;
+      var cost  = inv.actualTrucking.brkCost  || 0;
+      inv.actualTrucking.brkRows = (count > 0 || cost > 0)
+        ? [{ name: 'Broker', count: count, cost: cost }]
+        : [];
+      changed = true;
+    }
+  });
+  if (changed) saveInvoiceList();
+}
+
 // ── Billed total: sum of mix item totals + supplier truck cost ─────────────────
 function invCardBilledTotal(inv) {
   var mix = (inv.mixItems || []).reduce(function(s, m) {
@@ -3538,6 +3557,112 @@ function invTruckInlineEdit(id, field, value) {
   inv.updatedAt = Date.now();
   saveInvoiceList();
   _invRefreshBilled(id);
+}
+
+// ── Broker row inline edit helpers ─────────────────────────────────────────────
+function invBrkRowInlineEdit(invId, rowIdx, field, value) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv || !inv.actualTrucking) return;
+  var rows = inv.actualTrucking.brkRows || [];
+  if (!rows[rowIdx]) return;
+  rows[rowIdx][field] = (field === 'name') ? value : (parseFloat(value) || 0);
+  inv.actualTrucking.brkRows  = rows;
+  inv.actualTrucking.brkCount = rows.reduce(function(s, r) { return s + (r.count || 0); }, 0);
+  inv.actualTrucking.brkCost  = rows.reduce(function(s, r) { return s + (r.cost  || 0); }, 0);
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  _invRefreshBilled(invId);
+}
+
+function invAddBrkRow(invId) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  if (!inv.actualTrucking) inv.actualTrucking = {};
+  if (!Array.isArray(inv.actualTrucking.brkRows)) inv.actualTrucking.brkRows = [];
+  inv.actualTrucking.brkRows.push({ name: '', count: 0, cost: 0 });
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  var card = document.getElementById('inv2-card-' + invId);
+  if (card) card.outerHTML = _invRenderCard(inv);
+}
+
+function invRemoveBrkRow(invId, rowIdx) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv || !inv.actualTrucking || !Array.isArray(inv.actualTrucking.brkRows)) return;
+  inv.actualTrucking.brkRows.splice(rowIdx, 1);
+  inv.actualTrucking.brkCount = inv.actualTrucking.brkRows.reduce(function(s, r) { return s + (r.count || 0); }, 0);
+  inv.actualTrucking.brkCost  = inv.actualTrucking.brkRows.reduce(function(s, r) { return s + (r.cost  || 0); }, 0);
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  _invRefreshBilled(invId);
+  var card = document.getElementById('inv2-card-' + invId);
+  if (card) card.outerHTML = _invRenderCard(inv);
+}
+
+function invBrkActivateEdit(el) {
+  if (el.querySelector('input,select')) return;
+  var invId  = el.dataset.inv;
+  var rowIdx = parseInt(el.dataset.brkidx);
+  var field  = el.dataset.field;
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv || !inv.actualTrucking || !inv.actualTrucking.brkRows) return;
+  var row = inv.actualTrucking.brkRows[rowIdx];
+  if (!row) return;
+  var rawVal = row[field];
+  var saved = false;
+  var ctl;
+  if (field === 'name') {
+    var brokers = typeof truckingBrokersList !== 'undefined' ? truckingBrokersList : [];
+    if (brokers.length) {
+      ctl = document.createElement('select');
+      ctl.className = 'inv2-inline-input';
+      ctl.style.width = '100%';
+      ctl.innerHTML = '<option value="">— select —</option>'
+        + brokers.map(function(b) {
+            return '<option value="' + escHtml(b) + '"' + (b === rawVal ? ' selected' : '') + '>' + escHtml(b) + '</option>';
+          }).join('');
+    } else {
+      ctl = document.createElement('input');
+      ctl.className = 'inv2-inline-input';
+      ctl.type = 'text';
+      ctl.value = rawVal || '';
+    }
+  } else {
+    ctl = document.createElement('input');
+    ctl.className = 'inv2-inline-input';
+    ctl.type = 'number';
+    ctl.step = '0.01';
+    ctl.min = '0';
+    ctl.value = rawVal || '';
+  }
+  el.innerHTML = '';
+  el.appendChild(ctl);
+  ctl.focus();
+  if (ctl.select && field !== 'name') ctl.select();
+  function doSave() {
+    if (saved) return;
+    saved = true;
+    var val = ctl.value.trim();
+    invBrkRowInlineEdit(invId, rowIdx, field, val);
+    var updInv = invoiceList.find(function(i) { return i.id === invId; });
+    var updRow = (updInv && updInv.actualTrucking && updInv.actualTrucking.brkRows || [])[rowIdx];
+    if (updRow) {
+      if (field === 'name')        el.textContent = updRow.name || '—';
+      else if (field === 'count')  el.textContent = updRow.count || '—';
+      else                         el.textContent = updRow.cost && parseFloat(updRow.cost) ? invFmt(parseFloat(updRow.cost)) : '—';
+    } else {
+      el.textContent = val || '—';
+    }
+  }
+  ctl.onblur = doSave;
+  ctl.onkeydown = function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); ctl.blur(); }
+    if (e.key === 'Escape') {
+      saved = true; ctl.onblur = null; ctl.blur();
+      el.textContent = (rawVal !== undefined && rawVal !== null && rawVal !== '') ? String(rawVal) : '—';
+    }
+  };
+  if (field === 'name') ctl.onchange = doSave;
 }
 
 // ── Live DOM refresh helpers ───────────────────────────────────────────────────
@@ -3772,7 +3897,24 @@ function _invRenderCard(inv) {
     +   '<div class="inv2-trucking">'
     +     '<div class="inv2-truck-hdr">Trucking</div>'
     +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟡</span><span class="inv2-truck-lbl">DMC</span>' + edTruckCount('dmcCount', at.dmcCount) + edTruckCost('dmcCost', at.dmcCost) + '</div>'
-    +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🔵</span><span class="inv2-truck-lbl">Broker</span>' + edTruckCount('brkCount', at.brkCount) + edTruckCost('brkCost', at.brkCost) + '</div>'
+    +     (function() {
+            var brkRows = at.brkRows || [];
+            var rowsHtml = brkRows.length
+              ? brkRows.map(function(br, i) {
+                  return '<div class="inv2-truck-row">'
+                    + '<span class="inv2-truck-icon">🔵</span>'
+                    + '<span class="inv2-editable inv2-truck-lbl" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="name" onclick="invBrkActivateEdit(this)" title="Click to change broker">' + escHtml(br.name || '—') + '</span>'
+                    + '<span class="inv2-editable inv2-truck-count" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="count" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.count || '—') + '</span>'
+                    + '<span class="inv2-editable inv2-truck-cost" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="cost" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.cost && parseFloat(br.cost) ? invFmt(parseFloat(br.cost)) : '—') + '</span>'
+                    + (canEdit ? '<button style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:11px;padding:0 3px;line-height:1;" onclick="event.stopPropagation();invRemoveBrkRow(\'' + inv.id + '\',' + i + ')" title="Remove">✕</button>' : '')
+                    + '</div>';
+                }).join('')
+              : '<div class="inv2-truck-row"><span class="inv2-truck-icon">🔵</span><span class="inv2-truck-lbl" style="color:var(--concrete-dim);font-style:italic;">No broker trucks</span></div>';
+            var addBtn = canEdit
+              ? '<button style="font-size:10px;padding:1px 6px;margin:1px 0 3px;background:none;border:1px dashed rgba(126,203,143,0.3);border-radius:3px;color:var(--concrete-dim);cursor:pointer;width:100%;" onclick="event.stopPropagation();invAddBrkRow(\'' + inv.id + '\')">+ Broker</button>'
+              : '';
+            return rowsHtml + addBtn;
+          }())
     +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟢</span><span class="inv2-truck-lbl">Supplier</span>' + edTruckCount('supCount', at.supCount) + edTruckCost('supCost', at.supCost) + '</div>'
     +   '</div>'
 
@@ -3809,6 +3951,7 @@ function _invRenderCard(inv) {
 
 // ── Main render ────────────────────────────────────────────────────────────────
 function renderInvoiceTracker() {
+  if (!_invMigrationDone) { _invMigrateBrokerRows(); _invMigrationDone = true; }
   var wrap = document.getElementById('invoiceView');
   if (!wrap) return;
 
@@ -3964,6 +4107,23 @@ function openInvoiceModal(id, prefill) {
   }
 
   var at = (inv && inv.actualTrucking) || {};
+
+  // Init modal broker rows from existing invoice or from schedule prefill
+  _invModalBrkRows = [];
+  if (isEdit && Array.isArray(at.brkRows)) {
+    _invModalBrkRows = at.brkRows.map(function(r) { return { name: r.name || '', count: r.count || 0, cost: r.cost || 0 }; });
+  } else if (!isEdit && p.dateOfWork) {
+    try {
+      var _ms = typeof foremanRoster !== 'undefined' ? foremanRoster : [];
+      var _pSlot = (p.foreman && _ms[1] && p.foreman === _ms[1]) ? 'bottom' : 'top';
+      var _pDay  = (typeof schedData !== 'undefined' ? schedData[p.dateOfWork] : null) || {};
+      var _pTd   = JSON.parse(((_pDay[_pSlot] || {}).fields || {}).trucking || '{}');
+      (_pTd.brokerTrucks || []).filter(function(t) { return t.trim(); }).forEach(function(name) {
+        _invModalBrkRows.push({ name: name, count: 0, cost: 0 });
+      });
+    } catch(e) {}
+  }
+
   var overlay = document.createElement('div');
   overlay.id = 'invModal';
   overlay.className = 'inv-modal-overlay';
@@ -3993,9 +4153,14 @@ function openInvoiceModal(id, prefill) {
     +     '<div><label class="inv-form-label">DMC Trucks (actual #)</label><input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="' + (at.dmcCount || p.truckCount || '') + '" style="width:100%;" /></div>'
     +     '<div><label class="inv-form-label">DMC Truck Cost ($)</label><input class="inv-input" id="invActDmcCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.dmcCost || '') + '" style="width:100%;" /></div>'
     +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualDmc()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
-    +     '<div><label class="inv-form-label">Broker Trucks (actual #)</label><input class="inv-input" id="invActBrkCount" type="number" min="0" step="1" placeholder="0" value="' + (at.brkCount || '') + '" style="width:100%;" /></div>'
-    +     '<div><label class="inv-form-label">Broker Truck Cost ($)</label><input class="inv-input" id="invActBrkCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.brkCost || '') + '" style="width:100%;" /></div>'
-    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualBrk()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
+    +     '<div style="grid-column:1/-1;">'
+    +       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+    +         '<span style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Broker Trucks</span>'
+    +         '<button onclick="invAddModalBrkRow()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">+ Add</button>'
+    +         '<button onclick="autoFillActualBrk()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">↙ Use Projected</button>'
+    +       '</div>'
+    +       '<div id="invModalBrkRows"></div>'
+    +     '</div>'
     +     '<div><label class="inv-form-label">Supplier Trucks (actual #)</label><input class="inv-input" id="invActSupCount" type="number" min="0" step="1" placeholder="0" value="' + (at.supCount || '') + '" style="width:100%;" /></div>'
     +     '<div><label class="inv-form-label">Supplier Truck Cost ($)</label><input class="inv-input" id="invActSupCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.supCost || '') + '" style="width:100%;" /></div>'
     +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualSup()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
@@ -4024,6 +4189,40 @@ function openInvoiceModal(id, prefill) {
   overlay._mixCount = mixItems.length;
   window._invAttachments = ((inv && inv.attachments) || []).map(function(a) { return Object.assign({}, a); });
   if (typeof invRenderAttList === 'function') invRenderAttList();
+  renderInvModalBrkRows();
+}
+
+function renderInvModalBrkRows() {
+  var el = document.getElementById('invModalBrkRows');
+  if (!el) return;
+  var brokers = typeof truckingBrokersList !== 'undefined' ? truckingBrokersList : [];
+  if (!_invModalBrkRows.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--concrete-dim);padding:4px 0;font-style:italic;">No broker trucks — click + Add to add one.</div>';
+    return;
+  }
+  el.innerHTML = _invModalBrkRows.map(function(row, i) {
+    var nameField;
+    if (brokers.length) {
+      var opts = '<option value="">— select broker —</option>'
+        + brokers.map(function(b) {
+            return '<option value="' + escHtml(b) + '"' + (b === row.name ? ' selected' : '') + '>' + escHtml(b) + '</option>';
+          }).join('');
+      nameField = '<select class="inv-input" oninput="_invModalBrkRows[' + i + '].name=this.value" style="font-size:12px;">' + opts + '</select>';
+    } else {
+      nameField = '<input class="inv-input" placeholder="Broker name" value="' + escHtml(row.name || '') + '" oninput="_invModalBrkRows[' + i + '].name=this.value" style="font-size:12px;" />';
+    }
+    return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:6px;margin-bottom:4px;">'
+      + nameField
+      + '<input class="inv-input" type="number" min="0" step="1" placeholder="# trucks" value="' + (row.count || '') + '" oninput="_invModalBrkRows[' + i + '].count=parseFloat(this.value)||0" style="font-size:12px;" />'
+      + '<input class="inv-input" type="number" min="0" step="0.01" placeholder="$cost" value="' + (row.cost || '') + '" oninput="_invModalBrkRows[' + i + '].cost=parseFloat(this.value)||0" style="font-size:12px;" />'
+      + '<button onclick="_invModalBrkRows.splice(' + i + ',1);renderInvModalBrkRows();" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:0 4px;align-self:center;">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function invAddModalBrkRow() {
+  _invModalBrkRows.push({ name: '', count: 0, cost: 0 });
+  renderInvModalBrkRows();
 }
 
 function addInvMixRow() {
@@ -4102,7 +4301,9 @@ function saveInvoiceEntry(editId) {
     mixItems:    mixItems,
     actualTrucking: {
       dmcCount: gn('invActDmcCount'), dmcCost: gn('invActDmcCost'),
-      brkCount: gn('invActBrkCount'), brkCost: gn('invActBrkCost'),
+      brkRows:  _invModalBrkRows.slice(),
+      brkCount: _invModalBrkRows.reduce(function(s, r) { return s + (r.count || 0); }, 0),
+      brkCost:  _invModalBrkRows.reduce(function(s, r) { return s + (r.cost  || 0); }, 0),
       supCount: gn('invActSupCount'), supCost: gn('invActSupCost')
     },
     updatedAt:      Date.now(),
