@@ -1850,18 +1850,80 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
+     MAIL — back bar / reply bar / compose handle: desktop hidden
+     ════════════════════════════════════════════════════════════════════════ */
+  .mail-viewer-backbar  { display: none; }
+  .mail-viewer-replybar { display: none; }
+  .mail-compose-handle  { display: none; }
+
+  /* ════════════════════════════════════════════════════════════════════════
      MAIL — mobile responsive layout
      ════════════════════════════════════════════════════════════════════════ */
   @media (max-width: 768px) {
-    #mailPanels  { flex-direction: column !important; }
-    #mailFolders { width: 100% !important; max-height: 44px !important; flex-direction: row !important;
-                   overflow-x: auto !important; overflow-y: hidden !important; flex-shrink: 0 !important;
-                   border-right: none !important; border-bottom: 1px solid var(--asphalt-light) !important;
-                   padding: 0 !important; }
-    #mailFolders > div { flex-shrink: 0; padding: 8px 14px !important; }
-    #mailList    { width: 100% !important; max-height: 40vh !important; flex-shrink: 0 !important;
-                   border-right: none !important; border-bottom: 1px solid var(--asphalt-light) !important; }
-    #mailViewer  { width: 100% !important; flex: 1 !important; min-height: 200px !important; min-width: 0 !important; }
+    /* Header: collapse desktop overflow group, show ⋯ button, hide verbose status */
+    #mailHdrOverflow { display: none !important; }
+    #mailMobMenuBtn  { display: flex !important; align-items: center; }
+    #mailStatus      { display: none !important; }
+
+    /* Panels: stack vertically, exclusive single-panel view */
+    #mailPanels { flex-direction: column !important; }
+
+    /* IMAP folder strip: full-width 36px horizontal scroll row */
+    #mailFolders {
+      width: 100% !important; height: 36px !important; max-height: 36px !important;
+      flex-direction: row !important; overflow-x: auto !important; overflow-y: hidden !important;
+      flex-shrink: 0 !important; align-items: center !important;
+      border-right: none !important; border-bottom: 1px solid var(--asphalt-light) !important;
+      padding: 0 6px !important; gap: 4px !important; scrollbar-width: none;
+    }
+    #mailFolders::-webkit-scrollbar { display: none; }
+    #mailFolders > div {
+      flex-shrink: 0 !important; padding: 6px 12px !important;
+      font-size: 11px !important; white-space: nowrap;
+    }
+
+    /* Redundant static "Inbox" label — hide */
+    #mailListHdr { display: none !important; }
+
+    /* Category tabs: horizontal scroll row, no wrap, Safari pill style */
+    #mailCategoryTabs {
+      overflow-x: auto !important; overflow-y: hidden !important;
+      flex-wrap: nowrap !important; padding: 6px 8px !important;
+      gap: 5px !important; scrollbar-width: none !important;
+    }
+    #mailCategoryTabs::-webkit-scrollbar { display: none; }
+
+    /* Message list: full width, fills all remaining height */
+    #mailList {
+      width: 100% !important; flex: 1 !important;
+      max-height: none !important; flex-shrink: 1 !important;
+      border-right: none !important; border-bottom: none !important;
+    }
+
+    /* Viewer: hidden by default; shown when mail-viewing class is on #mailApp */
+    #mailViewer { display: none !important; }
+    #mailApp.mail-viewing #mailList   { display: none !important; }
+    #mailApp.mail-viewing #mailViewer { display: flex !important; flex: 1 !important; width: 100% !important; min-width: 0 !important; }
+
+    /* Folder mode: hide category tabs, show folder back bar */
+    #mailFolderBackBtn { display: none; }
+    #mailApp.mail-folder-mode #mailCategoryTabs  { display: none !important; }
+    #mailApp.mail-folder-mode #mailFolderBackBtn { display: flex !important; }
+
+    /* Back bar and reply bar inside viewer */
+    .mail-viewer-backbar  { display: flex !important; }
+    .mail-viewer-replybar { display: flex !important; }
+
+    /* Compose drag handle */
+    .mail-compose-handle { display: flex !important; }
+
+    /* Compose modal: full-width bottom sheet */
+    #mailComposeModal {
+      right: 0 !important; left: 0 !important;
+      width: 100% !important; max-width: 100% !important;
+      border-radius: 16px 16px 0 0 !important;
+      max-height: 75vh !important; overflow-y: auto !important;
+    }
   }
 
   /* ════════════════════════════════════════════════════════════════════════
@@ -14647,6 +14709,8 @@ var _bidRequests          = [];
 var _schedulingRequests   = [];
 var _mailScannedUids      = {};
 var _mailBatchScanRunning = false;
+var _mailMobileView       = 'list';  // 'list' | 'viewer'
+var _mailActiveFolderMode = false;   // true when non-Inbox IMAP folder is selected
 
 function _mailGetCategory(msg) {
   var uid = msg.uid;
@@ -14670,20 +14734,22 @@ function _mailMsgRowHtml(m, folder) {
   var dt      = m.date ? _mailFmtDate(new Date(m.date)) : '';
   var unread  = !m.seen;
   var flagged = m.flagged;
+  var preview = m.preview || m.snippet || '';
   return '<div onclick="_mailOpenMessage('+m.uid+',\''+escHtml(folder)+'\')"'+
     ' id="mailRow_'+m.uid+'"'+
     ' data-flagged="'+(flagged?'1':'0')+'"'+
     ' data-unread="'+(unread?'1':'0')+'"'+
-    ' style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+
+    ' style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;min-height:56px;box-sizing:border-box;'+
     (unread ? 'background:rgba(245,197,24,0.04);' : '')+'"'+
     ' onmouseover="this.style.background=\'rgba(255,255,255,0.06)\'" onmouseout="this.style.background=\''+(unread?'rgba(245,197,24,0.04)':'')+'\'">'+
-    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">'+
       '<span id="mailDot_'+m.uid+'" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;'+(unread?'background:var(--stripe);':'')+'"></span>'+
       '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:12px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
       '<span id="mailFlag_'+m.uid+'" style="color:var(--stripe);font-size:10px;'+(flagged?'':'display:none;')+'">★</span>'+
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">'+escHtml(dt)+'</div>'+
     '</div>'+
-    '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
+    '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
+    (preview ? '<div style="font-size:11px;color:var(--concrete-dim);opacity:0.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:12px;margin-top:1px;">'+escHtml(preview)+'</div>' : '')+
   '</div>';
 }
 
@@ -14754,27 +14820,47 @@ function _mailRenderCategoryTabs() {
   var el = document.getElementById('mailCategoryTabs');
   if (!el) return;
   var cats = [
-    { id:'all',         label:'All' },
-    { id:'inbox',       label:'Inbox' },
-    { id:'promotions',  label:'Promos' },
-    { id:'purchases',   label:'Purchases' },
+    { id:'all',                label:'All' },
+    { id:'inbox',              label:'Inbox' },
+    { id:'promotions',         label:'Promos' },
+    { id:'purchases',          label:'Purchases' },
     { id:'bidrequests',        label:'Bids' },
-    { id:'schedulingrequests', label:'Sched' }
+    { id:'schedulingrequests', label:'Schedule' }
   ];
   var counts = { all: _mailMessages.length, inbox: 0, promotions: 0, purchases: 0, bidrequests: 0, schedulingrequests: 0 };
+  var unread  = { all: 0, inbox: 0, promotions: 0, purchases: 0, bidrequests: 0, schedulingrequests: 0 };
   _mailMessages.forEach(function(m) {
     var cat = _mailGetCategory(m);
     if (counts[cat] !== undefined) counts[cat]++;
+    if (!m.seen) {
+      if (unread[cat] !== undefined) unread[cat]++;
+      unread.all++;
+    }
   });
   el.innerHTML = cats.map(function(c) {
     var active = _mailActiveCategory === c.id;
     var cnt    = counts[c.id] || 0;
+    var unrd   = unread[c.id] || 0;
+    var badge  = unrd > 0
+      ? '<span style="display:inline-flex;align-items:center;justify-content:center;'+
+          'background:'+(active?'rgba(0,0,0,0.2)':'var(--stripe)')+';'+
+          'color:'+(active?'var(--asphalt)':'var(--asphalt)')+';'+
+          'border-radius:8px;min-width:14px;height:14px;font-size:7px;font-weight:700;padding:0 3px;margin-left:2px;">'+
+          unrd+'</span>'
+      : (cnt > 0 ? '<span style="opacity:0.5;font-size:8px;margin-left:2px;">'+cnt+'</span>' : '');
     return '<button onclick="_mailSelectCategory(\''+c.id+'\')"'+
-      ' style="background:'+(active?'var(--stripe)':'rgba(255,255,255,0.06)')+';'+
-      'color:'+(active?'var(--asphalt)':'var(--concrete-dim)')+';'+
-      'border:none;border-radius:var(--radius);padding:3px 8px;'+
-      'font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;white-space:nowrap;">'+
-      escHtml(c.label)+(cnt ? ' <span style="opacity:0.65;">'+cnt+'</span>' : '')+
+      ' style="'+
+        'background:'+(active?'var(--stripe)':'transparent')+';'+
+        'color:'+(active?'var(--asphalt)':'rgba(200,190,180,0.7)')+';'+
+        'border:none;border-radius:20px;'+
+        'padding:'+(active?'5px 14px':'4px 10px')+';'+
+        'font-family:\'DM Mono\',monospace;'+
+        'font-size:'+(active?'11px':'9px')+';'+
+        'font-weight:'+(active?'700':'400')+';'+
+        'cursor:pointer;white-space:nowrap;flex-shrink:0;'+
+        'transition:background 0.15s,color 0.15s,padding 0.15s,font-size 0.15s;'+
+      '">'+
+      escHtml(c.label)+badge+
     '</button>';
   }).join('');
 }
@@ -15141,33 +15227,48 @@ function _mailBuildApp(wrap, acct) {
     '<div id="mailApp" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">'+
 
       // Header
-      '<div style="flex-shrink:0;background:var(--asphalt-mid);border-bottom:1px solid var(--asphalt-light);padding:7px 16px;display:flex;align-items:center;gap:10px;">'+
-        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:3px;color:var(--white);">✉️ Mail</div>'+
-        '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">'+escHtml(acct.email)+'</div>'+
-        '<div style="flex:1;"></div>'+
-        '<span id="mailStatus" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);"></span>'+
+      '<div id="mailHdr" style="flex-shrink:0;background:var(--asphalt-mid);border-bottom:1px solid var(--asphalt-light);padding:7px 10px;display:flex;align-items:center;gap:8px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:3px;color:var(--white);flex-shrink:0;">✉️ Mail</div>'+
+        '<div id="mailHdrEmail" style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+escHtml(acct.email)+'</div>'+
+        '<span id="mailStatus" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;white-space:nowrap;"></span>'+
         '<button onclick="openMailCompose({})"'+
-          ' style="background:var(--stripe);border:none;border-radius:var(--radius);padding:5px 14px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;cursor:pointer;">'+
+          ' style="background:var(--stripe);border:none;border-radius:var(--radius);padding:5px 14px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;cursor:pointer;flex-shrink:0;">'+
           '✏ Compose'+
         '</button>'+
         '<button onclick="_mailRefresh()"'+
-          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;flex-shrink:0;">'+
           '↻'+
         '</button>'+
+        // Desktop-only overflow group (hidden on mobile via CSS)
+        '<div id="mailHdrOverflow" style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'+
+          (isAdmin
+            ? '<button onclick="_mailShowAdminSetup()"'+
+                ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Configure mail accounts">'+
+                '⚙ Accounts'+
+              '</button>'
+            : '')+
+          '<button onclick="_mailShowBidLog()"'+
+            ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Bid requests log">'+
+            '📋 Bid Log'+
+          '</button>'+
+          '<button onclick="_mailShowSchedLog()"'+
+            ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Scheduling requests log">'+
+            '📅 Sched Log'+
+          '</button>'+
+        '</div>'+
+        // Mobile ⋯ overflow button (shown on mobile via CSS, hidden on desktop)
+        '<button id="mailMobMenuBtn" onclick="_mailMobileMenuToggle()"'+
+          ' style="display:none;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:15px;cursor:pointer;flex-shrink:0;line-height:1;">'+
+          '⋯'+
+        '</button>'+
+      '</div>'+
+      // Mobile overflow menu (toggled by ⋯, hidden by default)
+      '<div id="mailMobMenu" style="display:none;flex-shrink:0;background:var(--asphalt);border-bottom:1px solid var(--asphalt-light);padding:8px 10px;gap:8px;flex-wrap:wrap;">'+
         (isAdmin
-          ? '<button onclick="_mailShowAdminSetup()"'+
-              ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Configure mail accounts">'+
-              '⚙ Accounts'+
-            '</button>'
+          ? '<button onclick="_mailShowAdminSetup()" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:7px 14px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">⚙ Accounts</button>'
           : '')+
-        '<button onclick="_mailShowBidLog()"'+
-          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Bid requests log">'+
-          '📋 Bid Log'+
-        '</button>'+
-        '<button onclick="_mailShowSchedLog()"'+
-          ' style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 10px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;" title="Scheduling requests log">'+
-          '📅 Sched Log'+
-        '</button>'+
+        '<button onclick="_mailShowBidLog()" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:7px 14px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">📋 Bid Log</button>'+
+        '<button onclick="_mailShowSchedLog()" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:7px 14px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">📅 Sched Log</button>'+
       '</div>'+
 
       // 3-panel body
@@ -15180,6 +15281,11 @@ function _mailBuildApp(wrap, acct) {
 
         // Message list
         '<div id="mailList" style="width:260px;flex-shrink:0;background:var(--asphalt-mid);border-right:1px solid var(--asphalt-light);display:flex;flex-direction:column;overflow:hidden;">'+
+          // Folder mode back bar — hidden by default, shown when in non-Inbox folder on mobile
+          '<div id="mailFolderBackBtn" style="display:none;flex-shrink:0;padding:7px 10px;border-bottom:1px solid var(--asphalt-light);align-items:center;gap:8px;background:var(--asphalt);">'+
+            '<button onclick="_mailBackToInbox()" style="background:none;border:none;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;padding:0;flex-shrink:0;">← Inbox</button>'+
+            '<span id="mailFolderBreadcrumb" style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-transform:uppercase;letter-spacing:1px;"></span>'+
+          '</div>'+
           '<div id="mailListHdr" style="flex-shrink:0;padding:8px 14px;border-bottom:1px solid var(--asphalt-light);font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Inbox</div>'+
           '<div id="mailCategoryTabs" style="flex-shrink:0;border-bottom:1px solid var(--asphalt-light);padding:5px 8px;display:flex;gap:3px;flex-wrap:wrap;background:var(--asphalt-mid);"></div>'+
           '<div id="mailListBody" style="flex:1;overflow-y:auto;">'+
@@ -15288,11 +15394,21 @@ function _mailLoadFolders() {
 
 function _mailSelectFolder(path, name) {
   if (_mailFolderLoading) return;
-  _mailFolder         = path;
-  _mailFolderNm       = name;
-  _mailOpenUid        = null;
-  _mailActiveCategory = 'all';
-  // Update viewer
+  _mailFolder           = path;
+  _mailFolderNm         = name;
+  _mailOpenUid          = null;
+  _mailActiveCategory   = 'all';
+  _mailActiveFolderMode = path.toUpperCase() !== 'INBOX';
+  // Mobile: return to list view and update folder mode class
+  _mailMobileSetView('list');
+  var app = document.getElementById('mailApp');
+  if (app) app.classList.toggle('mail-folder-mode', _mailActiveFolderMode);
+  // Show / hide folder back bar and breadcrumb
+  var fbBtn = document.getElementById('mailFolderBackBtn');
+  var bc    = document.getElementById('mailFolderBreadcrumb');
+  if (fbBtn) fbBtn.style.display = _mailActiveFolderMode ? 'flex' : 'none';
+  if (bc)    bc.textContent      = name || path;
+  // Reset viewer placeholder
   var v = document.getElementById('mailViewer');
   if (v) v.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;">Select a message to read</div>';
   // Reload folders to update active state, then load messages
@@ -15353,6 +15469,13 @@ function _mailOpenMessage(uid, folder) {
     v.dataset.replySubj = 'Re: ' + (msg.subject || '').replace(/^Re:\s*/i, '');
     var isFlagged = !!(document.getElementById('mailRow_'+uid) && document.getElementById('mailRow_'+uid).dataset.flagged === '1');
     v.innerHTML =
+      // Mobile-only back bar (hidden on desktop via CSS class)
+      '<div class="mail-viewer-backbar" style="display:none;flex-shrink:0;padding:8px 10px;border-bottom:1px solid var(--asphalt-light);background:var(--asphalt);align-items:center;gap:8px;">'+
+        '<button onclick="_mailBackToList()" style="background:none;border:none;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;padding:0;flex-shrink:0;">← Back</button>'+
+        '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">'+escHtml(msg.subject||'')+'</div>'+
+        '<button onclick="_mailActionFromViewer(\'delete\')" style="background:none;border:none;color:#e57373;font-size:15px;cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1;">🗑</button>'+
+      '</div>'+
+      // Desktop header: subject + action buttons
       '<div style="flex-shrink:0;padding:14px 18px;border-bottom:1px solid var(--asphalt-light);">'+
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
           '<div style="flex:1;font-size:16px;font-weight:700;color:var(--white);line-height:1.3;">'+escHtml(msg.subject)+'</div>'+
@@ -15373,7 +15496,13 @@ function _mailOpenMessage(uid, folder) {
         '</div>'+
       '</div>'+
       '<div id="_mailBodyWrap" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">'+
-        (!msg.html ? '<div style="padding:18px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);white-space:pre-wrap;overflow-y:auto;flex:1;min-height:0;box-sizing:border-box;">'+escHtml(msg.text||'(empty)')+'</div>' : '')+
+        (!msg.html ? '<div style="padding:18px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);white-space:pre-wrap;overflow-y:auto;flex:1;min-height:0;box-sizing:border-box;word-break:break-word;">'+escHtml(msg.text||'(empty)')+'</div>' : '')+
+      '</div>'+
+      // Mobile-only quick reply bar (hidden on desktop via CSS class)
+      '<div class="mail-viewer-replybar" style="display:none;flex-shrink:0;padding:6px 10px;border-top:1px solid var(--asphalt-light);background:var(--asphalt-mid);align-items:center;gap:6px;">'+
+        '<input id="_mailReplyInput" type="text" placeholder="Quick reply…"'+
+          ' style="flex:1;background:rgba(255,255,255,0.06);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:7px 10px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:12px;outline:none;"/>'+
+        '<button onclick="_mailSendQuickReply()" style="background:var(--stripe);border:none;border-radius:var(--radius);padding:7px 10px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0;">➤</button>'+
       '</div>';
     // Inject iframe via DOM so srcdoc is set as a property — avoids all HTML attribute escaping issues
     if (msg.html) {
@@ -15390,6 +15519,7 @@ function _mailOpenMessage(uid, folder) {
     if (hasAtt) { _mailRenderAttachments(msg.attachments, uid, folder); }
     _mailClassifyBidRequest(msg, uid, folder);
     _mailClassifySchedulingRequest(msg, uid, folder);
+    _mailMobileSetView('viewer');
   }).catch(function(err) {
     _mailMessageLoading = false;
     if (v) v.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(err.message)+'</div>';
@@ -15413,6 +15543,42 @@ function _mailActionFromViewer(action) {
     action = (row && row.dataset.flagged === '1') ? 'unflag' : 'flag';
   }
   _mailAction(uid, folder, action);
+}
+
+// ── Mobile helpers ────────────────────────────────────────────────────────────
+function _mailMobileSetView(view) {
+  _mailMobileView = view;
+  var app = document.getElementById('mailApp');
+  if (app) app.classList.toggle('mail-viewing', view === 'viewer');
+}
+function _mailBackToList() {
+  _mailOpenUid = null;
+  _mailMobileSetView('list');
+}
+function _mailBackToInbox() {
+  _mailSelectFolder('INBOX', 'Inbox');
+}
+function _mailMobileMenuToggle() {
+  var m = document.getElementById('mailMobMenu');
+  if (!m) return;
+  m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+}
+function _mailSendQuickReply() {
+  var v     = document.getElementById('mailViewer');
+  var input = document.getElementById('_mailReplyInput');
+  if (!v || !input || !input.value.trim()) return;
+  var text = input.value.trim();
+  input.value = '';
+  input.placeholder = 'Sending…';
+  _mailCall('send', { to: v.dataset.replyTo || '', subject: v.dataset.replySubj || '', text: text, inReplyTo: v.dataset.uid || '' })
+    .then(function() {
+      input.placeholder = '✓ Sent';
+      setTimeout(function() { input.placeholder = 'Quick reply…'; }, 2000);
+    })
+    .catch(function(err) {
+      input.value       = text;
+      input.placeholder = '⚠ ' + err.message;
+    });
 }
 
 function _mailAction(uid, folder, action) {
@@ -15768,6 +15934,9 @@ function openMailCompose(opts) {
   modal.dataset.inReplyTo = opts.inReplyTo || '';
   modal.style.cssText = 'position:fixed;bottom:0;right:28px;width:520px;max-width:calc(100vw - 40px);background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:12px 12px 0 0;box-shadow:0 -4px 32px rgba(0,0,0,0.5);z-index:9000;display:flex;flex-direction:column;';
   modal.innerHTML =
+    '<div class="mail-compose-handle" style="display:none;justify-content:center;padding:8px 0 2px;">'+
+      '<div style="width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,0.2);"></div>'+
+    '</div>'+
     '<div style="padding:10px 16px;background:var(--asphalt-mid);border-radius:12px 12px 0 0;display:flex;align-items:center;gap:8px;">'+
       '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:var(--white);">New Message</span>'+
       '<div style="flex:1;"></div>'+
