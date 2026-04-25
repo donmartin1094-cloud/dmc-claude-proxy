@@ -26,9 +26,9 @@
     --radius: 4px; --radius-lg: 8px;
   }
   body.light-mode {
-    --asphalt: #F5F4F2; --asphalt-mid: #ECEAE7; --asphalt-light: #E8E6E3;
+    --asphalt: #F5F4F2; --asphalt-mid: #D5D2CE; --asphalt-light: #E8E6E3;
     --stripe: #F5A800; --concrete: #1A1A1A; --concrete-dim: #555555; --white: #1A1A1A;
-    --red: #c0392b; --green: #3d9e6a; --blue: #2980b9; --orange: #e67e22;
+    --red: #c0392b; --green: #2d8a5a; --blue: #2980b9; --orange: #e67e22;
   }
   body.light-mode header { background: #7A1220; border-bottom-color: #F5A800; }
   body.light-mode .logo { color: #f0c0c8; }
@@ -41,6 +41,17 @@
   body.light-mode .coll-nav-scroll-arrow { background: #5e0e19; border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); }
   body.light-mode .sched-field-toggle { background: #f0ece8; border-color: rgba(0,0,0,0.25); color: #333; }
   body.light-mode .sched-field-toggle.sched-field-toggle-on { background: #F5A800; color: #000; border-color: #cc8c00; }
+  body.light-mode .hdr-bottom-strip { background: #7A1220 !important; }
+  body.light-mode .hdr-nav-btn:hover { background: rgba(255,255,255,0.12) !important; color: #ffffff !important; }
+  body.light-mode .hdr-nav-btn.active { background: rgba(255,255,255,0.2) !important; color: #ffffff !important; }
+  body.light-mode .hdr-bottom-strip #hdrSearchInput { background: rgba(255,255,255,0.15) !important; color: #ffffff !important; }
+  body.light-mode .hdr-bottom-strip #hdrSearchInput::placeholder { color: rgba(255,255,255,0.6) !important; }
+  body.light-mode .qmc-wrap { background: #ffffff; border-color: #D5D2CE; }
+  body.light-mode .qmc-jobname { color: #1A1A1A; }
+  body.light-mode .qmc-jobnum { color: #777777; }
+  body.light-mode .qmc-gc { color: #2980b9; }
+  body.light-mode .qmc-date { color: #888888; }
+  body.light-mode .qmc-del { color: #aaaaaa; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--asphalt); color: var(--concrete); font-family: 'DM Sans', sans-serif; font-size: 15px; min-height: 100vh; }
   header { background: #ffffff; border-bottom: 3px solid var(--stripe); padding: 0 32px; height: 204px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; overflow: visible; }
