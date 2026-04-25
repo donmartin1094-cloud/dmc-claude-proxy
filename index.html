@@ -1870,8 +1870,9 @@
 
     /* IMAP folder strip: full-width 36px horizontal scroll row */
     #mailFolders {
+      display: flex !important; flex-direction: row !important;
       width: 100% !important; height: 36px !important; max-height: 36px !important;
-      flex-direction: row !important; overflow-x: auto !important; overflow-y: hidden !important;
+      overflow-x: auto !important; overflow-y: hidden !important;
       flex-shrink: 0 !important; align-items: center !important;
       border-right: none !important; border-bottom: 1px solid var(--asphalt-light) !important;
       padding: 0 6px !important; gap: 4px !important; scrollbar-width: none;
@@ -14820,8 +14821,8 @@ function _mailRenderCategoryTabs() {
   var el = document.getElementById('mailCategoryTabs');
   if (!el) return;
   var cats = [
-    { id:'all',                label:'All' },
     { id:'inbox',              label:'Inbox' },
+    { id:'all',                label:'All' },
     { id:'promotions',         label:'Promos' },
     { id:'purchases',          label:'Purchases' },
     { id:'bidrequests',        label:'Bids' },
@@ -15839,7 +15840,7 @@ function _mailFmtSize(bytes) {
   return (bytes/1048576).toFixed(1) + ' MB';
 }
 
-// ── Attachment chips: download, image preview, large-file warning ─────────────
+// ── Attachment chips: file icon + filename + size + download ─────────────────
 function _mailRenderAttachments(attachments, uid, folder) {
   var bar = document.getElementById('mailAttachmentBar');
   if (!bar) return;
@@ -15848,40 +15849,26 @@ function _mailRenderAttachments(attachments, uid, folder) {
 
   attachments.forEach(function(att) {
     var chip = document.createElement('div');
-    chip.style.cssText = 'display:flex;align-items:center;gap:6px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);';
+    chip.style.cssText = 'display:flex;align-items:center;gap:6px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);max-width:260px;min-width:0;';
 
-    var isImage = att.contentType && att.contentType.startsWith('image/');
-    if (isImage) {
-      var img = document.createElement('img');
-      img.style.cssText = 'max-height:56px;border-radius:4px;margin-right:8px;display:block;';
-      img.alt = att.filename;
-      chip.appendChild(img);
-      (function(imgEl) {
-        fetch(_mailRailBase() + '/mail/attachment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: username, folder: folder, uid: uid, filename: att.filename })
-        }).then(function(r) {
-          if (!r.ok) return;
-          return r.blob();
-        }).then(function(blob) {
-          if (!blob) return;
-          imgEl.src = URL.createObjectURL(blob);
-        }).catch(function() {});
-      })(img);
-    }
+    var ext = (att.filename || '').split('.').pop().toLowerCase();
+    var icon = ext === 'pdf' ? '📄' : (ext === 'docx' || ext === 'doc') ? '📝' : (ext === 'xlsx' || ext === 'xls') ? '📊' : (att.contentType || '').startsWith('image/') ? '🖼' : '📎';
+    var iconEl = document.createElement('span');
+    iconEl.textContent = icon;
+    iconEl.style.cssText = 'flex-shrink:0;font-size:12px;';
+    chip.appendChild(iconEl);
 
     if (att.size > LARGE) {
       var warn = document.createElement('span');
       warn.textContent = '⚠';
       warn.title = 'Large file — download may be slow';
-      warn.style.cssText = 'color:#f5a623;cursor:default;';
+      warn.style.cssText = 'color:#f5a623;cursor:default;flex-shrink:0;';
       chip.appendChild(warn);
     }
 
     var label = document.createElement('span');
-    label.textContent = att.filename + ' (' + _mailFmtSize(att.size) + ')';
-    label.style.color = 'var(--white)';
+    label.textContent = (att.filename || 'attachment') + ' (' + _mailFmtSize(att.size) + ')';
+    label.style.cssText = 'color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;';
     chip.appendChild(label);
 
     var btn = document.createElement('button');
