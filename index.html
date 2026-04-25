@@ -1848,6 +1848,21 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
+     MAIL — mobile responsive layout
+     ════════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 768px) {
+    #mailPanels  { flex-direction: column !important; }
+    #mailFolders { width: 100% !important; max-height: 44px !important; flex-direction: row !important;
+                   overflow-x: auto !important; overflow-y: hidden !important; flex-shrink: 0 !important;
+                   border-right: none !important; border-bottom: 1px solid var(--asphalt-light) !important;
+                   padding: 0 !important; }
+    #mailFolders > div { flex-shrink: 0; padding: 8px 14px !important; }
+    #mailList    { width: 100% !important; max-height: 40vh !important; flex-shrink: 0 !important;
+                   border-right: none !important; border-bottom: 1px solid var(--asphalt-light) !important; }
+    #mailViewer  { width: 100% !important; flex: 1 !important; min-height: 200px !important; min-width: 0 !important; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
      PRINT — already exists, just reinforcing
      ════════════════════════════════════════════════════════════════════════ */
   @media print {
@@ -6540,7 +6555,11 @@ function _homeWeekScheduleWidget() {
           var jobName = (f.jobName || bt.label || '').substring(0, 10);
           var esc = typeof escHtml === 'function' ? escHtml : function(s){ return s; };
           gridHtml += '<div style="padding:1px;">' +
-            '<div style="height:38px;border-radius:3px;background:' + bt.color + '1a;border:1.5px solid ' + bt.color + '55;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 3px;gap:1px;">' +
+            '<div onclick="openMobBlockDetail(\''+day.key+'\',\''+row.id+'\')"' +
+            ' style="height:38px;border-radius:3px;background:' + bt.color + '1a;border:1.5px solid ' + bt.color + '55;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 3px;gap:1px;cursor:pointer;"' +
+            ' onmousedown="this.style.background=\''+bt.color+'33\'"' +
+            ' onmouseup="this.style.background=\''+bt.color+'1a\'"' +
+            ' onmouseleave="this.style.background=\''+bt.color+'1a\'">' +
               (jobNum  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:#ffffff;line-height:1.2;text-align:center;">' + esc(jobNum) + '</span>' : '') +
               '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:rgba(255,255,255,0.85);line-height:1.2;text-align:center;word-break:break-all;max-width:100%;overflow:hidden;">' + esc(jobName) + '</span>' +
             '</div>' +
@@ -14651,6 +14670,29 @@ function _mailGetCategory(msg) {
   return 'inbox';
 }
 
+function _mailMsgRowHtml(m, folder) {
+  var from    = m.from ? (m.from.name || m.from.address || '') : '—';
+  var subj    = m.subject || '(no subject)';
+  var dt      = m.date ? _mailFmtDate(new Date(m.date)) : '';
+  var unread  = !m.seen;
+  var flagged = m.flagged;
+  return '<div onclick="_mailOpenMessage('+m.uid+',\''+escHtml(folder)+'\')"'+
+    ' id="mailRow_'+m.uid+'"'+
+    ' data-flagged="'+(flagged?'1':'0')+'"'+
+    ' data-unread="'+(unread?'1':'0')+'"'+
+    ' style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+
+    (unread ? 'background:rgba(245,197,24,0.04);' : '')+'"'+
+    ' onmouseover="this.style.background=\'rgba(255,255,255,0.06)\'" onmouseout="this.style.background=\''+(unread?'rgba(245,197,24,0.04)':'')+'\'">'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'+
+      '<span id="mailDot_'+m.uid+'" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;'+(unread?'background:var(--stripe);':'')+'"></span>'+
+      '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:12px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
+      '<span id="mailFlag_'+m.uid+'" style="color:var(--stripe);font-size:10px;'+(flagged?'':'display:none;')+'">★</span>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">'+escHtml(dt)+'</div>'+
+    '</div>'+
+    '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
+  '</div>';
+}
+
 function _mailRenderList(messages, folder) {
   var body = document.getElementById('mailListBody');
   if (!body) return;
@@ -14658,28 +14700,60 @@ function _mailRenderList(messages, folder) {
     body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--concrete-dim);font-size:11px;">No messages</div>';
     return;
   }
-  body.innerHTML = messages.map(function(m) {
-    var from    = m.from ? (m.from.name || m.from.address || '') : '—';
-    var subj    = m.subject || '(no subject)';
-    var dt      = m.date ? _mailFmtDate(new Date(m.date)) : '';
-    var unread  = !m.seen;
-    var flagged = m.flagged;
-    return '<div onclick="_mailOpenMessage('+m.uid+',\''+escHtml(folder)+'\')"'+
-      ' id="mailRow_'+m.uid+'"'+
-      ' data-flagged="'+(flagged?'1':'0')+'"'+
-      ' data-unread="'+(unread?'1':'0')+'"'+
-      ' style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+
-      (unread ? 'background:rgba(245,197,24,0.04);' : '')+'"'+
-      ' onmouseover="this.style.background=\'rgba(255,255,255,0.06)\'" onmouseout="this.style.background=\''+(unread?'rgba(245,197,24,0.04)':'')+'\'">'+
-      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'+
-        '<span id="mailDot_'+m.uid+'" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;'+(unread?'background:var(--stripe);':'')+'"></span>'+
-        '<div id="mailFrom_'+m.uid+'" style="flex:1;font-size:12px;font-weight:'+(unread?'700':'400')+';color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(from)+'</div>'+
-        '<span id="mailFlag_'+m.uid+'" style="color:var(--stripe);font-size:10px;'+(flagged?'':'display:none;')+'">★</span>'+
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">'+escHtml(dt)+'</div>'+
-      '</div>'+
-      '<div id="mailSubj_'+m.uid+'" style="font-size:13px;font-weight:'+(unread?'600':'400')+';color:'+(unread?'var(--white)':'var(--concrete-dim)')+';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;padding-left:12px;line-height:1.4;">'+escHtml(subj)+'</div>'+
-    '</div>';
-  }).join('');
+  body.innerHTML = messages.map(function(m) { return _mailMsgRowHtml(m, folder); }).join('');
+}
+
+function _mailRenderGroupedAll(messages, folder) {
+  var body = document.getElementById('mailListBody');
+  if (!body) return;
+  var groupDefs = [
+    { id:'bidrequests',        icon:'📋', label:'Bid Requests' },
+    { id:'schedulingrequests', icon:'📅', label:'Scheduling' },
+    { id:'purchases',          icon:'🧾', label:'Purchases' },
+    { id:'inbox',              icon:'📥', label:'Inbox' },
+    { id:'promotions',         icon:'📢', label:'Promotions', collapse: true }
+  ];
+  var buckets = {};
+  groupDefs.forEach(function(g) { buckets[g.id] = []; });
+  messages.forEach(function(m) {
+    var cat = _mailGetCategory(m);
+    if (buckets[cat]) buckets[cat].push(m);
+  });
+  var html = '';
+  groupDefs.forEach(function(g) {
+    var msgs = buckets[g.id];
+    if (!msgs.length) return;
+    var rowsHtml = msgs.map(function(m) { return _mailMsgRowHtml(m, folder); }).join('');
+    if (g.collapse) {
+      html +=
+        '<div>'+
+          '<button onclick="_mailTogglePromos(this)" style="width:100%;text-align:left;padding:7px 12px;background:rgba(255,255,255,0.03);border:none;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);display:flex;align-items:center;gap:6px;">'+
+            '<span>'+g.icon+' '+g.label+' ('+msgs.length+')</span>'+
+            '<span id="_mailPromosArrow" style="margin-left:auto;">▸</span>'+
+          '</button>'+
+          '<div id="_mailPromosBody" style="display:none;">'+rowsHtml+'</div>'+
+        '</div>';
+    } else {
+      html +=
+        '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);padding:6px 12px 4px;background:rgba(255,255,255,0.02);border-top:1px solid rgba(255,255,255,0.05);">'+
+          g.icon+' '+g.label+
+        '</div>'+
+        rowsHtml;
+    }
+  });
+  if (!html) {
+    html = '<div style="padding:30px;text-align:center;color:var(--concrete-dim);font-size:11px;">No messages</div>';
+  }
+  body.innerHTML = html;
+}
+
+function _mailTogglePromos(btn) {
+  var panel = document.getElementById('_mailPromosBody');
+  var arrow = document.getElementById('_mailPromosArrow');
+  if (!panel) return;
+  var open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : '';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
 }
 
 function _mailRenderCategoryTabs() {
@@ -14714,10 +14788,12 @@ function _mailRenderCategoryTabs() {
 function _mailSelectCategory(cat) {
   _mailActiveCategory = cat;
   _mailRenderCategoryTabs();
-  var filtered = (cat === 'all')
-    ? _mailMessages
-    : _mailMessages.filter(function(m) { return _mailGetCategory(m) === cat; });
-  _mailRenderList(filtered, _mailFolder);
+  if (cat === 'all') {
+    _mailRenderGroupedAll(_mailMessages, _mailFolder);
+  } else {
+    var filtered = _mailMessages.filter(function(m) { return _mailGetCategory(m) === cat; });
+    _mailRenderList(filtered, _mailFolder);
+  }
 }
 
 async function loadBidRequests() {
@@ -15240,9 +15316,12 @@ function _mailLoadMessages(folder, folderName) {
     _mailMessages = d.messages || [];
     if (stat) stat.textContent = _mailMessages.length + ' messages';
     if (!body) return;
-    _mailActiveCategory = 'all';
+    _mailActiveCategory = folder.toUpperCase() === 'INBOX' ? 'inbox' : 'all';
     _mailRenderCategoryTabs();
-    _mailRenderList(_mailMessages, folder);
+    var _initMsgs = _mailActiveCategory === 'inbox'
+      ? _mailMessages.filter(function(m) { return _mailGetCategory(m) === 'inbox'; })
+      : _mailMessages;
+    _mailRenderList(_initMsgs, folder);
     if (folder.toUpperCase() === 'INBOX') { _mailBatchScanBids(); }
   }).catch(function(err) {
     if (body) body.innerHTML = '<div style="padding:20px;color:#e57373;font-family:\'DM Mono\',monospace;font-size:9px;">'+escHtml(err.message)+'</div>';
