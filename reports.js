@@ -3431,7 +3431,8 @@ function _ccConfirmAltLocation(blockIdx, dateKey, sessionKey) {
 // ═══════════════════════════════════════════════════════
 
 // ── State ─────────────────────────────────────────────────────────────────────
-var invoiceWeekOffset = 0;
+var invoiceActiveMonth = null; // 'YYYY-MM' or ['YYYY-01','YYYY-02','YYYY-03'] for Q1
+var invoiceActiveWeek  = null; // 'YYYY-MM-DD' Monday of selected week, or null = all weeks
 var invSearchQuery = '';
 var _invMixCount = 1;
 
@@ -3489,6 +3490,210 @@ function invWeekLabel(offset) {
   return mon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     + ' – '
     + fri.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Month/week navigation helpers ────────────────────────────────────────────
+function _invCurrentMonth() {
+  var now = new Date();
+  return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+}
+
+function _invDefaultMonth() {
+  var now = new Date();
+  var yr = now.getFullYear();
+  var mo = now.getMonth() + 1;
+  if (mo <= 3) return [yr + '-01', yr + '-02', yr + '-03'];
+  return yr + '-' + String(mo).padStart(2, '0');
+}
+
+function _invMonthDayKeys(monthStr) {
+  var p = monthStr.split('-');
+  var yr = parseInt(p[0]);
+  var mo = parseInt(p[1]) - 1;
+  var d = new Date(yr, mo, 1);
+  var keys = [];
+  while (d.getMonth() === mo) {
+    keys.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+    d.setDate(d.getDate() + 1);
+  }
+  return keys;
+}
+
+function _invActiveDayKeys() {
+  var months = Array.isArray(invoiceActiveMonth) ? invoiceActiveMonth : [invoiceActiveMonth || _invCurrentMonth()];
+  var keys = [];
+  months.forEach(function(m) { keys = keys.concat(_invMonthDayKeys(m)); });
+  return keys;
+}
+
+function _invMondayOf(dateKey) {
+  var p = dateKey.split('-');
+  var d = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+  var dow = d.getDay();
+  d.setDate(d.getDate() + ((dow === 0) ? -6 : 1 - dow));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function _invWeekFromMonday(mondayKey) {
+  var p = mondayKey.split('-');
+  var mon = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+  var days = [];
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    var yr = d.getFullYear();
+    var mo = String(d.getMonth() + 1).padStart(2, '0');
+    var dy = String(d.getDate()).padStart(2, '0');
+    days.push({
+      key:   yr + '-' + mo + '-' + dy,
+      label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+      dow:   d.getDay()
+    });
+  }
+  return days;
+}
+
+function _invWeeksWithData() {
+  var dayKeys = _invActiveDayKeys();
+  var dayKeySet = {};
+  dayKeys.forEach(function(k) { dayKeySet[k] = true; });
+  var dateDates = {};
+  invoiceList.forEach(function(inv) {
+    if (dayKeySet[inv.dateOfWork]) dateDates[inv.dateOfWork] = true;
+  });
+  _invGetSubsForPeriod(dayKeys).forEach(function(sub) {
+    if (dayKeySet[sub.date]) dateDates[sub.date] = true;
+  });
+  var mondaySeen = {};
+  Object.keys(dateDates).forEach(function(dk) { mondaySeen[_invMondayOf(dk)] = true; });
+  return Object.keys(mondaySeen).sort();
+}
+
+function invSetMonth(mStr) {
+  if (mStr === 'q1') {
+    var yr = new Date().getFullYear();
+    invoiceActiveMonth = [yr + '-01', yr + '-02', yr + '-03'];
+  } else {
+    invoiceActiveMonth = mStr;
+  }
+  invoiceActiveWeek = null;
+  renderInvoiceTracker();
+}
+
+function invSetWeek(mondayKey) {
+  invoiceActiveWeek = mondayKey || null;
+  renderInvoiceTracker();
+}
+
+function _invActiveLabel() {
+  var yr = new Date().getFullYear();
+  if (invoiceActiveWeek) {
+    var wd = _invWeekFromMonday(invoiceActiveWeek);
+    var mp = wd[0].key.split('-'), fp = wd[4].key.split('-');
+    var mD = new Date(parseInt(mp[0]), parseInt(mp[1]) - 1, parseInt(mp[2]));
+    var fD = new Date(parseInt(fp[0]), parseInt(fp[1]) - 1, parseInt(fp[2]));
+    return 'Week of ' + mD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      + ' – ' + fD.toLocaleDateString('en-US', { day: 'numeric' });
+  }
+  if (Array.isArray(invoiceActiveMonth)) return 'Jan – Mar ' + yr;
+  var p = (invoiceActiveMonth || _invCurrentMonth()).split('-');
+  return new Date(parseInt(p[0]), parseInt(p[1]) - 1, 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function _invRenderMonthTabs(canEdit) {
+  var yr = new Date().getFullYear();
+  var isQ1 = Array.isArray(invoiceActiveMonth);
+  var MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var MNUMS  = ['04',  '05',  '06',  '07',  '08',  '09',  '10',  '11',  '12'];
+  var html = '<div class="inv2-month-tabs">';
+  html += '<button class="inv2-month-tab' + (isQ1 ? ' inv2-tab-active' : '') + '" onclick="invSetMonth(\'q1\')">Jan – Mar</button>';
+  MONTHS.forEach(function(mName, i) {
+    var mStr = yr + '-' + MNUMS[i];
+    var active = !isQ1 && invoiceActiveMonth === mStr;
+    html += '<button class="inv2-month-tab' + (active ? ' inv2-tab-active' : '') + '" onclick="invSetMonth(\'' + mStr + '\')">' + mName + '</button>';
+  });
+  if (canEdit) {
+    html += '<button class="inv-btn" style="margin-left:auto;flex-shrink:0;" onclick="openInvoiceModal(null)">+ Add Invoice</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function _invRenderWeekTabs() {
+  var weeks = _invWeeksWithData();
+  var html = '<div class="inv2-week-tabs">';
+  html += '<button class="inv2-week-tab' + (!invoiceActiveWeek ? ' inv2-tab-active' : '') + '" onclick="invSetWeek(null)">All Weeks</button>';
+  if (weeks.length === 0) {
+    html += '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);padding:0 8px;">No invoices this '
+      + (Array.isArray(invoiceActiveMonth) ? 'quarter' : 'month') + '</span>';
+  } else {
+    weeks.forEach(function(mondayKey) {
+      var wd = _invWeekFromMonday(mondayKey);
+      var mp = wd[0].key.split('-'), fp = wd[4].key.split('-');
+      var mD = new Date(parseInt(mp[0]), parseInt(mp[1]) - 1, parseInt(mp[2]));
+      var fD = new Date(parseInt(fp[0]), parseInt(fp[1]) - 1, parseInt(fp[2]));
+      var lbl = mD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        + ' – ' + fD.toLocaleDateString('en-US', { day: 'numeric' });
+      html += '<button class="inv2-week-tab' + (invoiceActiveWeek === mondayKey ? ' inv2-tab-active' : '') + '" onclick="invSetWeek(\'' + mondayKey + '\')">' + lbl + '</button>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+function _invRenderWeekGrid(activeDays, rows, todayKey, subItems) {
+  var roster = (typeof foremanRoster !== 'undefined' && Array.isArray(foremanRoster)) ? foremanRoster : [];
+  var foremanSeen = {};
+  rows.forEach(function(inv) { foremanSeen[inv.foreman || '(No Foreman)'] = true; });
+  var foremans = Object.keys(foremanSeen).sort(function(a, b) {
+    var ai = roster.indexOf(a), bi = roster.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b);
+  });
+  var gridCols = '140px ' + activeDays.map(function() { return 'minmax(260px,1fr)'; }).join(' ');
+  var hdr = '<div class="inv2-corner-cell"></div>'
+    + activeDays.map(function(day) {
+        return '<div class="inv2-day-head' + (day.key === todayKey ? ' inv2-today' : '') + '">' + day.label + '</div>';
+      }).join('');
+  var dataRows = foremans.map(function(foreman) {
+    var row = '<div class="inv2-foreman-cell"><span>' + escHtml(foreman) + '</span></div>';
+    row += activeDays.map(function(day) {
+      var cellInvs = rows.filter(function(inv) {
+        return (inv.foreman || '(No Foreman)') === foreman && inv.dateOfWork === day.key;
+      });
+      return '<div class="inv2-day-cell' + (cellInvs.length === 0 ? ' inv2-cell-empty' : '') + '">'
+        + cellInvs.map(function(inv) { return _invRenderCard(inv); }).join('')
+        + '</div>';
+    }).join('');
+    return row;
+  }).join('');
+  var _SUB_ORDER_W = ['Milling', 'Grading', 'QC', 'Tack', 'Rubber', 'Lowbed'];
+  var subByType = {};
+  (subItems || []).forEach(function(sub) {
+    if (!subByType[sub.type]) subByType[sub.type] = {};
+    if (!subByType[sub.type][sub.date]) subByType[sub.type][sub.date] = [];
+    subByType[sub.type][sub.date].push(sub);
+  });
+  var subRows = '';
+  if (subItems && subItems.length > 0) {
+    subRows += '<div class="inv2-sub-divider">Subcontractors</div>';
+    _SUB_ORDER_W.forEach(function(typeName) {
+      if (!subByType[typeName]) return;
+      var row = '<div class="inv2-foreman-cell inv2-sub-type-lbl"><span>' + escHtml(typeName) + '</span></div>';
+      row += activeDays.map(function(day) {
+        var daySubs = (subByType[typeName][day.key]) || [];
+        return '<div class="inv2-day-cell' + (daySubs.length === 0 ? ' inv2-cell-empty' : '') + '">'
+          + daySubs.map(function(sub) { return _invRenderSubCard(sub); }).join('')
+          + '</div>';
+      }).join('');
+      subRows += row;
+    });
+  }
+  return '<div class="inv2-grid" style="grid-template-columns:' + gridCols + ';">'
+    + hdr + dataRows + subRows + '</div>';
 }
 
 // ── Migration: promote flat brkCount/brkCost to brkRows array ─────────────────
@@ -4161,18 +4366,24 @@ function renderInvoiceTracker() {
   var wrap = document.getElementById('invoiceView');
   if (!wrap) return;
 
-  var days  = invWeekRange(invoiceWeekOffset);
-  var label = invWeekLabel(invoiceWeekOffset);
+  if (!invoiceActiveMonth) invoiceActiveMonth = _invDefaultMonth();
 
   var n = new Date();
   var todayKey = n.getFullYear() + '-'
     + String(n.getMonth() + 1).padStart(2, '0') + '-'
     + String(n.getDate()).padStart(2, '0');
 
-  var weekKeySet = {};
-  days.forEach(function(d) { weekKeySet[d.key] = true; });
+  var activeDayKeys;
+  if (invoiceActiveWeek) {
+    activeDayKeys = _invWeekFromMonday(invoiceActiveWeek).map(function(d) { return d.key; });
+  } else {
+    activeDayKeys = _invActiveDayKeys();
+  }
+  var dayKeySet = {};
+  activeDayKeys.forEach(function(k) { dayKeySet[k] = true; });
+
   var rows = invoiceList.filter(function(inv) {
-    if (!weekKeySet[inv.dateOfWork]) return false;
+    if (!dayKeySet[inv.dateOfWork]) return false;
     if (!invSearchQuery) return true;
     var q = invSearchQuery.toLowerCase();
     return (inv.dateOfWork || '').toLowerCase().indexOf(q) >= 0
@@ -4183,98 +4394,76 @@ function renderInvoiceTracker() {
         || (inv.invoiceNo || '').toLowerCase().indexOf(q) >= 0;
   });
 
-  var activeDays = days.slice(0, 5);
-  if (rows.some(function(inv) { return inv.dateOfWork === days[5].key; })) activeDays.push(days[5]);
-  if (rows.some(function(inv) { return inv.dateOfWork === days[6].key; })) activeDays.push(days[6]);
+  var canEdit = (typeof isAdmin === 'function' && isAdmin())
+             || (typeof canEditTab === 'function' && canEditTab('ap'));
 
-  var foremanSeen = {};
-  rows.forEach(function(inv) { foremanSeen[inv.foreman || '(No Foreman)'] = true; });
-  var roster = (typeof foremanRoster !== 'undefined' && Array.isArray(foremanRoster)) ? foremanRoster : [];
-  var foremans = Object.keys(foremanSeen).sort(function(a, b) {
-    var ai = roster.indexOf(a), bi = roster.indexOf(b);
-    if (ai >= 0 && bi >= 0) return ai - bi;
-    if (ai >= 0) return -1;
-    if (bi >= 0) return 1;
-    return a.localeCompare(b);
-  });
-
-  var weekBilled = rows.reduce(function(s, inv) { return s + invCardBilledTotal(inv); }, 0);
-  var weekApproved = 0, hasApproved = false;
+  var periodBilled = rows.reduce(function(s, inv) { return s + invCardBilledTotal(inv); }, 0);
+  var periodApproved = 0, hasApproved = false;
   rows.forEach(function(inv) {
     var a = inv.approvedAmount
       ? parseFloat((inv.approvedAmount + '').replace(/[^0-9.\-]/g, '')) || 0
       : null;
-    if (a !== null) { weekApproved += a; hasApproved = true; }
+    if (a !== null) { periodApproved += a; hasApproved = true; }
   });
 
-  var canEdit = (typeof isAdmin === 'function' && isAdmin())
-             || (typeof canEditTab === 'function' && canEditTab('ap'));
-
-  var gridCols = '140px ' + activeDays.map(function() { return 'minmax(260px,1fr)'; }).join(' ');
-
   var gridHtml;
-  if (!rows.length) {
-    gridHtml = '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">'
-      + 'No invoices this week.'
-      + (canEdit ? '<br><button class="inv-btn" style="margin-top:16px;" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : '')
-      + '</div>';
-  } else {
-    var hdr = '<div class="inv2-corner-cell"></div>'
-      + activeDays.map(function(day) {
-          return '<div class="inv2-day-head' + (day.key === todayKey ? ' inv2-today' : '') + '">' + day.label + '</div>';
-        }).join('');
-
-    var dataRows = foremans.map(function(foreman) {
-      var row = '<div class="inv2-foreman-cell"><span>' + escHtml(foreman) + '</span></div>';
-      row += activeDays.map(function(day) {
-        var cellInvs = rows.filter(function(inv) {
-          return (inv.foreman || '(No Foreman)') === foreman && inv.dateOfWork === day.key;
-        });
-        return '<div class="inv2-day-cell' + (cellInvs.length === 0 ? ' inv2-cell-empty' : '') + '">'
-          + cellInvs.map(function(inv) { return _invRenderCard(inv); }).join('')
-          + '</div>';
-      }).join('');
-      return row;
-    }).join('');
-
-    // Sub rows (Part 3b)
-    var subItems   = _invGetSubsForPeriod(activeDays.map(function(d) { return d.key; }));
-    var _SUB_ORDER = ['Milling', 'Grading', 'QC', 'Tack', 'Rubber', 'Lowbed'];
-    var subByType  = {};
-    subItems.forEach(function(sub) {
-      if (!subByType[sub.type]) subByType[sub.type] = {};
-      if (!subByType[sub.type][sub.date]) subByType[sub.type][sub.date] = [];
-      subByType[sub.type][sub.date].push(sub);
-    });
-    var subRows = '';
-    if (subItems.length > 0) {
-      subRows += '<div class="inv2-sub-divider">Subcontractors</div>';
-      _SUB_ORDER.forEach(function(typeName) {
-        if (!subByType[typeName]) return;
-        var row = '<div class="inv2-foreman-cell inv2-sub-type-lbl"><span>' + escHtml(typeName) + '</span></div>';
-        row += activeDays.map(function(day) {
-          var daySubs = (subByType[typeName] && subByType[typeName][day.key]) || [];
-          return '<div class="inv2-day-cell' + (daySubs.length === 0 ? ' inv2-cell-empty' : '') + '">'
-            + daySubs.map(function(sub) { return _invRenderSubCard(sub); }).join('')
-            + '</div>';
-        }).join('');
-        subRows += row;
-      });
+  if (invoiceActiveWeek) {
+    var wkAllDays = _invWeekFromMonday(invoiceActiveWeek);
+    var wkKeySet  = {};
+    rows.forEach(function(inv) { wkKeySet[inv.dateOfWork] = true; });
+    var wkSubs = _invGetSubsForPeriod(wkAllDays.map(function(d) { return d.key; }));
+    wkSubs.forEach(function(sub) { wkKeySet[sub.date] = true; });
+    var wkDays = wkAllDays.slice(0, 5);
+    if (wkKeySet[wkAllDays[5].key]) wkDays.push(wkAllDays[5]);
+    if (wkKeySet[wkAllDays[6].key]) wkDays.push(wkAllDays[6]);
+    if (rows.length === 0 && wkSubs.length === 0) {
+      gridHtml = '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">No invoices for this week.</div>';
+    } else {
+      gridHtml = _invRenderWeekGrid(wkDays, rows, todayKey, wkSubs);
     }
-
-    gridHtml = '<div class="inv2-grid" style="grid-template-columns:' + gridCols + ';">'
-      + hdr + dataRows + subRows + '</div>';
+  } else {
+    var weeks = _invWeeksWithData();
+    if (weeks.length === 0) {
+      gridHtml = '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">No invoices this '
+        + (Array.isArray(invoiceActiveMonth) ? 'quarter' : 'month') + '.'
+        + (canEdit ? '<br><button class="inv-btn" style="margin-top:16px;" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : '')
+        + '</div>';
+    } else {
+      var allWeeksHtml = '';
+      weeks.forEach(function(mondayKey) {
+        var wkDays2    = _invWeekFromMonday(mondayKey);
+        var wkDayKeys2 = wkDays2.map(function(d) { return d.key; });
+        var wkDaySet2  = {};
+        wkDayKeys2.forEach(function(k) { wkDaySet2[k] = true; });
+        var wkRows2    = rows.filter(function(inv) { return wkDaySet2[inv.dateOfWork]; });
+        var wkSubs2    = _invGetSubsForPeriod(wkDayKeys2);
+        var wkData2    = {};
+        wkRows2.forEach(function(inv) { wkData2[inv.dateOfWork] = true; });
+        wkSubs2.forEach(function(sub) { wkData2[sub.date] = true; });
+        var wkActive2  = wkDays2.slice(0, 5);
+        if (wkData2[wkDays2[5].key]) wkActive2.push(wkDays2[5]);
+        if (wkData2[wkDays2[6].key]) wkActive2.push(wkDays2[6]);
+        var wmp = wkDays2[0].key.split('-'), wfp = wkDays2[4].key.split('-');
+        var wMon = new Date(parseInt(wmp[0]), parseInt(wmp[1]) - 1, parseInt(wmp[2]));
+        var wFri = new Date(parseInt(wfp[0]), parseInt(wfp[1]) - 1, parseInt(wfp[2]));
+        var wkLabel = wMon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          + ' – ' + wFri.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        allWeeksHtml += '<div class="inv2-week-separator">Week of ' + wkLabel + '</div>';
+        allWeeksHtml += _invRenderWeekGrid(wkActive2, wkRows2, todayKey, wkSubs2);
+      });
+      gridHtml = allWeeksHtml;
+    }
   }
 
   var totalBar = rows.length
     ? '<div class="inv2-total-bar">'
-    +   '<span class="inv2-total-lbl">Week Total &mdash; ' + rows.length + ' invoice' + (rows.length !== 1 ? 's' : '') + '</span>'
+    +   '<span class="inv2-total-lbl">' + escHtml(_invActiveLabel()) + ' &mdash; ' + rows.length + ' invoice' + (rows.length !== 1 ? 's' : '') + '</span>'
     +   '<div style="display:flex;gap:20px;align-items:baseline;">'
     +     '<div><span style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Billed</span>'
-    +       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:var(--stripe);">' + invFmt(weekBilled) + '</div></div>'
+    +       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:var(--stripe);">' + invFmt(periodBilled) + '</div></div>'
     +     (hasApproved
             ? '<div><span style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Approved</span>'
-                + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:#7ecb8f;">' + invFmt(weekApproved) + '</div></div>'
+                + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:#7ecb8f;">' + invFmt(periodApproved) + '</div></div>'
             : '')
     +   '</div>'
     + '</div>'
@@ -4282,25 +4471,18 @@ function renderInvoiceTracker() {
 
   wrap.innerHTML = '<div class="inv2-wrap">'
     + '<div class="inv2-header">'
-    +   '<div style="text-align:center;">'
-    +     '<div class="inv-title" style="text-align:center;">🧾 Sales Invoice &amp; Trucking Tracker</div>'
-    +     '<div class="inv-sub" style="text-align:center;">Weekly grid — foremen &times; days</div>'
+    +   '<div class="inv2-title-row">'
+    +     '<div class="inv-title">🧾 Sales Invoice &amp; Trucking Tracker</div>'
+    +     '<div class="inv-sub">Monthly view &mdash; foremen &times; days</div>'
     +     '<div class="inv2-search-bar">'
     +       '<input class="inv2-search-input" type="text" placeholder="Search by date, job #, foreman, or supplier…" value="' + escHtml(invSearchQuery) + '" oninput="invSetSearch(this.value)" />'
     +       (invSearchQuery ? '<button class="inv-btn-ghost" onclick="invSetSearch(\'\')" style="padding:5px 10px;font-size:11px;">✕ Clear</button>' : '')
     +     '</div>'
     +   '</div>'
-    +   '<div class="inv-month-nav">'
-    +     '<button class="inv-btn-ghost" onclick="invoiceWeekOffset--;renderInvoiceTracker();">◀</button>'
-    +     '<div class="inv-month-label">' + label + '</div>'
-    +     '<button class="inv-btn-ghost" onclick="invoiceWeekOffset++;renderInvoiceTracker();">▶</button>'
-    +     '<button class="inv-btn-ghost" onclick="invoiceWeekOffset=0;renderInvoiceTracker();">This Week</button>'
-    +   '</div>'
+    +   _invRenderMonthTabs(canEdit)
+    +   _invRenderWeekTabs()
     + '</div>'
-    + '<div class="inv-toolbar">'
-    +   (invSearchQuery ? '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);margin-right:10px;">🔍 ' + rows.length + ' result' + (rows.length !== 1 ? 's' : '') + '</span>' : '')
-    +   (canEdit ? '<button class="inv-btn" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : '')
-    + '</div>'
+    + (invSearchQuery ? '<div style="padding:4px 24px 2px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);">🔍 ' + rows.length + ' result' + (rows.length !== 1 ? 's' : '') + '</div>' : '')
     + '<div class="inv2-grid-scroll">' + gridHtml + '</div>'
     + totalBar
     + '</div>';

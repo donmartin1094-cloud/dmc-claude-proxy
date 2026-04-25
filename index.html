@@ -1887,12 +1887,13 @@
 
   /* ── Invoice Tracker v2 — Weekly Grid ── */
   .inv2-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--asphalt-mid); }
-  .inv2-header { padding:16px 24px 12px; border-bottom:1px solid var(--asphalt-light); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .inv2-header { border-bottom:1px solid var(--asphalt-light); flex-shrink:0; display:flex; flex-direction:column; }
+  .inv2-title-row { padding:16px 24px 10px; text-align:center; }
   .inv2-search-bar { display:flex; align-items:center; gap:6px; margin-top:8px; }
   .inv2-search-input { background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius); color:var(--white); font-family:'DM Sans',sans-serif; font-size:12px; padding:6px 10px; outline:none; min-width:260px; transition:border-color 0.15s; }
   .inv2-search-input:focus { border-color:var(--stripe); }
   .inv2-grid-scroll { flex:1; overflow:auto; padding:12px 16px 24px; }
-  .inv2-grid { display:grid; border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); overflow:hidden; }
+  .inv2-grid { display:grid; border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:6px; }
   .inv2-corner-cell { background:var(--asphalt-mid); padding:8px 10px; border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); }
   .inv2-day-head { background:var(--asphalt); padding:8px 10px; text-align:center; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); }
   .inv2-day-head.inv2-today { color:var(--stripe); border-bottom:2px solid var(--stripe); }
@@ -1967,6 +1968,20 @@
   /* Total bar */
   .inv2-total-bar { margin:0 16px 16px; padding:10px 18px; background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
   .inv2-total-lbl { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); }
+  /* Month tab bar */
+  .inv2-month-tabs { display:flex; align-items:center; gap:6px; padding:8px 16px; overflow-x:auto; flex-wrap:nowrap; flex-shrink:0; border-bottom:1px solid var(--asphalt-light); }
+  .inv2-month-tab { background:rgba(245,197,24,0.1); border:1px solid rgba(245,197,24,0.25); border-radius:var(--radius); padding:6px 13px; color:var(--stripe); font-family:'DM Sans',sans-serif; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all 0.15s; }
+  .inv2-month-tab:hover { background:rgba(245,197,24,0.22); border-color:rgba(245,197,24,0.5); }
+  .inv2-month-tab.inv2-tab-active { background:var(--stripe); color:#111; border-color:var(--stripe); }
+  /* Week filter bar */
+  .inv2-week-tabs { display:flex; align-items:center; gap:5px; padding:6px 16px 8px; overflow-x:auto; flex-wrap:nowrap; flex-shrink:0; }
+  .inv2-week-tab { background:rgba(255,255,255,0.04); border:1px solid var(--asphalt-light); border-radius:var(--radius); padding:4px 10px; color:var(--concrete-dim); font-family:'DM Mono',monospace; font-size:9px; letter-spacing:0.5px; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all 0.15s; }
+  .inv2-week-tab:hover { border-color:rgba(245,197,24,0.4); color:var(--stripe); }
+  .inv2-week-tab.inv2-tab-active { background:rgba(245,197,24,0.12); border-color:rgba(245,197,24,0.45); color:var(--stripe); font-weight:700; }
+  /* Week separator between week grids in All-Weeks view */
+  .inv2-week-separator { padding:10px 4px 4px; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--concrete-dim); border-top:1px solid var(--asphalt-light); margin-top:8px; }
+  .inv2-week-separator:first-child { border-top:none; margin-top:0; }
+  @media print { .inv2-month-tabs, .inv2-week-tabs { display:none !important; } }
 
   /* ── Bid Main View redesign ── */
   .bid-main-toolbar { display:flex; align-items:center; gap:10px; padding:14px 24px; border-bottom:2px solid var(--asphalt-light); background:var(--asphalt-mid); flex-shrink:0; }
