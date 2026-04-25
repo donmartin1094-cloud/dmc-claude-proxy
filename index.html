@@ -5305,7 +5305,7 @@ function isWidgetEnabled(id, prefs) {
 
 // ── Home GPS + Fleet Panel ─────────────────────────────────────────────────────
 var _homeGps         = { devices:[], loading:false, map:null, markers:[], lastFetch:0, gen:0 };
-var _adminMobileSectionOrder = ['daily','gps','fleet','lowbed']; // hours + week are always pinned at top on mobile
+var _adminMobileSectionOrder = ['daily','gps','lowbed']; // hours + week are always pinned at top on mobile
 var _homeFleet       = { open:true, statusFilter:'all', sortBy:'name', groupBy:'none', expanded:{} };
 var _fleetCollapseState = {}; // keyed by sanitized title — tracks mobile collapse for loc cards + subtype groups
 var _homeDailyOverview = { open:true };
@@ -5867,10 +5867,8 @@ function _homeFleetRerenderControls() {
 function _homeFleetRerender() {
   var isMob = window.innerWidth <= 600;
   if (isMob) {
-    var fp = document.getElementById('homeFleetPanel');
-    if (fp) fp.innerHTML = '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;">' +
-      _homeLowbedSectionHtml() +
-    '</div>';
+    var lbCard = document.querySelector('.home-admin-sect-card[data-sect="lowbed"]');
+    if (lbCard) lbCard.innerHTML = _homeLowbedSectionHtml();
   } else {
     var dailyCol = document.getElementById('homeAdminDailyCol');
     if (dailyCol) dailyCol.innerHTML = _homeDailyOverviewSectionHtml();
@@ -6168,10 +6166,6 @@ function _homeAdminMobSectionsHtml() {
     '</div>' +
     '<div class="home-admin-sect-card" data-sect="week">' +
       _homeWeekScheduleWidget() +
-    '</div>' +
-    // Pinned Lowbed Moves card (toggleable)
-    '<div class="home-admin-sect-card" data-sect="lowbed">' +
-      _homeLowbedSectionHtml() +
     '</div>';
 
   // Reorderable sections (no extra title headers — each section has its own internal label)
@@ -6179,9 +6173,7 @@ function _homeAdminMobSectionsHtml() {
     daily:  _homeDailyOverviewSectionHtml(),
     gps:    '<div style="height:220px;"><div class="home-gps-map-inner" id="homeGpsMapEl" style="width:100%;height:100%;"></div></div>',
     fleet:  '<div id="homeFleetPanel" style="display:flex;flex-direction:column;">' +
-              '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;">' +
-                _homeLowbedSectionHtml() +
-              '</div>' +
+              '<div id="homeFleetScrollBody" style="overflow-y:auto;max-height:320px;"></div>' +
             '</div>',
     lowbed: _homeLowbedSectionHtml()
   };
@@ -24978,7 +24970,7 @@ async function initApp(username) {
               else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val)); saveAccounts(val, { skipRemote: true });  _checkLocalStorageSize();}
               else if (key === 'gcs')        { knownGCs = val; localStorage.setItem('pavescope_gcs', JSON.stringify(val));  _checkLocalStorageSize();}
               else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipCheckStatusChanges(); _fleetUpdateBadge(); if (activeTab === 'equipment') { var _eqv = document.getElementById('equipmentFleetView'); if(_eqv) renderEquipmentFleet(_eqv); }  _checkLocalStorageSize();}
-              else if (key === 'lowbed_groups') { localStorage.setItem('dmc_lowbed_groups', JSON.stringify(val)); if (activeTab === 'equipment') { var _eqv2 = document.getElementById('equipmentFleetView'); if(_eqv2) renderEquipmentFleet(_eqv2); } try { var _lbw = document.querySelector('[data-wid="lowbedmoves"]'); if (_lbw) { var _tmp = document.createElement('div'); _tmp.innerHTML = widgetLowbedMoves(); var _nb = _tmp.querySelector('.home-widget-body'); var _ob = _lbw.querySelector('.home-widget-body'); if (_nb && _ob) _ob.innerHTML = _nb.innerHTML; } } catch(e) {} if (typeof _homeFleetRerender === 'function') _homeFleetRerender(); _checkLocalStorageSize();}
+              else if (key === 'lowbed_groups') { localStorage.setItem('dmc_lowbed_groups', JSON.stringify(val)); if (activeTab === 'equipment') { var _eqv2 = document.getElementById('equipmentFleetView'); if(_eqv2) renderEquipmentFleet(_eqv2); } if (typeof _homeFleetRerender === 'function') _homeFleetRerender(); _checkLocalStorageSize();}
               else if (key === 'hd_equip_names') { localStorage.setItem('hd_equip_names', JSON.stringify(val));  _checkLocalStorageSize();}
               else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); if (activeTab === 'reports') renderReports();  _checkLocalStorageSize();}
               // ── Keys saved to Firebase but previously missing from live listener ──
