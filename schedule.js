@@ -457,7 +457,6 @@ function openMobBlockDetail(key, slot) {
     row('Job Name',  fields.jobName),
     row('Plant',     fields.plant),
     row('Mix',       matStr),
-    row('Load Time', fields.loadTime),
     row('Trucking',  (() => { try { const td=JSON.parse(fields.trucking||'{}'); return [td.trucks?`🚛 ${td.trucks}`:'', td.loadTime?`⏱ ${td.loadTime}`:'', td.spacing?`📏 ${td.spacing}`:''].filter(Boolean).join(' · '); } catch(e){return fields.trucking||'';} })()),
     eqList.length  ? `<div class="sched-mob-sheet-row"><span class="sched-mob-sheet-lbl">Equipment</span><div>${eqList.map(e=>`<span class="sched-mob-sheet-chip">🔧 ${escHtml(e)}</span>`).join('')}</div></div>` : '',
     opList.length  ? `<div class="sched-mob-sheet-row"><span class="sched-mob-sheet-lbl">Operators</span><div>${opList.map(o=>`<span class="sched-mob-sheet-chip">👷 ${escHtml(o)}</span>`).join('')}</div></div>` : '',
@@ -2675,63 +2674,78 @@ function renderExtraBlock(key, idx, ex, isLast) {
       const btnsHtml = f.buttons.map(b => {
         const active = b === 'Others' ? _isQTROthers(cur) : cur === b;
         return `<button class="sched-field-toggle ${active?'sched-field-toggle-on':''}"
-          style="${active?`color:${fc};border-color:${fc}99;background:rgba(255,255,255,0.15);`:`color:${fc}50;border-color:${fc}25;`}"
           onclick="toggleSchedFieldBtn('${key}','${slot}','${f.key}','${b.replace(/'/g,"\\'")}',this)"
         >${b}</button>`;
       }).join('');
+      const _qtrSub = (typeof cur === 'object' && _isQTROthers(cur) && cur.subCompany) ? cur.subCompany : '';
+      const othersSubChip = _qtrSub
+        ? `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;">${escHtml(_qtrSub)}<button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();clearQTROthers('${key}','${slot}','${f.key}')" title="Clear sub">✕</button></span>`
+        : '';
       return `<div class="sched-field">
         <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
-        <div class="sched-field-btns">${btnsHtml}</div>
+        <div class="sched-field-btns">${btnsHtml}${othersSubChip}</div>
       </div>`;
     }
-    // Job Name — backlog search dropdown
+    // Job Name/# — chip when set, inline textarea editors when empty
     if (f.key === 'jobName') {
-      return `<div class="sched-field" style="position:relative;">
-        <div class="sched-field-label" style="color:${fc}80;cursor:pointer;text-decoration:underline dotted;" title="Click to change job name"
-          onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNameInput(ta);">
-          ${f.label}
+      const hasJob = !!(fields.jobName || fields.jobNum);
+      const safeSlot = slot.replace(/[^a-z0-9_]/g,'_');
+      const chipParts = [fields.jobNum ? '#' + fields.jobNum : '', fields.jobName || ''].filter(Boolean);
+      const chipLabel = chipParts.join(' — ');
+      return `<div class="sched-field sched-field-operators" id="jchip_${key}_${safeSlot}" style="${!hasJob?'display:none;':''}">
+          <div class="sched-field-label" style="color:${fc}80;">Job:</div>
+          <div class="op-chips-wrap">
+            <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;cursor:pointer;"
+              onclick="_schedJobChipEdit('${key}','${slot}')" title="Click to change job">
+              ${escHtml(chipLabel)}
+              <button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();clearSchedJob('${key}','${slot}')" title="Clear job">✕</button>
+            </span>
+          </div>
         </div>
-        <div style="position:relative;flex:1;">
-          <textarea class="sched-field-input" rows="1"
-            placeholder="—"
-            style="color:${fc};width:100%;"
-            data-key="${key}" data-slot="${slot}" data-field="${f.key}"
-            autocomplete="off"
-            onchange="saveSchedFieldExtra(this,'${key}',${idx})"
-            oninput="autoResize(this);schedJobNameInput(this);"
-            onblur="schedJobNameBlur(this)"
-            onfocus="schedJobNameInput(this)"
-            onkeydown="schedJobNameKeydown(event,this)"
-          >${fields[f.key]||''}</textarea>
-          <div class="sched-jobnum-drop" id="sjn-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
-               onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
+        <div class="sched-field" id="jname_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
+          <div class="sched-field-label" style="color:${fc}80;cursor:pointer;text-decoration:underline dotted;" title="Click to change job name"
+            onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNameInput(ta);">
+            Job Name:
+          </div>
+          <div style="position:relative;flex:1;">
+            <textarea class="sched-field-input" rows="1"
+              placeholder="—"
+              style="color:${fc};width:100%;"
+              data-key="${key}" data-slot="${slot}" data-field="jobName"
+              autocomplete="off"
+              onchange="saveSchedFieldExtra(this,'${key}',${idx})"
+              oninput="autoResize(this);schedJobNameInput(this);"
+              onblur="schedJobNameBlur(this)"
+              onfocus="schedJobNameInput(this)"
+              onkeydown="schedJobNameKeydown(event,this)"
+            >${fields.jobName||''}</textarea>
+            <div class="sched-jobnum-drop" id="sjn-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
+                 onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
+          </div>
         </div>
-      </div>`;
+        <div class="sched-field" id="jnum_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
+          <div class="sched-field-label" style="color:${fc}80;cursor:pointer;text-decoration:underline dotted;" title="Click to change job #"
+            onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNumInputExtra(ta,'${key}',${idx});">
+            Job #:
+          </div>
+          <div style="position:relative;flex:1;">
+            <textarea class="sched-field-input" rows="1"
+              placeholder="—"
+              style="color:${fc};width:100%;"
+              data-key="${key}" data-slot="${slot}" data-field="jobNum"
+              autocomplete="off"
+              onchange="saveSchedFieldExtra(this,'${key}',${idx});lookupBacklogByJobNumExtra(this,'${key}',${idx});"
+              oninput="autoResize(this);schedJobNumInputExtra(this,'${key}',${idx});"
+              onblur="schedJobNumBlurExtra(this,'${key}',${idx})"
+              onfocus="schedJobNumInputExtra(this,'${key}',${idx})"
+              onkeydown="schedJobNumKeydownExtra(event,this,'${key}',${idx})"
+            >${fields.jobNum||''}</textarea>
+            <div class="sched-jobnum-drop" id="sjde-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
+                 onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
+          </div>
+        </div>`;
     }
-    // Job # — backlog number dropdown
-    if (f.key === 'jobNum') {
-      return `<div class="sched-field" style="position:relative;">
-        <div class="sched-field-label" style="color:${fc}80;cursor:pointer;text-decoration:underline dotted;" title="Click to change job #"
-          onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNumInputExtra(ta,'${key}',${idx});">
-          ${f.label}
-        </div>
-        <div style="position:relative;flex:1;">
-          <textarea class="sched-field-input" rows="1"
-            placeholder="—"
-            style="color:${fc};width:100%;"
-            data-key="${key}" data-slot="${slot}" data-field="${f.key}"
-            autocomplete="off"
-            onchange="saveSchedFieldExtra(this,'${key}',${idx});lookupBacklogByJobNumExtra(this,'${key}',${idx});"
-            oninput="autoResize(this);schedJobNumInputExtra(this,'${key}',${idx});"
-            onblur="schedJobNumBlurExtra(this,'${key}',${idx})"
-            onfocus="schedJobNumInputExtra(this,'${key}',${idx})"
-            onkeydown="schedJobNumKeydownExtra(event,this,'${key}',${idx})"
-          >${fields[f.key]||''}</textarea>
-          <div class="sched-jobnum-drop" id="sjde-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
-               onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
-        </div>
-      </div>`;
-    }
+    if (f.key === 'jobNum') { return ''; }
     // Notes gets special treatment — taller, no label, no action button (special actions live on the day-note bar only)
     if (f.key === 'notes') {
       const saAssigned = (fields._specialActions || []);
@@ -2751,6 +2765,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
         }).join('') + `</div>` : '';
       return `<div class="sched-field sched-notes-wrap" id="sanw_${key}_${slot.replace(/[^a-z0-9]/g,'_')}">
         ${saChipsHtml}
+        <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
         <textarea class="sched-field-input sched-notes-input" rows="1" placeholder="Notes…" style="color:${fc};"
           data-key="${key}" data-slot="${slot}" data-field="${f.key}"
           onchange="saveSchedFieldExtra(this,'${key}',${idx})"
@@ -2963,18 +2978,75 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
       </div>`;
 
   } else if (type === 'operators' || type === 'equipment') {
-    const pool = type === 'equipment' ? equipmentList : operatorsList;
     const current = getPickerItems(key, slot, field);
     const icon = type === 'equipment' ? '🚜' : '👤';
     const placeholder = type === 'equipment' ? 'e.g. Paver, Roller…' : 'Name…';
-    listHtml = pool.length
-      ? pool.map(item => {
-          const sel = current.includes(item);
-          return `<div class="uspm-item ${sel ? 'selected' : ''}" onclick="uspmToggleItem('${key}','${slot}','${field}','${type}','${item.replace(/'/g,"\\'")}',this)">
-            <span class="uspm-item-icon">${icon}</span>${item}
-          </div>`;
-        }).join('')
-      : `<div class="uspm-empty">No ${type} in roster yet.<br><span style="font-size:11px;">Add them in ⚙️ Settings → Rosters.</span></div>`;
+
+    if (type === 'equipment') {
+      // Pull from equipmentFleet, grouped by type
+      const fleet = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : [])
+        .filter(e => e.active !== false)
+        .sort((a, b) => (a.name||'').localeCompare(b.name||''));
+      const isCleanOut = _getBlockCleanOut(key, slot);
+
+      // Group by type key
+      const typeMap = {};
+      fleet.forEach(e => {
+        const tk = e.type || 'other';
+        if (!typeMap[tk]) typeMap[tk] = [];
+        typeMap[tk].push(e);
+      });
+      const typeKeys = Object.keys(typeMap);
+
+      const togglesHtml = typeKeys.length > 1
+        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--asphalt-light);">` +
+          typeKeys.map(tk => {
+            const typeLabel = ((typeof FLEET_TYPES !== 'undefined' ? FLEET_TYPES : []).find(t => t.key === tk) || {}).label || tk;
+            return `<button class="sched-field-toggle sched-field-toggle-on" data-eq-type="${tk}"
+              onclick="uspmToggleEqType('${tk}',this)">${typeLabel}</button>`;
+          }).join('') + `</div>`
+        : '';
+
+      listHtml = (togglesHtml || '') + (fleet.length
+        ? typeKeys.map(tk => {
+            const typeLabel = ((typeof FLEET_TYPES !== 'undefined' ? FLEET_TYPES : []).find(t => t.key === tk) || {}).label || tk;
+            const items = typeMap[tk];
+            return `<div class="uspm-group-header" data-eq-group="${tk}">${typeLabel}</div>` +
+              items.map(e => {
+                const sel = current.includes(e.name);
+                const unavailReason = (() => {
+                  if (e.status === 'down') return 'Down — unavailable';
+                  if (e.status === 'maintenance') return 'In maintenance';
+                  if (e.assignedJobName && !isCleanOut) return `On ${e.assignedJobName}`;
+                  return null;
+                })();
+                const blocked = !!unavailReason;
+                const statusDot = blocked
+                  ? `<span style="font-size:9px;color:${e.status==='down'?'#d94f3d':'#e8813a'};margin-left:4px;">⚠</span>`
+                  : (e.status === 'limping' ? `<span style="font-size:9px;color:#e8813a;margin-left:4px;">~</span>` : '');
+                return `<div class="uspm-item ${sel ? 'selected' : ''}" data-eq-type="${tk}"
+                  title="${blocked ? escHtml(unavailReason) : ''}"
+                  style="${blocked ? 'opacity:0.45;' + (!isAdmin() ? 'cursor:not-allowed;' : '') : ''}"
+                  onclick="uspmEquipToggle('${key}','${slot}','${field}','${e.name.replace(/'/g,"\\'")}','${(unavailReason||'').replace(/'/g,"\\'")}',${blocked},this)">
+                  <span class="uspm-item-icon">${icon}</span>${escHtml(e.name)}${statusDot}
+                </div>`;
+              }).join('');
+          }).join('')
+        : `<div class="uspm-empty">No equipment in fleet yet.<br><span style="font-size:11px;">Add them on the Equipment page.</span></div>`);
+
+    } else {
+      // Operators: original string-pool logic
+      const pool = operatorsList;
+      listHtml = pool.length
+        ? pool.map(item => {
+            const sel = current.includes(item);
+            return `<div class="uspm-item ${sel ? 'selected' : ''}" onclick="uspmToggleItem('${key}','${slot}','${field}','operators','${item.replace(/'/g,"\\'")}',this)">
+              <span class="uspm-item-icon">${icon}</span>${item}
+            </div>`;
+          }).join('')
+        : `<div class="uspm-empty">No operators in roster yet.<br><span style="font-size:11px;">Add them in ⚙️ Settings → Rosters.</span></div>`;
+    }
+
     addSectionHtml = `
       <div class="uspm-add-section">
         <div class="uspm-add-label">Add New ${type === 'equipment' ? 'Equipment' : 'Operator'} to Roster</div>
@@ -3256,17 +3328,64 @@ function uspmAddNewItem(key, slot, field, type) {
   const inp = document.getElementById('uspmNewItem');
   const name = inp?.value.trim();
   if (!name) return;
-  const pool = type === 'equipment' ? equipmentList : operatorsList;
-  if (!pool.includes(name)) {
-    pool.push(name);
-    if (type === 'equipment') saveEquipmentList(); else saveOperatorsList();
+  if (type === 'equipment') {
+    // Add to equipmentFleet if not already present
+    const existing = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : [])
+      .find(e => (e.name||'').toLowerCase() === name.toLowerCase());
+    if (!existing) {
+      equipmentFleet.push({
+        id: (typeof _fleetNextId === 'function') ? _fleetNextId() : 'EQ-' + Date.now(),
+        name: name, type: '', status: 'operational', active: true,
+        createdAt: new Date().toISOString(),
+        photos: [], maintenanceLogs: [], issueReports: []
+      });
+      if (typeof saveFleet === 'function') saveFleet();
+    }
+  } else {
+    const pool = operatorsList;
+    if (!pool.includes(name)) { pool.push(name); saveOperatorsList(); }
   }
   const items = getPickerItems(key, slot, field);
   if (!items.includes(name)) { items.push(name); setPickerItems(key, slot, field, items); }
-  // Rebuild the picker with fresh data
   const typeLabel = type === 'equipment' ? '🚜 Equipment' : '👷 Operators';
   document.getElementById('unifiedSchedPicker')?.remove();
   openUnifiedSchedPicker({ type, title: typeLabel, key, slot, field });
+}
+
+function uspmToggleEqType(typeKey, btn) {
+  btn.classList.toggle('sched-field-toggle-on');
+  const list = document.getElementById('uspmList');
+  if (!list) return;
+  const active = btn.classList.contains('sched-field-toggle-on');
+  list.querySelectorAll('[data-eq-type="' + typeKey + '"]').forEach(function(el) {
+    el.style.display = active ? '' : 'none';
+  });
+  list.querySelectorAll('.uspm-group-header[data-eq-group="' + typeKey + '"]').forEach(function(el) {
+    el.style.display = active ? '' : 'none';
+  });
+}
+
+function uspmEquipToggle(key, slot, field, itemName, reason, blocked, el) {
+  if (blocked) {
+    if (!isAdmin()) {
+      var msg = document.createElement('span');
+      msg.style.cssText = 'font-size:9px;color:#d94f3d;display:block;margin-top:2px;';
+      msg.textContent = 'Contact admin to override';
+      el.appendChild(msg);
+      setTimeout(function() { msg.remove(); }, 2000);
+      return;
+    }
+    if (!confirm('This equipment is ' + reason + '. Select anyway?')) return;
+  }
+  uspmToggleItem(key, slot, field, 'equipment', itemName, el);
+}
+
+function _getBlockCleanOut(key, slot) {
+  if (slot.startsWith('extra_')) {
+    var idx = parseInt(slot.replace('extra_',''));
+    return !!(schedData[key]?.extras?.[idx]?.data?._cleanOut);
+  }
+  return !!(schedData[key]?.[slot]?._cleanOut);
 }
 
 function uspmMatToggle(i) {
@@ -3639,6 +3758,35 @@ function selectSchedPlant(key, slot, value, e) {
 
 function clearSchedPlant(key, slot, btn) {
   selectSchedPlant(key, slot, '', null);
+}
+
+function clearSchedJob(key, slot) {
+  if (slot.startsWith('extra_')) {
+    var idx = parseInt(slot.replace('extra_',''));
+    if (schedData[key]?.extras?.[idx]?.data?.fields) {
+      schedData[key].extras[idx].data.fields.jobName = '';
+      schedData[key].extras[idx].data.fields.jobNum  = '';
+    }
+  } else {
+    if (schedData[key]?.[slot]?.fields) {
+      schedData[key][slot].fields.jobName = '';
+      schedData[key][slot].fields.jobNum  = '';
+    }
+  }
+  saveSchedData();
+  renderSchedule();
+}
+
+function _schedJobChipEdit(key, slot) {
+  var safeSlot = slot.replace(/[^a-z0-9_]/g,'_');
+  var chipEl = document.getElementById('jchip_' + key + '_' + safeSlot);
+  var nameEl = document.getElementById('jname_' + key + '_' + safeSlot);
+  var numEl  = document.getElementById('jnum_'  + key + '_' + safeSlot);
+  if (chipEl) chipEl.style.display = 'none';
+  if (nameEl) nameEl.style.display = '';
+  if (numEl)  numEl.style.display  = '';
+  var ta = nameEl && nameEl.querySelector('textarea');
+  if (ta) { ta.removeAttribute('readonly'); ta.style.pointerEvents = ''; ta.focus(); ta.select(); schedJobNameInput(ta); }
 }
 
 function selectPlant(itemId, plantName, e) {
@@ -4189,60 +4337,76 @@ function renderSchedule() {
             const btnsHtml = f.buttons.map(b => {
               const active = b === 'Others' ? _isQTROthers(cur) : cur === b;
               return `<button class="sched-field-toggle ${active?'sched-field-toggle-on':''}"
-                style="${active?`color:${fc};border-color:${fc}99;background:rgba(255,255,255,0.15);`:`color:${fc}50;border-color:${fc}25;`}"
-                ${canEdit ? `onclick="toggleSchedFieldBtn('${key}','${slot}','${f.key}','${b.replace(/'/g,"\\'")}',this)"` : 'disabled style="cursor:default;opacity:0.6;"'}
+                ${canEdit ? `onclick="toggleSchedFieldBtn('${key}','${slot}','${f.key}','${b.replace(/'/g,"\\'")}',this)"` : 'disabled'}
               >${b}</button>`;
             }).join('');
+            const _qtrSub = (typeof cur === 'object' && _isQTROthers(cur) && cur.subCompany) ? cur.subCompany : '';
+            const othersSubChip = _qtrSub
+              ? `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;">${escHtml(_qtrSub)}${canEdit?`<button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();clearQTROthers('${key}','${slot}','${f.key}')" title="Clear sub">✕</button>`:''}</span>`
+              : '';
             return `<div class="sched-field">
               <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
-              <div class="sched-field-btns">${btnsHtml}</div>
+              <div class="sched-field-btns">${btnsHtml}${othersSubChip}</div>
             </div>`;
           }
+          // Job Name/# — chip when set, inline textarea editors when empty
           if (f.key === 'jobName') {
-            return `<div class="sched-field" style="position:relative;">
-              <div class="sched-field-label" style="color:${fc}80;${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job name':''}" ${canEdit?`onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.removeAttribute('readonly');ta.style.pointerEvents='';ta.focus();ta.select();schedJobNameInput(ta);"`:''}>
-                ${f.label}
+            const hasJob = !!(fields.jobName || fields.jobNum);
+            const safeSlot = slot.replace(/[^a-z0-9_]/g,'_');
+            const chipParts = [fields.jobNum ? '#' + fields.jobNum : '', fields.jobName || ''].filter(Boolean);
+            const chipLabel = chipParts.join(' — ');
+            return `<div class="sched-field sched-field-operators" id="jchip_${key}_${safeSlot}" style="${!hasJob?'display:none;':''}">
+                <div class="sched-field-label" style="color:${fc}80;">Job:</div>
+                <div class="op-chips-wrap">
+                  <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;${canEdit?'cursor:pointer;':''}"
+                    ${canEdit?`onclick="_schedJobChipEdit('${key}','${slot}')" title="Click to change job"`:''}
+                  >${escHtml(chipLabel)}${canEdit?`<button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();clearSchedJob('${key}','${slot}')" title="Clear job">✕</button>`:''}</span>
+                </div>
               </div>
-              <div style="position:relative;flex:1;">
-                <textarea class="sched-field-input" rows="1"
-                  placeholder="—"
-                  style="color:${fc};width:100%;"
-                  data-key="${key}" data-slot="${slot}" data-field="${f.key}"
-                  autocomplete="off"
-                  onchange="saveSchedField(this)"
-                  oninput="autoResize(this);schedJobNameInput(this);"
-                  onblur="schedJobNameBlur(this)"
-                  onfocus="schedJobNameInput(this)"
-                  onkeydown="schedJobNameKeydown(event,this)"
-                  ${canEdit?'':'readonly style="pointer-events:none;cursor:default;"'}
-                >${fields[f.key]||''}</textarea>
-                <div class="sched-jobnum-drop" id="sjn-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
-                     onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
+              <div class="sched-field" id="jname_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
+                <div class="sched-field-label" style="color:${fc}80;${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job name':''}">
+                  Job Name:
+                </div>
+                <div style="position:relative;flex:1;">
+                  <textarea class="sched-field-input" rows="1"
+                    placeholder="—"
+                    style="color:${fc};width:100%;"
+                    data-key="${key}" data-slot="${slot}" data-field="jobName"
+                    autocomplete="off"
+                    onchange="saveSchedField(this)"
+                    oninput="autoResize(this);schedJobNameInput(this);"
+                    onblur="schedJobNameBlur(this)"
+                    onfocus="schedJobNameInput(this)"
+                    onkeydown="schedJobNameKeydown(event,this)"
+                    ${canEdit?'':'readonly style="pointer-events:none;cursor:default;"'}
+                  >${fields.jobName||''}</textarea>
+                  <div class="sched-jobnum-drop" id="sjn-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
+                       onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
+                </div>
               </div>
-            </div>`;
+              <div class="sched-field" id="jnum_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
+                <div class="sched-field-label" style="color:${fc}80;${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job #':''}">
+                  Job #:
+                </div>
+                <div style="position:relative;flex:1;">
+                  <textarea class="sched-field-input" rows="1"
+                    placeholder="—"
+                    style="color:${fc};width:100%;"
+                    data-key="${key}" data-slot="${slot}" data-field="jobNum"
+                    autocomplete="off"
+                    onchange="saveSchedField(this);lookupBacklogByJobNum(this);"
+                    oninput="autoResize(this);schedJobNumInput(this);"
+                    onblur="schedJobNumBlur(this)"
+                    onfocus="schedJobNumInput(this)"
+                    onkeydown="schedJobNumKeydown(event,this)"
+                    ${canEdit?'':'readonly style="pointer-events:none;cursor:default;"'}
+                  >${fields.jobNum||''}</textarea>
+                  <div class="sched-jobnum-drop" id="sjd-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
+                       onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
+                </div>
+              </div>`;
           }
-          if (f.key === 'jobNum') {
-            return `<div class="sched-field" style="position:relative;">
-              <div class="sched-field-label" style="color:${fc}80;${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job #':''}" ${canEdit?`onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNumInput(ta);"`:''}>
-                ${f.label}
-              </div>
-              <div style="position:relative;flex:1;">
-                <textarea class="sched-field-input" rows="1"
-                  placeholder="—"
-                  style="color:${fc};width:100%;"
-                  data-key="${key}" data-slot="${slot}" data-field="${f.key}"
-                  autocomplete="off"
-                  onchange="saveSchedField(this);lookupBacklogByJobNum(this);"
-                  oninput="autoResize(this);schedJobNumInput(this);"
-                  onblur="schedJobNumBlur(this)"
-                  onfocus="schedJobNumInput(this)"
-                  onkeydown="schedJobNumKeydown(event,this)"
-                >${fields[f.key]||''}</textarea>
-                <div class="sched-jobnum-drop" id="sjd-${key}-${slot}" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:3000;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:0 0 var(--radius) var(--radius);max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,0.5);"
-                     onmouseenter="this._hovering=true" onmouseleave="this._hovering=false"></div>
-              </div>
-            </div>`;
-          }
+          if (f.key === 'jobNum') { return ''; }
           // Notes — taller, no label, no action button (special actions live on the day-note bar only)
           if (f.key === 'notes') {
             const saA = (fields._specialActions || []);
@@ -4262,6 +4426,7 @@ function renderSchedule() {
               }).join('') + `</div>` : '';
             return `<div class="sched-field sched-notes-wrap" id="sanw_${key}_${slot.replace(/[^a-z0-9]/g,'_')}">
               ${saChips}
+              <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
               <textarea class="sched-field-input sched-notes-input" rows="1"
                 placeholder="Notes…"
                 style="color:${fc};"
@@ -5102,15 +5267,14 @@ function toggleSchedFieldBtn(key, slot, field, value, el) {
     schedData[key][slot].fields[field] = (cur === value) ? '' : value;
     saveSchedData();
   }
+  renderSchedule();
+}
 
-  // Update button states in-place
-  const row = el.closest('.sched-field');
-  row.querySelectorAll('.sched-field-toggle').forEach(btn => {
-    const fieldVal = schedData[key][slot].fields[field];
-    const btnTxt = btn.textContent.trim();
-    const isActive = _isQTROthers(fieldVal) ? btnTxt === 'Others' : btnTxt === fieldVal;
-    btn.classList.toggle('sched-field-toggle-on', isActive);
-  });
+function clearQTROthers(key, slot, field) {
+  if (!schedData[key] || !schedData[key][slot] || !schedData[key][slot].fields) return;
+  schedData[key][slot].fields[field] = '';
+  saveSchedData();
+  renderSchedule();
 }
 
 // ═══════════════════════════════════════════════════════
