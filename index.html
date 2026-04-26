@@ -1896,9 +1896,14 @@
 
     /* Message list: full width, fills all remaining height */
     #mailList {
-      width: 100% !important; flex: 1 !important;
+      width: 100% !important; flex: 1 !important; min-height: 0 !important;
       max-height: none !important; flex-shrink: 1 !important;
       border-right: none !important; border-bottom: none !important;
+      overflow: hidden !important;
+    }
+    #mailListBody {
+      overflow-y: auto !important; -webkit-overflow-scrolling: touch;
+      flex: 1 !important; min-height: 0 !important;
     }
 
     /* Viewer: hidden by default; shown when mail-viewing class is on #mailApp */
@@ -14722,8 +14727,17 @@ function _mailGetCategory(msg) {
     if (_schedulingRequests[j].emailUid === uid && _schedulingRequests[j].status !== undefined) return 'schedulingrequests';
   }
   var subj = (msg.subject || '').toLowerCase();
+  var bidKw = [
+    'request for bid','request for pricing','request for quote','request for proposal',
+    'rfq','rfb','rfp',
+    'bid invite','invitation to bid','itb','bid solicitation',
+    'quote request','pricing request','bid request'
+  ];
   var purchaseKw = ['order','receipt','invoice','payment','tracking','shipping','confirmation','your purchase'];
   var promoKw    = ['sale','deal','% off','%off','offer','newsletter','unsubscribe','promo','discount','coupon'];
+  for (var b = 0; b < bidKw.length; b++) { if (subj.indexOf(bidKw[b]) !== -1) return 'bidrequests'; }
+  // "bid" or "quote" appearing alongside "request" anywhere in the subject
+  if ((subj.indexOf('bid') !== -1 || subj.indexOf('quote') !== -1) && subj.indexOf('request') !== -1) return 'bidrequests';
   for (var p = 0; p < purchaseKw.length; p++) { if (subj.indexOf(purchaseKw[p]) !== -1) return 'purchases'; }
   for (var r = 0; r < promoKw.length;    r++) { if (subj.indexOf(promoKw[r])    !== -1) return 'promotions'; }
   return 'inbox';
