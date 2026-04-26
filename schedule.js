@@ -465,6 +465,31 @@ function openMobBlockDetail(key, slot) {
     bdata.rainedOut ? row('Status', '🌧 Rained Out') : '',
   ].filter(Boolean).join('');
   const dateLabel = (() => { try { const d=new Date(key+'T12:00:00'); return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}); } catch(e){return key;} })();
+  const truckPreview = (() => { try { const td=JSON.parse(fields.trucking||'{}'); return [td.trucks?td.trucks+' trucks':'', td.loadTime||'', td.spacing||''].filter(Boolean).join(' · '); } catch(e){return fields.trucking||'';} })();
+  const _editRow = (icon, lbl, val, onclk) =>
+    `<div class="sched-mob-sheet-row" style="cursor:pointer;align-items:center;" onclick="${onclk}">
+      <span class="sched-mob-sheet-lbl">${icon} ${lbl}</span>
+      <span style="font-family:'DM Sans',sans-serif;font-size:11px;color:var(--concrete-dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;padding-right:4px;">${escHtml(String(val||'—'))}</span>
+      <span style="color:var(--concrete-dim);font-size:18px;flex-shrink:0;line-height:1;">›</span>
+    </div>`;
+  const adminEditHtml = isAdmin() ? `
+    <div style="margin-top:14px;padding-top:10px;border-top:2px solid var(--asphalt-light);">
+      <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);padding-bottom:6px;">✏️ Edit Fields</div>
+      ${_editRow('✏️','Job / Type', btype.label, `document.getElementById('_mobSheet')?.remove();cycleBlockType('${key}','${slot}');`)}
+      ${_editRow('🪨','Mix Types', matStr, `document.getElementById('_mobSheet')?.remove();openMixTypeChipMenu('${key}','${slot}',null,null);`)}
+      ${_editRow('👷','Operators', opList.join(', '), `document.getElementById('_mobSheet')?.remove();openPickerDropdown('${key}','${slot}','operators','operators');`)}
+      ${_editRow('🚜','Equipment', eqList.join(', '), `document.getElementById('_mobSheet')?.remove();openPickerDropdown('${key}','${slot}','equipment','equipment');`)}
+      ${_editRow('🌱','Plant', fields.plant, `document.getElementById('_mobSheet')?.remove();openSchedPlantPicker('${key}','${slot}',null);`)}
+      ${_editRow('🚛','Trucking', truckPreview, `document.getElementById('_mobSheet')?.remove();openTruckingModal('${key}','${slot}');`)}
+      <div class="sched-mob-sheet-row" style="flex-direction:column;gap:6px;align-items:stretch;border-bottom:none;">
+        <span class="sched-mob-sheet-lbl">📝 Notes</span>
+        <textarea data-key="${key}" data-slot="${slot}" data-field="notes"
+          style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:5px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;resize:none;min-height:60px;width:100%;box-sizing:border-box;margin-top:2px;"
+          oninput="autoResize(this)"
+          onblur="saveSchedField(this);setTimeout(renderSchedule,100);"
+        >${escHtml(fields.notes||'')}</textarea>
+      </div>
+    </div>` : '';
   const footBtns = canEdit ? [
     `<button class="sched-mob-sheet-btn" style="background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.4);color:var(--stripe);" onclick="generateDailyOrder('${key}','${slot}',event)">📋 Daily Order</button>`,
     isAdmin() ? `<button class="sched-mob-sheet-btn" style="background:rgba(155,148,136,0.08);border:1px solid rgba(155,148,136,0.3);color:#9b9488;" onclick="rainOutBlock('${key}','${slot}');document.getElementById('_mobSheet').remove();">🌧 Rain Out</button>` : '',
@@ -483,7 +508,7 @@ function openMobBlockDetail(key, slot) {
       </div>
       <button onclick="document.getElementById('_mobSheet').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:20px;cursor:pointer;padding:4px 8px;">✕</button>
     </div>
-    <div class="sched-mob-sheet-body">${bodyHtml || '<div style="padding:20px 0;text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">No job scheduled</div>'}</div>
+    <div class="sched-mob-sheet-body">${bodyHtml + adminEditHtml || '<div style="padding:20px 0;text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">No job scheduled</div>'}</div>
     <div class="sched-mob-sheet-foot">${footBtns}</div>
   </div>`;
   ovl.addEventListener('click', e => { if (e.target === ovl) ovl.remove(); });
@@ -810,6 +835,7 @@ const DEFAULT_FOREMANS = ['Filipe Joaquim','Louie Medeiros'];
 var foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringify(DEFAULT_FOREMANS));
 function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); _checkLocalStorageSize(); fbSet('foremans', foremanRoster); }
 var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second foreman
+var mobSchedViewMode = 'foreman'; // 'foreman' | 'overall'
 
 // ── Trucking Brokers roster ──
 const TRUCKING_BROKERS_KEY = 'pavescope_trucking_brokers';
@@ -4848,15 +4874,24 @@ function renderSchedule() {
           </div>
           <button class="sched-mob-nav-btn" onclick="schedMonthOffset++;renderSchedule();" aria-label="Next month">&#9654;</button>
         </div>
-        <!-- Foreman toggle -->
-        <div class="sched-mob-fm-toggle">
+        <!-- View mode toggle -->
+        <div class="sched-mob-view-toggle">
+          <button class="sched-mob-view-btn${mobSchedViewMode==='foreman'?' active':''}"
+            onclick="mobSchedViewMode='foreman';renderSchedule()">By Foreman</button>
+          <button class="sched-mob-view-btn${mobSchedViewMode==='overall'?' active':''}"
+            onclick="mobSchedViewMode='overall';renderSchedule()">Overall</button>
+        </div>
+        <!-- Foreman toggle: only shown in By Foreman mode -->
+        ${mobSchedViewMode === 'foreman' ? `<div class="sched-mob-fm-toggle">
           <button class="sched-mob-fm-btn${mobSchedForemanFilter==='top'?' active':''}"
             onclick="mobSchedForemanFilter='top';renderSchedule()">${foremanRoster[0]||'Filipe Joaquim'}</button>
           <button class="sched-mob-fm-btn${mobSchedForemanFilter==='bottom'?' active':''}"
             onclick="mobSchedForemanFilter='bottom';renderSchedule()">${foremanRoster[1]||'Louie Medeiros'}</button>
+        </div>` : ''}
+        <!-- Calendar content: Overall shows full foreman list, By Foreman shows calendar grid -->
+        <div class="sched-mob-cal">
+          ${mobSchedViewMode === 'overall' ? mobileWeeksHtml : mobileCalHtml}
         </div>
-        <!-- Monthly calendar grid -->
-        <div class="sched-mob-cal">${mobileCalHtml}</div>
       </div>
 
       <!-- ── Desktop grid (hidden ≤600px) ────────────────────────────── -->
@@ -4915,9 +4950,86 @@ function renderSchedule() {
       newScrollOuter.scrollLeft = savedScrollLeft;
     }
   }
+  // Init pinch zoom on mobile after DOM settles
+  setTimeout(_schedInitPinchZoom, 80);
+
   } catch(e) {
     console.error('renderSchedule error:', e);
   }
+}
+
+// ── Mobile pinch-to-zoom on schedule grid ─────────────────────────────────
+var _schedPinchState = { active: false, startDist: 0, startScale: 1, currentScale: 1 };
+var SCHED_ZOOM_MIN = 0.4;
+var SCHED_ZOOM_MAX = 2.5;
+
+function _schedInitPinchZoom() {
+  var el = document.querySelector('.sched-mob-cal');
+  if (!el) return;
+  // Avoid double-binding
+  if (el._pinchBound) return;
+  el._pinchBound = true;
+
+  // Reset zoom button — floating pill in top-right of sched-mob-view
+  var btn = document.getElementById('_schedResetZoomBtn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = '_schedResetZoomBtn';
+    btn.textContent = '⊡ Reset Zoom';
+    btn.style.cssText = 'display:none;position:absolute;top:8px;right:10px;z-index:20;' +
+      'background:#f5c518;color:#000;border:none;border-radius:12px;' +
+      'font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:0.5px;' +
+      'padding:5px 12px;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+    btn.onclick = _schedResetZoom;
+    var mobView = document.querySelector('.sched-mob-view');
+    if (mobView) {
+      mobView.style.position = 'relative';
+      mobView.appendChild(btn);
+    }
+  }
+
+  el.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+      _schedPinchState.active = true;
+      _schedPinchState.startDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      _schedPinchState.startScale = _schedPinchState.currentScale;
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchmove', function(e) {
+    if (!_schedPinchState.active || e.touches.length !== 2) return;
+    var dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    var scale = _schedPinchState.startScale * (dist / _schedPinchState.startDist);
+    scale = Math.min(Math.max(scale, SCHED_ZOOM_MIN), SCHED_ZOOM_MAX);
+    _schedPinchState.currentScale = scale;
+    el.style.transform = 'scale(' + scale + ')';
+    el.style.width = (100 / scale) + '%';
+  }, { passive: true });
+
+  el.addEventListener('touchend', function() {
+    if (!_schedPinchState.active) return;
+    _schedPinchState.active = false;
+    var resetBtn = document.getElementById('_schedResetZoomBtn');
+    if (resetBtn) {
+      resetBtn.style.display = Math.abs(_schedPinchState.currentScale - 1) > 0.05 ? 'block' : 'none';
+    }
+  }, { passive: true });
+}
+
+function _schedResetZoom() {
+  var el = document.querySelector('.sched-mob-cal');
+  if (!el) return;
+  _schedPinchState.currentScale = 1;
+  el.style.transform = 'scale(1)';
+  el.style.width = '100%';
+  var btn = document.getElementById('_schedResetZoomBtn');
+  if (btn) btn.style.display = 'none';
 }
 
 function autoResize(el) {
