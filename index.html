@@ -5749,6 +5749,34 @@ function _homeDailyOverviewSectionHtml() {
         (EQ_ICONS[t2]||'🔧') + ' ' + escHtml(n2) + '</span>';
     }).join('');
 
+    var opList = (f.operators || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+    var opChips = opList.map(function(op) {
+      return '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:#5ab4f5;' +
+        'background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.3);border-radius:4px;padding:1px 4px;white-space:nowrap;">👤 ' + escHtml(op) + '</span>';
+    }).join('');
+
+    var todaySlips = (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(s) {
+      return s.date === todayKey && s.jobNum && f.jobNum &&
+             s.jobNum.toString().trim() === f.jobNum.toString().trim();
+    });
+    var tonsByType = {};
+    var scannedTotal = 0;
+    todaySlips.forEach(function(s) {
+      var mt = s.mixType || 'Unknown';
+      tonsByType[mt] = (tonsByType[mt] || 0) + (parseFloat(s.tons) || 0);
+      scannedTotal += (parseFloat(s.tons) || 0);
+    });
+    var tonnageSection = '';
+    if (todaySlips.length > 0) {
+      var tonLines = Object.keys(tonsByType).map(function(mt) {
+        return '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);display:flex;justify-content:space-between;padding:0 2px;">' +
+          '<span>' + escHtml(mt) + '</span><span>' + tonsByType[mt].toFixed(1) + 't</span></div>';
+      }).join('');
+      var totalLine = '<div style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:800;color:var(--concrete);display:flex;justify-content:space-between;padding:1px 2px;border-top:1px solid rgba(255,255,255,0.08);margin-top:1px;">' +
+        '<span>Total</span><span>' + scannedTotal.toFixed(1) + 't</span></div>';
+      tonnageSection = '<div style="margin-top:3px;padding:3px;background:rgba(0,0,0,0.15);border-radius:3px;">' + tonLines + totalLine + '</div>';
+    }
+
     return '<div style="'+cardStyle+'">' +
       hdrStrip +
       '<div style="flex:1;padding:5px 9px 4px;overflow:hidden;display:flex;flex-direction:column;gap:2px;">' +
@@ -5766,8 +5794,12 @@ function _homeDailyOverviewSectionHtml() {
           (trucks   ? '<span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:1px 4px;font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);">🚛 '+escHtml(trucks)+'</span>' : '') +
           (loadTime ? '<span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:1px 4px;font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);">⏱ '+escHtml(loadTime)+'</span>' : '') +
         '</div>' +
-        // Equipment chips — all of them, wrapping naturally
+        // Equipment chips — wrapping naturally
         (eqChips ? '<div style="display:flex;flex-wrap:wrap;gap:2px;overflow:hidden;">' + eqChips + '</div>' : '') +
+        // Operator chips
+        (opChips ? '<div style="display:flex;flex-wrap:wrap;gap:2px;overflow:hidden;">' + opChips + '</div>' : '') +
+        // Scanned mix tonnage
+        tonnageSection +
       '</div>' +
     '</div>';
   }

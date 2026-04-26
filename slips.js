@@ -27,6 +27,7 @@ function _slipsSave() {
   localStorage.setItem(SLIPS_KEY, JSON.stringify(slim));
   _checkLocalStorageSize();
   try { if (db) fbSet('paving_slips', slim); } catch(e) {}
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
 }
 function _laNormalizeMixTypes() {
   _slipsLoad();
