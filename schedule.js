@@ -4240,6 +4240,101 @@ function _attachSchedEqObserver() {
   });
 }
 
+function _mobCalOverallGrid() {
+  var now = new Date();
+  now.setHours(0,0,0,0);
+  var todayKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  var base = new Date(now.getFullYear(), now.getMonth() + schedMonthOffset, 1);
+  var yr = base.getFullYear();
+  var mo = base.getMonth();
+  var daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  var firstDow = new Date(yr, mo, 1).getDay();
+
+  function _init(name) {
+    var parts = (name || '').trim().split(/\s+/);
+    return parts.length >= 2
+      ? (parts[0][0] + parts[parts.length-1][0]).toUpperCase()
+      : ((parts[0] || '?')[0] || '?').toUpperCase();
+  }
+
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var hdrHtml = DOW.map(function(d) {
+    return '<div class="mob-cal-day-hdr">' + d + '</div>';
+  }).join('');
+
+  var cells = [];
+
+  // Leading cells from previous month
+  var prevDays = new Date(yr, mo, 0).getDate();
+  for (var i = 0; i < firstDow; i++) {
+    var pday = prevDays - firstDow + 1 + i;
+    cells.push('<div class="mob-cal-day-cell mob-cal-outside-month"><span class="mob-cal-day-num">' + pday + '</span></div>');
+  }
+
+  // Current month cells
+  for (var d = 1; d <= daysInMonth; d++) {
+    var date = new Date(yr, mo, d);
+    var dow = date.getDay();
+    var key = yr + '-' + String(mo+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var isWknd = dow === 0 || dow === 6;
+    var isHolD = (typeof holidays !== 'undefined') && holidays.has(key);
+    var isTodayCell = key === todayKey;
+
+    var fmSlots = [
+      { slot: 'top',    name: (typeof foremanRoster !== 'undefined' && foremanRoster[0]) || 'Filipe Joaquim' },
+      { slot: 'bottom', name: (typeof foremanRoster !== 'undefined' && foremanRoster[1]) || 'Louie Medeiros' }
+    ];
+
+    var anyJob = false;
+    var rowsHtml = fmSlots.map(function(s, si) {
+      var bdata = ((typeof schedData !== 'undefined' && schedData[key]) || {})[s.slot] || { type:'blank', fields:{} };
+      var fields = bdata.fields || {};
+      var hasJob = !!(fields.jobName || fields.jobNum);
+      var isRained = !!bdata.rainedOut;
+      var btype = (typeof getBlockType === 'function') ? getBlockType(bdata.type || 'blank') : { color:'#888' };
+      var initials = _init(s.name);
+      var jobNum = fields.jobNum ? '#' + fields.jobNum : '';
+      if (hasJob) anyJob = true;
+
+      var rowClass = 'mob-cal-foreman-row';
+      var rowStyle = si === 0 ? 'margin-top:12px;' : 'margin-top:1px;';
+      var rowText = '';
+      var onclick = '';
+
+      if (isRained) {
+        rowStyle += 'background:rgba(155,148,136,0.25);border-left:3px solid #9b9488;color:#9b9488;';
+        rowText = initials + ' 🌧';
+        rowClass += ' no-job';
+      } else if (hasJob) {
+        rowStyle += 'border-left:3px solid ' + btype.color + ';background:' + btype.color + '22;color:var(--white);';
+        rowText = escHtml(initials + ' ' + jobNum);
+        onclick = 'onclick="openMobBlockDetail(\'' + key + '\',\'' + s.slot + '\')"';
+      } else {
+        rowClass += ' no-job';
+        rowText = '—';
+      }
+      return '<div class="' + rowClass + '" style="' + rowStyle + '" ' + onclick + '>' + rowText + '</div>';
+    }).join('');
+
+    var cellClass = 'mob-cal-day-cell';
+    var cellStyle = '';
+    if (!anyJob && (isWknd || isHolD)) cellClass += ' mob-cal-lilac';
+    if (isTodayCell) cellStyle = 'outline:2px solid var(--stripe);outline-offset:-2px;z-index:1;';
+    var holLbl = isHolD ? '<span style="position:absolute;bottom:2px;left:3px;font-family:\'DM Mono\',monospace;font-size:6px;color:var(--red);pointer-events:none;">HOL</span>' : '';
+
+    cells.push('<div class="' + cellClass + '" style="' + cellStyle + '">' +
+      '<span class="mob-cal-day-num">' + d + '</span>' + rowsHtml + holLbl + '</div>');
+  }
+
+  // Trailing cells to complete 6 rows (42 total)
+  var needed = 42 - cells.length;
+  for (var n = 1; n <= needed; n++) {
+    cells.push('<div class="mob-cal-day-cell mob-cal-outside-month"><span class="mob-cal-day-num">' + n + '</span></div>');
+  }
+
+  return '<div class="mob-cal-overall-grid">' + hdrHtml + cells.join('') + '</div>';
+}
+
 function renderSchedule() {
   try {
   syncMixTypeDisplayNames();
@@ -4912,7 +5007,7 @@ function renderSchedule() {
         </div>` : ''}
         <!-- Calendar content: Overall shows full foreman list, By Foreman shows calendar grid -->
         <div class="sched-mob-cal">
-          ${mobSchedViewMode === 'overall' ? mobileWeeksHtml : mobileCalHtml}
+          ${mobSchedViewMode === 'overall' ? _mobCalOverallGrid() : mobileCalHtml}
         </div>
       </div>
 

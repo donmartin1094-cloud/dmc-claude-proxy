@@ -1490,6 +1490,33 @@
     color:var(--red); font-family:'DM Mono',monospace; font-size:10px; font-weight:700;
     padding:5px 12px; cursor:pointer; -webkit-tap-highlight-color:transparent;
   }
+  /* ── Overall monthly calendar grid ── */
+  .mob-cal-overall-grid {
+    display:grid; grid-template-columns:repeat(7,1fr); gap:1px;
+    background:var(--asphalt-light); border:1px solid var(--asphalt-light);
+    border-radius:var(--radius); overflow:hidden; width:100%;
+  }
+  .mob-cal-day-hdr {
+    font-size:9px; font-family:'DM Mono',monospace; font-weight:800;
+    color:var(--concrete-dim); text-align:center; padding:4px 0; background:var(--asphalt);
+  }
+  .mob-cal-day-cell {
+    background:var(--asphalt-mid); padding:3px; min-height:52px;
+    display:flex; flex-direction:column; gap:1px; position:relative;
+  }
+  .mob-cal-day-num {
+    position:absolute; top:2px; right:3px; font-size:8px;
+    color:var(--concrete-dim); font-family:'DM Mono',monospace; pointer-events:none;
+  }
+  .mob-cal-foreman-row {
+    font-size:9px; font-family:'DM Sans',sans-serif; font-weight:700;
+    color:var(--concrete); padding:2px 3px; border-radius:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+  }
+  .mob-cal-foreman-row.no-job { color:var(--concrete-dim); font-weight:400; cursor:default; }
+  .mob-cal-foreman-row:not(.no-job):active { opacity:0.75; }
+  .mob-cal-lilac { background:#c9b8d4 !important; }
+  .mob-cal-outside-month { background:var(--asphalt) !important; opacity:0.5; }
   /* Legacy list elements (kept for openMobBlockDetail compatibility) */
   .sched-mob-list { flex:1; overflow-y:auto; padding:10px 12px 40px; -webkit-overflow-scrolling:touch; }
   .sched-mob-week { margin-bottom:18px; }
