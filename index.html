@@ -52,6 +52,14 @@
   body.light-mode .qmc-gc { color: #2980b9; }
   body.light-mode .qmc-date { color: #888888; }
   body.light-mode .qmc-del { color: #aaaaaa; }
+  body.light-mode #mobileNavOverlay { background: #F5F4F2 !important; }
+  body.light-mode .mob-nav-hdr { background: #7A1220 !important; border-bottom-color: rgba(245,168,0,0.5) !important; }
+  body.light-mode .mob-nav-close { background: rgba(255,255,255,0.15) !important; border-color: rgba(255,255,255,0.3) !important; color: #ffffff !important; }
+  body.light-mode .mob-nav-group { color: #555555 !important; background: #E8E6E3 !important; border-top-color: #D5D2CE !important; border-bottom-color: #D5D2CE !important; }
+  body.light-mode #mobileNavOverlay .mob-nav-item { background: transparent !important; border-bottom-color: #D5D2CE !important; }
+  body.light-mode #mobileNavOverlay .mob-nav-item:active { background: rgba(0,0,0,0.06) !important; }
+  body.light-mode #mobileNavOverlay .mob-nav-label { color: #1A1A1A !important; }
+  body.light-mode #mobileNavOverlay .mob-nav-item.mob-nav-sub .mob-nav-label { color: #555555 !important; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--asphalt); color: var(--concrete); font-family: 'DM Sans', sans-serif; font-size: 15px; min-height: 100vh; }
   header { background: #ffffff; border-bottom: 3px solid var(--stripe); padding: 0 32px; height: 204px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; overflow: visible; }
@@ -2857,11 +2865,23 @@
     <div id="pricingView"  style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="scheduleView" style="display:none;flex:1;overflow:hidden;flex-direction:column;"></div>
     <div id="backlogView" style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
+    <div id="reportsMobileBack"
+         style="display:none;align-items:center;gap:8px;padding:10px 14px;
+                border-bottom:1px solid var(--asphalt-light);cursor:pointer;flex-shrink:0;
+                font-family:'DM Mono',monospace;font-size:12px;font-weight:700;
+                color:var(--stripe);background:var(--asphalt);"
+         onclick="switchTab('reports')">&#8592; Back to Reports</div>
     <div id="reportsView" style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="chatView" style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="arOverviewView"  style="display:none;flex:1;flex-direction:column;overflow-y:auto;min-height:0;"></div>
     <div id="invoiceView"    style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="apAnalyticsView" style="display:none;flex:1;flex-direction:column;overflow-y:auto;min-height:0;"></div>
+    <div id="qcMobileBack"
+         style="display:none;align-items:center;gap:8px;padding:10px 14px;
+                border-bottom:1px solid var(--asphalt-light);cursor:pointer;flex-shrink:0;
+                font-family:'DM Mono',monospace;font-size:12px;font-weight:700;
+                color:var(--stripe);background:var(--asphalt);"
+         onclick="switchTab('reports')">&#8592; Back to Reports</div>
     <div id="qcReportsView"  style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="apAiaView"       style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
     <div id="heimdallView"    style="display:none;flex:1;flex-direction:column;overflow:hidden;"></div>
@@ -3527,7 +3547,7 @@ function closeSecPopup() {
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',
     reportsDailyOrders:'reports', reportsTwoWeek:'reports', reportsForemens:'reports',
-    reportsQC:'reports', reportsJobMix:'reports', reports:'reports',
+    reportsQC:'reports', reportsJobMix:'reports', reportsCertif:'reports', reports:'reports',
     employees:'employees', equipment:'equipment', heimdall:'heimdall', mail:'mail',
     'settings-theme':'settings','settings-schedule':'settings','settings-rosters':'settings',
     'settings-plants':'settings','settings-trucking':'settings','settings-users':'settings' };
@@ -4954,7 +4974,7 @@ function switchTab(tab) {
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',
     reportsDailyOrders:'reports', reportsTwoWeek:'reports', reportsForemens:'reports',
-    reportsQC:'reports', reportsJobMix:'reports', reports:'reports',
+    reportsQC:'reports', reportsJobMix:'reports', reportsCertif:'reports', reports:'reports',
     employees:'employees', equipment:'equipment', heimdall:'heimdall', mail:'mail',
     'settings-theme':'settings','settings-schedule':'settings','settings-rosters':'settings',
     'settings-plants':'settings','settings-trucking':'settings','settings-users':'settings' };
@@ -4995,7 +5015,7 @@ function switchTab(tab) {
   setBtn('tabBacklog',  tab === 'backlog',   '245,197,24');
   setBtn('tabBids',     isBidsView,          '245,197,24');
   setBtn('tabSchedule', tab === 'schedule',  '245,197,24');
-  setBtn('tabReports',  tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix', '245,197,24');
+  setBtn('tabReports',  tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix' || tab === 'reportsCertif', '245,197,24');
   setBtn('tabChat',     tab === 'chat',      '245,197,24');
   const _chatSub = document.getElementById('chatSubTabs');
   if (_chatSub) _chatSub.style.display = (tab === 'chat') ? 'flex' : 'none';
@@ -5065,6 +5085,18 @@ function switchTab(tab) {
   document.getElementById('_fleetDetailOverlay')?.remove();
   jobsList.style.display        = '';
 
+  // Mobile back bars for reports sub-views
+  var _rBack = document.getElementById('reportsMobileBack');
+  if (_rBack) {
+    var _isReportsSub = ['reportsDailyOrders','reportsTwoWeek','reportsForemens',
+                         'reportsQC','reportsJobMix','reportsCertif'].indexOf(tab) >= 0;
+    _rBack.style.display = (_isReportsSub && window.innerWidth <= 768) ? 'flex' : 'none';
+  }
+  var _qcBack = document.getElementById('qcMobileBack');
+  if (_qcBack) {
+    _qcBack.style.display = (tab === 'reportsQC' && window.innerWidth <= 768) ? 'flex' : 'none';
+  }
+
   if (tab === 'home') {
     jobsList.style.display = 'none';
     emptyState.style.display = 'none';
@@ -5123,7 +5155,7 @@ function switchTab(tab) {
         }
       }).catch(function() {});
     }
-  } else if (tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix') {
+  } else if (tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix' || tab === 'reportsCertif') {
     // Show/update DJ approval button
     const _djBtn = document.getElementById('djApprovalBtnWrap');
     if (_djBtn) {
@@ -28901,11 +28933,13 @@ function _pruneNavGroups(items) {
     { type:'group', label:'Operations' },
     { type:'item', icon:'\uD83D\uDCAC', label:'Chat',              action:'popup',  section:'chat' },
     { type:'item', icon:'\uD83D\uDCC5', label:'Master Schedule',   action:'popup',  section:'schedule' },
-    { type:'group', label:'Reports' },
-    { type:'item', icon:'\uD83D\uDCC4', label:'Daily Orders',      action:'tab',    tab:'reportsDailyOrders' },
-    { type:'item', icon:'\uD83D\uDCCA', label:'2-Week Look Ahead', action:'tab',    tab:'reportsTwoWeek',  sub:true },
-    { type:'item', icon:'\uD83D\uDC77', label:"Foremen's Reports", action:'tab',    tab:'reportsForemens', sub:true },
-    { type:'item', icon:'\uD83D\uDD2C', label:'QC Reports',        action:'tab',    tab:'reportsQC',       sub:true },
+    { type:'item', icon:'\uD83D\uDCC1', label:'Reports',           action:'tab', tab:'reports' },
+    { type:'item', icon:'\uD83D\uDCC4', label:'Daily Orders',      action:'tab', tab:'reportsDailyOrders', sub:true },
+    { type:'item', icon:'\uD83D\uDCCA', label:'2-Week Look Ahead', action:'tab', tab:'reportsTwoWeek',     sub:true },
+    { type:'item', icon:'\uD83D\uDC77', label:"Foremen's Reports", action:'tab', tab:'reportsForemens',    sub:true },
+    { type:'item', icon:'\uD83D\uDD2C', label:'QC Reports',        action:'tab', tab:'reportsQC',          sub:true },
+    { type:'item', icon:'\uD83E\uDDEA', label:'Job Mix Formula',   action:'tab', tab:'reportsJobMix',      sub:true },
+    { type:'item', icon:'\uD83D\uDCCB', label:'Certifieds',        action:'tab', tab:'reportsCertif',      sub:true },
     { type:'group', label:'People & Equipment' },
     { type:'item', icon:'\uD83D\uDC77', label:'Employees',         action:'popup',  section:'employees' },
     { type:'item', icon:'\uD83D\uDD27', label:'Equipment',         action:'popup',  section:'equipment' },
@@ -28970,16 +29004,16 @@ function _pruneNavGroups(items) {
     ov._navData = _visibleNav; // patch navData so _hdrMobileNavExec uses filtered indices
     var html = _visibleNav.map(function(n, i) {
       if (n.type === 'header') {
-        return '<div style="display:flex;flex-direction:column;border-bottom:2px solid rgba(245,197,24,0.35);background:#1a1a1a;flex-shrink:0;position:sticky;top:0;z-index:1;">' +
+        return '<div class="mob-nav-hdr" style="display:flex;flex-direction:column;border-bottom:2px solid rgba(245,197,24,0.35);background:#1a1a1a;flex-shrink:0;position:sticky;top:0;z-index:1;">' +
           '<div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 10px;">' +
             '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:3px;color:#f5c518;">🔭 Navigate</div>' +
-            '<button onclick="_hdrMobileNavClose()" style="background:rgba(255,255,255,0.06);border:1px solid #444;border-radius:8px;color:#ccc;font-size:20px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;">&#10005;</button>' +
+            '<button class="mob-nav-close" onclick="_hdrMobileNavClose()" style="background:rgba(255,255,255,0.06);border:1px solid #444;border-radius:8px;color:#ccc;font-size:20px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;">&#10005;</button>' +
           '</div>' +
           '<div id="_mnavSearchSlot" style="padding:0 16px 14px;"></div>' +
         '</div>';
       }
       if (n.type === 'group') {
-        return '<div style="padding:10px 20px 7px;font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#f5c518;background:rgba(245,197,24,0.07);border-top:1px solid rgba(245,197,24,0.15);border-bottom:1px solid rgba(245,197,24,0.15);margin-top:2px;">' + n.label + '</div>';
+        return '<div class="mob-nav-group" style="padding:10px 20px 7px;font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#f5c518;background:rgba(245,197,24,0.07);border-top:1px solid rgba(245,197,24,0.15);border-bottom:1px solid rgba(245,197,24,0.15);margin-top:2px;">' + n.label + '</div>';
       }
       var isActive = (n.tab && n.tab === cur) || (n.action === 'home' && (cur === 'home' || cur === '' || !cur));
       var pl = n.sub ? '56px' : '20px';
@@ -28988,11 +29022,12 @@ function _pruneNavGroups(items) {
       var color = isActive ? '#f5c518' : (n.sub ? '#9b9488' : '#f9f7f3');
       var fw = isActive ? '800' : (n.sub ? '500' : '600');
       var fs = n.sub ? '14px' : '16px';
-      return '<div onclick="_hdrMobileNavExec(' + i + ')" ' +
+      var itemClass = 'mob-nav-item' + (n.sub ? ' mob-nav-sub' : '');
+      return '<div class="' + itemClass + '" onclick="_hdrMobileNavExec(' + i + ')" ' +
         'style="display:flex;align-items:center;gap:16px;padding:15px 20px 15px ' + pl + ';' + borderL + 'background:' + bg + ';' +
         'cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);-webkit-tap-highlight-color:transparent;min-height:54px;box-sizing:border-box;transition:background 0.1s;">' +
         '<span style="font-size:' + (n.sub?'16px':'20px') + ';flex-shrink:0;width:28px;text-align:center;line-height:1;">' + (n.icon||'') + '</span>' +
-        '<span style="font-family:\'DM Sans\',sans-serif;font-size:' + fs + ';font-weight:' + fw + ';color:' + color + ';">' + n.label + '</span>' +
+        '<span class="mob-nav-label" style="font-family:\'DM Sans\',sans-serif;font-size:' + fs + ';font-weight:' + fw + ';color:' + color + ';">' + n.label + '</span>' +
         (isActive ? '<span style="margin-left:auto;width:8px;height:8px;border-radius:50%;background:#f5c518;flex-shrink:0;"></span>' : '') +
         '</div>';
     }).join('');
