@@ -3653,7 +3653,10 @@ function _invRenderWeekGrid(activeDays, rows, todayKey, subItems) {
     if (bi >= 0) return 1;
     return a.localeCompare(b);
   });
-  var gridCols = '140px ' + activeDays.map(function() { return 'minmax(260px,1fr)'; }).join(' ');
+  var isMobile = window.innerWidth <= 768;
+  var colMin   = isMobile ? '120px' : '260px';
+  var lblWidth = isMobile ? '80px'  : '140px';
+  var gridCols = lblWidth + ' ' + activeDays.map(function() { return 'minmax(' + colMin + ',1fr)'; }).join(' ');
   var hdr = '<div class="inv2-corner-cell"></div>'
     + activeDays.map(function(day) {
         return '<div class="inv2-day-head' + (day.key === todayKey ? ' inv2-today' : '') + '">' + day.label + '</div>';
@@ -4738,3 +4741,13 @@ function saveInvoiceEntry(editId) {
   if (modal) modal.remove();
   renderInvoiceTracker();
 }
+
+var _invResizeTimer = null;
+window.addEventListener('resize', function() {
+  clearTimeout(_invResizeTimer);
+  _invResizeTimer = setTimeout(function() {
+    if (typeof renderInvoiceTracker === 'function') {
+      renderInvoiceTracker();
+    }
+  }, 200);
+});

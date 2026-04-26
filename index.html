@@ -2095,6 +2095,26 @@
   .inv2-week-separator:first-child { border-top:none; margin-top:0; }
   @media print { .inv2-month-tabs, .inv2-week-tabs { display:none !important; } }
 
+  @media (max-width: 768px) {
+    #invoiceView    { overflow-x: auto !important; overflow-y: auto !important; }
+    .inv2-wrap      { overflow-x: auto !important; height: auto !important; }
+    .inv2-grid-scroll { padding: 8px !important; }
+    .inv2-grid      { overflow: visible !important; }
+    .inv2-foreman-cell { font-size: 9px !important; padding: 4px 3px !important; min-width: 0 !important; }
+    .inv2-card      { min-width: 110px !important; padding: 4px !important; font-size: 9px !important; }
+    .inv2-billing   { width: 70px !important; font-size: 8px !important; }
+    .inv2-search-input { min-width: 120px !important; font-size: 11px !important; }
+    .inv2-month-tab,
+    .inv2-week-tab  { font-size: 9px !important; padding: 3px 6px !important; }
+    .inv2-mix-row,
+    .inv2-truck-row { font-size: 8px !important; gap: 2px !important; }
+    .inv2-day-cell  { padding: 2px !important; gap: 3px !important; }
+    .inv2-billed-amt,
+    .inv2-approved-amt { font-size: 11px !important; }
+    .inv2-sub-divider { font-size: 8px !important; padding: 2px 4px !important; }
+    .inv2-total-bar { font-size: 9px !important; padding: 6px 8px !important; }
+  }
+
   /* ── Bid Main View redesign ── */
   .bid-main-toolbar { display:flex; align-items:center; gap:10px; padding:14px 24px; border-bottom:2px solid var(--asphalt-light); background:var(--asphalt-mid); flex-shrink:0; }
   .bid-main-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; color:var(--white); flex:1; }
