@@ -450,25 +450,31 @@ function openMobBlockDetail(key, slot) {
       : `<span class="sched-mob-sheet-val">${escHtml(val)}</span>`;
     return `<div class="sched-mob-sheet-row"><span class="sched-mob-sheet-lbl">${lbl}</span>${content}</div>`;
   };
-  const mobTonsByType = {};
-  let mobTotalTons = 0;
+  const mobTonsByType  = {};
+  const mobCountByType = {};
+  let mobTotalTons  = 0;
+  let mobTotalLoads = 0;
   (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(s) {
     return s.date === key && s.jobNum && fields.jobNum &&
            s.jobNum.toString().trim() === fields.jobNum.toString().trim();
   }).forEach(function(s) {
     const mt = s.mixType || 'Unknown';
-    mobTonsByType[mt] = (mobTonsByType[mt] || 0) + (parseFloat(s.tons) || 0);
-    mobTotalTons += (parseFloat(s.tons) || 0);
+    mobTonsByType[mt]  = (mobTonsByType[mt]  || 0) + (parseFloat(s.tons) || 0);
+    mobCountByType[mt] = (mobCountByType[mt] || 0) + 1;
+    mobTotalTons  += (parseFloat(s.tons) || 0);
+    mobTotalLoads += 1;
   });
   const mobTonnageHtml = Object.keys(mobTonsByType).length > 0
     ? `<div class="sched-mob-sheet-row" style="flex-direction:column;gap:3px;align-items:stretch;">` +
         `<span class="sched-mob-sheet-lbl">Scanned Tons</span>` +
-        Object.keys(mobTonsByType).map(mt =>
-          `<div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);padding:0 2px;">` +
-          `<span>${escHtml(mt)}</span><span>${mobTonsByType[mt].toFixed(1)} t</span></div>`
-        ).join('') +
+        Object.keys(mobTonsByType).map(mt => {
+          const pct = mobTotalTons > 0 ? Math.round(mobTonsByType[mt] / mobTotalTons * 100) : 0;
+          const n   = mobCountByType[mt];
+          return `<div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);padding:0 2px;">` +
+            `<span>${escHtml(mt)}</span><span>${n} ld · ${mobTonsByType[mt].toFixed(1)} t · ${pct}%</span></div>`;
+        }).join('') +
         `<div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:10px;font-weight:800;color:var(--concrete);padding:2px 2px 0;border-top:1px solid rgba(255,255,255,0.1);margin-top:1px;">` +
-        `<span>Total</span><span>${mobTotalTons.toFixed(1)} t</span></div>` +
+        `<span>Total</span><span>${mobTotalLoads} ld · ${mobTotalTons.toFixed(1)} t</span></div>` +
       `</div>`
     : '';
   const bodyHtml = [

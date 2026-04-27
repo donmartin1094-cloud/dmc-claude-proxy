@@ -10,13 +10,12 @@ function _slipsMigrate(arr) {
   return (Array.isArray(arr) ? arr : []).map(function(slip) {
     return Object.assign({
       loadNumber: slip.ticketNo || '',
-      handwrittenNotes: '',
       manualNote: '',
       photoUrl: null,
       photoPath: null,
-      driver: '',
-      loadTime: '',
-      mixCode: slip.mixType || ''
+      time: slip.loadTime || '',
+      truckId: slip.truckNum || '',
+      supplier: ''
     }, slip);
   });
 }
@@ -348,7 +347,7 @@ function _laResortSlips() {
   var tc = document.getElementById('aiaTabContent');
   if (tc) tc.innerHTML = _aiaRenderLA();
 }
-var _SLIP_SCAN_PROMPT = 'This is a paving plant ticket / delivery slip. Extract the following fields if visible. Respond ONLY with a JSON object, no markdown:\n{"mixType":"","tons":0,"rapPct":0,"ticketNo":"","loadNumber":null,"truckNum":"","plant":"","date":"","handwrittenNotes":null}\nmixType: the asphalt mix designation (e.g. SBC 37.5, SIC 19.0). tons: net tons. rapPct: RAP percentage (0 if not shown). ticketNo: ticket/receipt number. loadNumber: LOAD NUMBER — this is printed in the BOTTOM RIGHT corner of the slip, separate from the ticket number. Look specifically in the bottom right area for a number labeled "Load", "Load No", "Load #", "Load Number", or a standalone sequential number in that corner (e.g. 1, 2, 3 or 001, 002, 003). Do NOT confuse with the ticket number which is usually larger and at the top. Return null if not found in the bottom right corner. truckNum: truck number or ID. plant: plant name or location. date: date in YYYY-MM-DD format. handwrittenNotes: any handwritten text visible on the slip — notes, corrections, initials, quantities written by hand. Transcribe exactly as written, or null if none visible.';
+var _SLIP_SCAN_PROMPT = 'This is a hot mix asphalt (HMA) paving delivery ticket. Extract the following fields if visible. Respond ONLY with a JSON object, no markdown:\n{"supplier":"company name at top of slip e.g. Amrize or Aggregate Industries","plant":"specific plant location or address as printed","time":"load time exactly as printed e.g. 14:32","ticketNo":"ticket or receipt number","loadNumber":"LOAD NUMBER from the BOTTOM RIGHT corner of the slip — look for a label like Load, Load No, Load #, or a standalone sequential number in that corner (e.g. 1, 002). Do NOT confuse with the ticket number. Return null if not found in bottom right corner.","truckNum":"truck number or ID","mixType":"asphalt mix designation e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}\ntons: net tons as a number. If any field is not visible or not printed, use null. Never invent values.';
 function _laRescanSlipById(slipId) {
   return new Promise(function(resolve, reject) {
     var slip = pavingSlips.find(function(s){ return s.id===slipId; });
@@ -369,14 +368,14 @@ function _laRescanSlipById(slipId) {
       var text = (data.content && data.content[0] && data.content[0].text) || '';
       try {
         var p = JSON.parse(text.replace(/```json|```/g,'').trim());
-        if (p.date)               slip.date             = p.date;
-        if (p.mixType)            { slip.mixType = p.mixType; slip.mixCode = p.mixType; }
-        if (p.tons > 0)           slip.tons             = p.tons;
-        if (p.ticketNo)           { slip.ticketNo = p.ticketNo; slip.loadNumber = p.ticketNo; }
-        if (p.truckNum)           slip.truckNum         = p.truckNum;
-        if (p.plant)              slip.plant            = p.plant;
-        if (p.rapPct > 0)         slip.rapPct           = p.rapPct;
-        if (p.handwrittenNotes)   slip.handwrittenNotes = p.handwrittenNotes;
+        if (p.date)     slip.date     = p.date;
+        if (p.mixType)  slip.mixType  = p.mixType;
+        if (p.tons > 0) slip.tons     = p.tons;
+        if (p.ticketNo) { slip.ticketNo = p.ticketNo; slip.loadNumber = p.ticketNo; }
+        if (p.truckNum) slip.truckId  = p.truckNum;
+        if (p.plant)    slip.plant    = p.plant;
+        if (p.supplier) slip.supplier = p.supplier;
+        if (p.time)     slip.time     = p.time;
         slip.autoScanned = true;
         resolve(slip);
       } catch(e) { reject(e); }
@@ -477,11 +476,11 @@ function _laUploadSlipModal(prefillDate) {
         '<div><label class="form-label">Date</label><input id="lsDate" class="form-input" type="date" value="'+(prefillDate||today)+'"/></div>'+
         '<div><label class="form-label">Mix Type</label><select id="lsMix" class="form-input"><option value="">— select —</option>'+mixSelHTML+'<option value="__custom">Custom…</option></select></div>'+
         '<div><label class="form-label">Tons</label><input id="lsTons" class="form-input" type="number" step="0.01" min="0" placeholder="0.00"/></div>'+
-        '<div><label class="form-label">RAP %</label><input id="lsRap" class="form-input" type="number" step="0.1" min="0" max="100" placeholder="0"/></div>'+
+        '<div><label class="form-label">Supplier</label><input id="lsSupplier" class="form-input" type="text" placeholder="e.g. Amrize, Aggregate Industries"/></div>'+
         '<div><label class="form-label">Ticket #</label><input id="lsTicket" class="form-input" type="text" placeholder="e.g. 48291"/></div>'+
         '<div><label class="form-label">LOAD # <span style="color:#666;font-size:9px;">(bottom right corner)</span></label><input id="lsLoadNum" class="form-input" type="text" placeholder="e.g. 1, 2, 003"/></div>'+
         '<div><label class="form-label">Truck #</label><input id="lsTruck" class="form-input" type="text" placeholder="e.g. 08"/></div>'+
-        '<div style="grid-column:span 2;"><label class="form-label">Plant / Supplier</label><input id="lsPlant" class="form-input" type="text" placeholder="e.g. Aggregate Industries — Chelmsford"/></div>'+
+        '<div style="grid-column:span 2;"><label class="form-label">Plant</label><input id="lsPlant" class="form-input" type="text" placeholder="e.g. Chelmsford Plant"/></div>'+
         '<div style="grid-column:span 2;"><label class="form-label">Notes</label><input id="lsNotes" class="form-input" type="text" placeholder="Optional notes"/></div>'+
       '</div>'+
       '<div id="laSlipScanStatus" style="display:none;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:8px;padding:6px 10px;background:rgba(90,180,245,0.08);border:1px solid rgba(90,180,245,0.2);border-radius:var(--radius);"></div>'+
@@ -546,14 +545,14 @@ function _laSlipAIScan(b64data, mimeType) {
     try {
       var parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
       // Populate fields
-      if (parsed.date)     { var d=document.getElementById('lsDate');   if(d && parsed.date)   d.value=parsed.date; }
-      if (parsed.mixType)  { var m=document.getElementById('lsMix');    if(m) { var found=[].find.call(m.options,function(o){return o.value.toLowerCase()===parsed.mixType.toLowerCase();}); if(found)m.value=found.value; else { var o=document.createElement('option'); o.value=parsed.mixType; o.textContent=parsed.mixType; m.add(o); m.value=parsed.mixType; } } }
-      if (parsed.tons>0)   { var t=document.getElementById('lsTons');   if(t) t.value=parsed.tons; }
-      if (parsed.rapPct>0) { var rp=document.getElementById('lsRap');   if(rp) rp.value=parsed.rapPct; }
-      if (parsed.ticketNo) { var tk=document.getElementById('lsTicket');if(tk) tk.value=parsed.ticketNo; }
+      if (parsed.date)     { var d=document.getElementById('lsDate');     if(d && parsed.date)   d.value=parsed.date; }
+      if (parsed.mixType)  { var m=document.getElementById('lsMix');      if(m) { var found=[].find.call(m.options,function(o){return o.value.toLowerCase()===parsed.mixType.toLowerCase();}); if(found)m.value=found.value; else { var o=document.createElement('option'); o.value=parsed.mixType; o.textContent=parsed.mixType; m.add(o); m.value=parsed.mixType; } } }
+      if (parsed.tons>0)   { var t=document.getElementById('lsTons');     if(t) t.value=parsed.tons; }
+      if (parsed.supplier) { var sp=document.getElementById('lsSupplier');if(sp) sp.value=parsed.supplier; }
+      if (parsed.ticketNo) { var tk=document.getElementById('lsTicket');  if(tk) tk.value=parsed.ticketNo; }
       if (parsed.loadNumber) { var ln=document.getElementById('lsLoadNum');if(ln) ln.value=parsed.loadNumber; }
-      if (parsed.truckNum) { var tr=document.getElementById('lsTruck'); if(tr) tr.value=parsed.truckNum; }
-      if (parsed.plant)    { var pl=document.getElementById('lsPlant'); if(pl) pl.value=parsed.plant; }
+      if (parsed.truckNum) { var tr=document.getElementById('lsTruck');   if(tr) tr.value=parsed.truckNum; }
+      if (parsed.plant)    { var pl=document.getElementById('lsPlant');   if(pl) pl.value=parsed.plant; }
       statusEl.innerHTML='&#10003; AI extracted ticket data — verify and adjust as needed.';
       statusEl.style.color='#7ecb8f';
       if (parsed.handwrittenNotes) {
@@ -578,22 +577,21 @@ function _laScanSlipFromPhoto() {
 }
 function _laSlipSave() {
   var s = _aiaState || {};
-  var date    = (document.getElementById('lsDate')  ||{}).value || new Date().toISOString().slice(0,10);
-  var mixType = (document.getElementById('lsMix')   ||{}).value || '';
-  var tons    = parseFloat((document.getElementById('lsTons')  ||{}).value) || 0;
-  var rapPct  = parseFloat((document.getElementById('lsRap')   ||{}).value) || 0;
-  var ticket  = (document.getElementById('lsTicket') ||{}).value || '';
-  var loadNum = (document.getElementById('lsLoadNum')||{}).value || '';
-  var truck   = (document.getElementById('lsTruck')  ||{}).value || '';
-  var plant   = (document.getElementById('lsPlant') ||{}).value || '';
-  var notes   = (document.getElementById('lsNotes') ||{}).value || '';
+  var date     = (document.getElementById('lsDate')    ||{}).value || new Date().toISOString().slice(0,10);
+  var mixType  = (document.getElementById('lsMix')     ||{}).value || '';
+  var tons     = parseFloat((document.getElementById('lsTons') ||{}).value) || 0;
+  var supplier = (document.getElementById('lsSupplier')||{}).value || '';
+  var ticket   = (document.getElementById('lsTicket')  ||{}).value || '';
+  var loadNum  = (document.getElementById('lsLoadNum') ||{}).value || '';
+  var truck    = (document.getElementById('lsTruck')   ||{}).value || '';
+  var plant    = (document.getElementById('lsPlant')   ||{}).value || '';
+  var notes    = (document.getElementById('lsNotes')   ||{}).value || '';
 
   _slipsLoad();
   var _ctx = window._slipScanContext || {};
   window._slipScanContext = null;
   var _photo   = window._laSlipPhotoB64 || '';
   window._laSlipPhotoB64 = null;
-  var _hwNotes = window._laSlipHandwrittenNotes || '';
   window._laSlipHandwrittenNotes = null;
 
   var jobId   = _ctx.jobId   || s.backlogJobId || null;
@@ -604,28 +602,28 @@ function _laSlipSave() {
 
   function _finishSave(photoUrl, photoPath) {
     var slip = {
-      id:               'slip_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-      jobId:            jobId,
-      jobName:          jobName,
-      jobNum:           jobNum,
-      reqId:            s.editId || null,
-      date:             date,
-      mixType:          mixType,
-      mixCode:          mixType,
-      tons:             tons,
-      rapPct:           rapPct,
-      plant:            plant,
-      truckNum:         truck,
-      ticketNo:         ticket,
-      loadNumber:       loadNum || ticket,
-      photoUrl:         photoUrl,
-      photoPath:        photoPath,
-      autoScanned:      !!_photo,
-      notes:            notes,
-      handwrittenNotes: _hwNotes,
-      createdAt:        Date.now()
+      id:          'slip_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+      jobId:       jobId,
+      jobName:     jobName,
+      jobNum:      jobNum,
+      reqId:       s.editId || null,
+      date:        date,
+      mixType:     mixType,
+      tons:        tons,
+      plant:       plant,
+      supplier:    supplier,
+      truckId:     truck,
+      ticketNo:    ticket,
+      loadNumber:  loadNum || ticket,
+      photoUrl:    photoUrl,
+      photoPath:   photoPath,
+      autoScanned: !!_photo,
+      notes:       notes,
+      createdAt:   Date.now()
     };
-    slip.mixType = _normalizeMixType(slip.mixCode, slip.mixType);
+    slip.mixType = _normalizeMixType(mixType, mixType);
+    slip.loadNumByType = (pavingSlips.filter(function(s){ return s.jobId===jobId && s.date===date && s.mixType===slip.mixType; }).length) + 1;
+    slip.loadNumDaily  = (pavingSlips.filter(function(s){ return s.jobId===jobId && s.date===date; }).length) + 1;
     pavingSlips.unshift(slip);
     _slipsSave();
 
@@ -665,6 +663,15 @@ function _laSlipSave() {
 
     var tc = document.getElementById('aiaTabContent');
     if (tc) tc.innerHTML = _aiaRenderLA();
+    try {
+      var jfBody = document.getElementById('jfBody');
+      if (jfBody) {
+        var jfBtn = document.querySelector('.jf-tab.active');
+        var jfJobId = jfBtn ? (jfBtn.getAttribute('onclick')||'').match(/'([^']+)'/)?.[1] : null;
+        var jfJob = jfJobId ? (backlogJobs||[]).find(function(j){ return j.id===jfJobId; }) : null;
+        if (jfJob) jfBody.innerHTML = _jfRenderTab(jfJob, _jfActiveTab || 'slips');
+      }
+    } catch(e) {}
   }
 
   if (_photo && typeof uploadFileToStorage === 'function' && storage) {

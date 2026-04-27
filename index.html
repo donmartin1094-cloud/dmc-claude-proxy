@@ -5786,21 +5786,27 @@ function _homeDailyOverviewSectionHtml() {
       return s.date === todayKey && s.jobNum && f.jobNum &&
              s.jobNum.toString().trim() === f.jobNum.toString().trim();
     });
-    var tonsByType = {};
+    var tonsByType   = {};
+    var countsByType = {};
     var scannedTotal = 0;
     todaySlips.forEach(function(s) {
       var mt = s.mixType || 'Unknown';
-      tonsByType[mt] = (tonsByType[mt] || 0) + (parseFloat(s.tons) || 0);
+      tonsByType[mt]   = (tonsByType[mt]   || 0) + (parseFloat(s.tons) || 0);
+      countsByType[mt] = (countsByType[mt] || 0) + 1;
       scannedTotal += (parseFloat(s.tons) || 0);
     });
     var tonnageSection = '';
     if (todaySlips.length > 0) {
       var tonLines = Object.keys(tonsByType).map(function(mt) {
+        var pct = scannedTotal > 0 ? Math.round(tonsByType[mt] / scannedTotal * 100) : 0;
+        var n   = countsByType[mt];
         return '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);display:flex;justify-content:space-between;padding:0 2px;">' +
-          '<span>' + escHtml(mt) + '</span><span>' + tonsByType[mt].toFixed(1) + 't</span></div>';
+          '<span>' + escHtml(mt) + '</span>' +
+          '<span>' + n + 'ld &middot; ' + tonsByType[mt].toFixed(1) + 't &middot; ' + pct + '%</span>' +
+          '</div>';
       }).join('');
       var totalLine = '<div style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:800;color:var(--concrete);display:flex;justify-content:space-between;padding:1px 2px;border-top:1px solid rgba(255,255,255,0.08);margin-top:1px;">' +
-        '<span>Total</span><span>' + scannedTotal.toFixed(1) + 't</span></div>';
+        '<span>Total</span><span>' + todaySlips.length + 'ld &middot; ' + scannedTotal.toFixed(1) + 't</span></div>';
       tonnageSection = '<div style="margin-top:3px;padding:3px;background:rgba(0,0,0,0.15);border-radius:3px;">' + tonLines + totalLine + '</div>';
     }
 
