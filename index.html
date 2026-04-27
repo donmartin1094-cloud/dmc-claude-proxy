@@ -3132,12 +3132,21 @@
                     <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Driver Classification</div>
                     <div style="display:flex;flex-direction:column;gap:8px;">
                       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-                        <input type="checkbox" id="driverTypeLowbed" style="accent-color:var(--stripe);width:14px;height:14px;" />
+                        <input type="checkbox" id="driverTypeLowbed" style="accent-color:var(--stripe);width:14px;height:14px;" onchange="document.getElementById('lowbedClassSection').style.display=this.checked?'':'none'" />
                         <div>
                           <div style="font-size:12px;font-weight:600;color:var(--white);">🚚 Lowbed Driver</div>
                           <div style="font-size:10px;color:var(--concrete-dim);">Hauls heavy equipment between job sites and yard.</div>
                         </div>
                       </label>
+                      <div id="lowbedClassSection" style="display:none;margin-left:24px;padding:8px 12px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:var(--radius);">
+                        <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:6px;">Lowbed Class</div>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#e05050;"><input type="radio" name="lowbedClass" id="lbcMonster" value="monster" style="accent-color:#e05050;" /> Monster</label>
+                          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#f0a060;"><input type="radio" name="lowbedClass" id="lbcHeavy" value="heavy" style="accent-color:#f0a060;" checked /> Heavy</label>
+                          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#5ab4f5;"><input type="radio" name="lowbedClass" id="lbcMedium" value="medium" style="accent-color:#5ab4f5;" /> Medium</label>
+                          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:#7ecb8f;"><input type="radio" name="lowbedClass" id="lbcLight" value="light" style="accent-color:#7ecb8f;" /> Light</label>
+                        </div>
+                      </div>
                       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
                         <input type="checkbox" id="driverTypeMixtruck" style="accent-color:var(--stripe);width:14px;height:14px;" />
                         <div>
@@ -6334,6 +6343,45 @@ function _homeLowbedSectionHtml() {
               '</div>';
             }).join('');
 
+            // Per-item equipment rows with selection toggles
+            var seenEqIds = {};
+            var allEquipItems = [];
+            jMoves.forEach(function(m) {
+              (m.items || []).forEach(function(it) {
+                if (it.id && !seenEqIds[it.id]) { seenEqIds[it.id] = true; allEquipItems.push(it); }
+              });
+            });
+            var cardSel = _lbEquipSelections[gId] || new Set();
+            var EQ_ICONS_CARD = { paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️', loader:'🚜', mecalac:'🔩',
+              skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛', lowbed:'🚚', tack_truck:'🛢️',
+              water_truck:'💧', generator:'⚡', trailer:'🔗', other:'📦' };
+            var equipRowsHtml = allEquipItems.length
+              ? '<div style="border-top:1px dashed rgba(123,79,166,0.3);padding:4px 9px 2px;">' +
+                  '<div style="font-family:\'DM Mono\',monospace;font-size:6px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(167,139,250,0.4);padding:2px 0 3px;">Select for new move</div>' +
+                  allEquipItems.map(function(it) {
+                    var isSel = cardSel.has(it.id);
+                    var avail = _lbGetEqStatus(it.id, groups);
+                    var ico = EQ_ICONS_CARD[it.type] || '📦';
+                    var safeItemId = (it.id || '').replace(/'/g, '');
+                    var safeGId2 = gId.replace(/'/g, '');
+                    return '<div onclick="event.stopPropagation();_lbToggleEquipSel(\'' + safeGId2 + '\',\'' + safeItemId + '\')" ' +
+                      'style="display:flex;align-items:center;gap:5px;padding:3px 0;cursor:pointer;">' +
+                      '<span style="font-size:11px;line-height:1;' + (isSel ? 'color:#a78bfa;' : 'color:rgba(123,79,166,0.3);') + '">' + (isSel ? '●' : '○') + '</span>' +
+                      '<span style="font-size:10px;">' + ico + '</span>' +
+                      '<span style="font-family:\'DM Mono\',monospace;font-size:7px;flex:1;color:' + (isSel ? '#e2d9f3' : 'rgba(200,190,220,0.55)') + ';">' + escHtml(it.name || it.type || 'Equipment') + '</span>' +
+                      '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:' + avail.color + ';">' + avail.label + '</span>' +
+                    '</div>';
+                  }).join('') +
+                '</div>'
+              : '';
+            var selCount = cardSel.size;
+            var moveSelBtn = (selCount > 0 && _homeIsAdmin())
+              ? '<div style="padding:3px 9px 4px;">' +
+                  '<button onclick="event.stopPropagation();_lbMoveSelectedFromCard(\'' + gId.replace(/'/g,'') + '\')" ' +
+                    'style="width:100%;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.4);border-radius:3px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:7px;padding:4px 0;cursor:pointer;font-weight:700;">🚛 Move Selected (' + selCount + ')</button>' +
+                '</div>'
+              : '';
+
             var typeCounts = {};
             jMoves.forEach(function(m) {
               (m.items || []).forEach(function(it) {
@@ -6356,7 +6404,7 @@ function _homeLowbedSectionHtml() {
                 '</div>'
               : '';
 
-            cardBody = moveRowsHtml + totalsHtml + cleanoutBtn;
+            cardBody = moveRowsHtml + equipRowsHtml + moveSelBtn + totalsHtml + cleanoutBtn;
           }
 
           return '<div style="background:#1e1035;border:1px solid rgba(123,79,166,' + (allDone ? '0.2' : '0.4') + ');border-top:2px solid ' + sc + ';border-radius:6px;overflow:hidden;' + (allDone ? 'opacity:0.65;' : '') + '">' +
@@ -19363,6 +19411,9 @@ var _lbMoveMode  = null;
 var _lbMoveItems = [];
 var _lbEqOpen    = {};
 var _lbCardOpen  = {};
+var _lbEquipSelections = {};
+
+var _LB_TIER_ORDER = ['light', 'medium', 'heavy', 'monster'];
 
 var _LB_RULES = {
   paver:      { loadClass:'heavy',   canPairWith:['roller','skid_steer','mecalac','compactor','generator'] },
@@ -19685,6 +19736,160 @@ function _lbResolveLabel(toVal) {
 function _lbToggleCard(groupId) {
   _lbCardOpen[groupId] = !_lbCardOpen[groupId];
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbToggleEquipSel(groupId, itemId) {
+  if (!_lbEquipSelections[groupId]) _lbEquipSelections[groupId] = new Set();
+  var s = _lbEquipSelections[groupId];
+  if (s.has(itemId)) { s.delete(itemId); } else { s.add(itemId); }
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbMoveSelectedFromCard(groupId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var sel = _lbEquipSelections[groupId] || new Set();
+  if (!sel.size) return;
+
+  var seenIds = {};
+  var allItems = [];
+  groups.forEach(function(m) {
+    if (!m.manual) return;
+    var gk = m.jobGroupId && m.jobGroupId.startsWith('job_') ? m.jobGroupId
+      : (m.to && m.to !== '__garage__') ? 'job_' + m.to : 'single_' + m.id;
+    if (gk !== groupId) return;
+    (m.items || []).forEach(function(it) {
+      if (it.id && sel.has(it.id) && !seenIds[it.id]) { seenIds[it.id] = true; allItems.push(it); }
+    });
+  });
+  if (!allItems.length) return;
+
+  var tierIdx = 0;
+  allItems.forEach(function(it) {
+    var lc = (_LB_RULES[it.type] || { loadClass: 'light' }).loadClass;
+    var i = _LB_TIER_ORDER.indexOf(lc);
+    if (i > tierIdx) tierIdx = i;
+  });
+  var reqClass = _LB_TIER_ORDER[tierIdx] || 'light';
+
+  var fromLoc = '';
+  groups.forEach(function(m) {
+    if (!m.manual) return;
+    var gk = m.jobGroupId && m.jobGroupId.startsWith('job_') ? m.jobGroupId
+      : (m.to && m.to !== '__garage__') ? 'job_' + m.to : 'single_' + m.id;
+    if (gk === groupId && m.to) fromLoc = m.to;
+  });
+
+  _lbDriverSelectModal(groupId, allItems, fromLoc, reqClass);
+}
+
+var _lbSelectedDriver = null;
+var _lbPendingMoveData = null;
+
+function _lbDriverSelectModal(groupId, items, fromLoc, reqClass) {
+  var tierColors = { light: '#7ecb8f', medium: '#5ab4f5', heavy: '#f0a060', monster: '#e05050' };
+  var tierColor = tierColors[reqClass] || '#a78bfa';
+  var tierCap = reqClass.charAt(0).toUpperCase() + reqClass.slice(1);
+
+  var now = new Date();
+  var todayKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  var allGroups = [];
+  try { allGroups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+
+  var accts = (typeof getAccounts === 'function') ? getAccounts() : [];
+  var drivers = accts.filter(function(a) {
+    return (a.driverTypes || []).includes('lowbed') || a.role === 'lowbed_driver' || a.role === 'rental_lowbed_driver';
+  });
+  var reqTierIdx = _LB_TIER_ORDER.indexOf(reqClass);
+  var eligible = drivers.filter(function(d) {
+    return _LB_TIER_ORDER.indexOf(d.lowbedClass || 'heavy') >= reqTierIdx;
+  });
+
+  _lbPendingMoveData = { groupId: groupId, items: items, fromLoc: fromLoc };
+
+  var driverRowsHtml = eligible.length
+    ? eligible.map(function(d) {
+        var name = d.displayName || d.username || '?';
+        var dTier = d.lowbedClass || 'heavy';
+        var dTierCap = dTier.charAt(0).toUpperCase() + dTier.slice(1);
+        var dTierCol = tierColors[dTier] || '#a78bfa';
+        var onJob = allGroups.some(function(m) {
+          return m.manual && m.status === 'in_progress' && m.date === todayKey
+            && (m.driverName || '').toLowerCase() === name.toLowerCase();
+        });
+        var safeName = name.replace(/'/g, '');
+        return '<div id="lb_dsel_' + safeName.replace(/\s+/g,'_') + '" data-driver="' + escHtml(name) + '" ' +
+          'onclick="_lbSelectDriver(\'' + safeName + '\')" ' +
+          'style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;cursor:pointer;">' +
+          '<div style="flex:1;">' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#fff;">' + escHtml(name) + '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + dTierCol + ';margin-top:2px;">' + dTierCap + ' rated</div>' +
+          '</div>' +
+          '<span style="font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 6px;border-radius:3px;' +
+            (onJob
+              ? 'color:#c9a800;background:rgba(201,168,0,0.1);border:1px solid rgba(201,168,0,0.3);'
+              : 'color:#7ecb8f;background:rgba(126,203,143,0.08);border:1px solid rgba(126,203,143,0.25);') +
+            '">' + (onJob ? '⚡ On Job' : '● Available') + '</span>' +
+        '</div>';
+      }).join('')
+    : '<div style="padding:16px;text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No ' + tierCap + ' rated drivers found.<br>Set driver tiers in Settings → Users.</div>';
+
+  var root = _lbModalRoot();
+  root.innerHTML =
+    '<div onclick="_lbDriverSelCancel()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;">' +
+    '<div onclick="event.stopPropagation()" style="background:var(--asphalt-mid);border:1px solid rgba(167,139,250,0.3);border-radius:10px;width:100%;max-width:400px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.8);">' +
+      '<div style="padding:14px 18px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:#a78bfa;">Select Driver</div>' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:4px;">Requires: <span style="color:' + tierColor + ';font-weight:700;">' + tierCap + '</span> rated driver or higher</div>' +
+      '</div>' +
+      '<div style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:6px;" id="lb_driver_rows">' + driverRowsHtml + '</div>' +
+      '<div style="padding:12px 14px;border-top:1px solid var(--asphalt-light);display:flex;gap:8px;flex-shrink:0;">' +
+        '<button id="lb_confirm_driver_btn" onclick="_lbConfirmDriverSel()" disabled ' +
+          'style="flex:1;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:5px;color:rgba(167,139,250,0.35);font-family:\'DM Mono\',monospace;font-size:10px;padding:8px 16px;cursor:not-allowed;font-weight:700;">Confirm Driver</button>' +
+        '<button onclick="_lbDriverSelCancel()" style="background:none;border:1px solid var(--asphalt-light);border-radius:5px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:8px 16px;cursor:pointer;">Cancel</button>' +
+      '</div>' +
+    '</div>' +
+    '</div>';
+}
+
+function _lbSelectDriver(driverName) {
+  _lbSelectedDriver = driverName;
+  var rows = document.querySelectorAll('#lb_driver_rows [data-driver]');
+  rows.forEach(function(r) { r.style.background = 'rgba(255,255,255,0.03)'; r.style.borderColor = 'rgba(255,255,255,0.06)'; });
+  var sel = document.querySelector('#lb_driver_rows [data-driver="' + driverName.replace(/"/g,'\\"') + '"]');
+  if (sel) { sel.style.background = 'rgba(167,139,250,0.15)'; sel.style.borderColor = 'rgba(167,139,250,0.5)'; }
+  var btn = document.getElementById('lb_confirm_driver_btn');
+  if (btn) { btn.disabled = false; btn.style.color = '#a78bfa'; btn.style.cursor = 'pointer'; btn.style.background = 'rgba(167,139,250,0.18)'; btn.style.borderColor = 'rgba(167,139,250,0.5)'; }
+}
+
+function _lbConfirmDriverSel() {
+  if (!_lbSelectedDriver || !_lbPendingMoveData) return;
+  var d = _lbPendingMoveData;
+  var driverName = _lbSelectedDriver;
+  _lbSelectedDriver = null;
+  _lbPendingMoveData = null;
+  _lbOpenMoveFromCard(driverName, d.groupId, d.items, d.fromLoc);
+}
+
+function _lbDriverSelCancel() {
+  if (_lbPendingMoveData) { delete _lbEquipSelections[_lbPendingMoveData.groupId]; }
+  _lbSelectedDriver = null;
+  _lbPendingMoveData = null;
+  _lbModalClose();
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbOpenMoveFromCard(driverName, groupId, items, fromLoc) {
+  _lbManualMoveOpen('job');
+  setTimeout(function() {
+    _lbMoveItems = items.slice();
+    _lbRenderChips();
+    var dEl = document.getElementById('lb_driver');
+    if (dEl) dEl.value = driverName;
+    var fEl = document.getElementById('lb_from');
+    if (fEl) fEl.value = fromLoc || '';
+    delete _lbEquipSelections[groupId];
+  }, 60);
 }
 
 function _lbCleanoutJob(groupId) {
@@ -28280,6 +28485,10 @@ function openEditUserForm(username) {
     const dt = acct.driverTypes || [];
     document.getElementById('driverTypeLowbed').checked = dt.includes('lowbed');
     document.getElementById('driverTypeMixtruck').checked = dt.includes('mixtruck');
+    const lbSect = document.getElementById('lowbedClassSection');
+    if (lbSect) lbSect.style.display = dt.includes('lowbed') ? '' : 'none';
+    const lbcEl = document.querySelector('input[name="lowbedClass"][value="' + (acct.lowbedClass || 'heavy') + '"]');
+    if (lbcEl) lbcEl.checked = true;
   } else { document.getElementById('roleStaff').checked = true; document.getElementById('driverTypeSection').style.display = 'none'; }
   document.getElementById('userEditError').style.display = 'none';
   document.getElementById('userEditForm').style.display = '';
@@ -28392,6 +28601,9 @@ async function saveUserAccount() {
     ...(document.getElementById('driverTypeLowbed')?.checked ? ['lowbed'] : []),
     ...(document.getElementById('driverTypeMixtruck')?.checked ? ['mixtruck'] : []),
   ] : [];
+  const lowbedClass = (role === 'driver' && document.getElementById('driverTypeLowbed')?.checked)
+    ? (document.querySelector('input[name="lowbedClass"]:checked')?.value || 'heavy')
+    : null;
 
   if (!username) { showUserErr('Username cannot be empty.'); return; }
   if (!password) { showUserErr('Password cannot be empty.'); return; }
@@ -28466,6 +28678,7 @@ async function saveUserAccount() {
       accounts[idx].role = ['dj','donmartin'].includes(newUsername.toLowerCase()) ? 'admin' : role;
       accounts[idx].displayName = displayName;
       accounts[idx].driverTypes = role === 'driver' ? driverTypes : [];
+      if (lowbedClass) { accounts[idx].lowbedClass = lowbedClass; } else { delete accounts[idx].lowbedClass; }
       accounts[idx].authUid = syncRes.ok ? (syncRes.data.uid || accounts[idx].authUid) : (accounts[idx].authUid || null);
     }
     // If the logged-in user edited themselves, update session + badge
@@ -28503,7 +28716,9 @@ async function saveUserAccount() {
       }
     }
 
-    accounts.push({ username, email, password, role, displayName, driverTypes: role === 'driver' ? driverTypes : [], authUid: syncRes.ok ? (syncRes.data?.uid || null) : null });
+    const newAcct = { username, email, password, role, displayName, driverTypes: role === 'driver' ? driverTypes : [], authUid: syncRes.ok ? (syncRes.data?.uid || null) : null };
+    if (lowbedClass) newAcct.lowbedClass = lowbedClass;
+    accounts.push(newAcct);
   }
 
   const cloudSave = await saveAccounts(accounts);
