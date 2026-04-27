@@ -2144,23 +2144,32 @@
   @media print { .inv2-month-tabs, .inv2-week-tabs { display:none !important; } }
 
   @media (max-width: 768px) {
-    #invoiceView    { overflow-x: auto !important; overflow-y: auto !important; }
-    .inv2-wrap      { overflow-x: auto !important; height: auto !important; }
-    .inv2-grid-scroll { padding: 8px !important; }
+    /* Fix 3 — proper scroll container structure */
+    #invoiceView    { overflow: hidden !important; display: flex !important; flex-direction: column !important; height: 100% !important; }
+    .inv2-wrap      { overflow-x: hidden !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+    .inv2-grid-scroll { flex: 1 !important; overflow-x: auto !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; padding: 6px !important; }
     .inv2-grid      { overflow: visible !important; }
-    .inv2-foreman-cell { font-size: 9px !important; padding: 4px 3px !important; min-width: 0 !important; }
-    .inv2-card      { min-width: 110px !important; padding: 4px !important; font-size: 9px !important; }
-    .inv2-billing   { width: 70px !important; font-size: 8px !important; }
-    .inv2-search-input { min-width: 120px !important; font-size: 11px !important; }
-    .inv2-month-tab,
-    .inv2-week-tab  { font-size: 9px !important; padding: 3px 6px !important; }
-    .inv2-mix-row,
-    .inv2-truck-row { font-size: 8px !important; gap: 2px !important; }
-    .inv2-day-cell  { padding: 2px !important; gap: 3px !important; }
+    /* Fix 2 — card and foreman cell widths matched to new 72px column minimum */
+    .inv2-foreman-cell { font-size: 8px !important; padding: 3px 2px !important; min-width: 0 !important; width: 52px !important; }
+    .inv2-card      { min-width: 60px !important; padding: 3px !important; font-size: 8px !important; }
+    .inv2-billing   { width: 56px !important; font-size: 7px !important; }
     .inv2-billed-amt,
-    .inv2-approved-amt { font-size: 11px !important; }
+    .inv2-approved-amt { font-size: 9px !important; }
+    .inv2-mix-row,
+    .inv2-truck-row { font-size: 7px !important; gap: 1px !important; }
+    .inv2-job-no,
+    .inv2-gc-name,
+    .inv2-project-name,
+    .inv2-supplier-name { font-size: 7px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+    .inv2-day-cell  { padding: 2px !important; gap: 3px !important; }
     .inv2-sub-divider { font-size: 8px !important; padding: 2px 4px !important; }
     .inv2-total-bar { font-size: 9px !important; padding: 6px 8px !important; }
+    .inv2-search-input { min-width: 120px !important; font-size: 11px !important; }
+    /* Fix 5 — tab bar sizing and scroll snap */
+    .inv2-month-tab { font-size: 8px !important; padding: 3px 5px !important; white-space: nowrap !important; flex-shrink: 0 !important; scroll-snap-align: start !important; }
+    .inv2-week-tab  { font-size: 8px !important; padding: 3px 5px !important; white-space: nowrap !important; flex-shrink: 0 !important; scroll-snap-align: start !important; }
+    .inv2-month-tabs,
+    .inv2-week-tabs { -webkit-overflow-scrolling: touch !important; scroll-snap-type: x mandatory !important; }
   }
 
   /* ── Bid Main View redesign ── */

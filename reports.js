@@ -3654,8 +3654,8 @@ function _invRenderWeekGrid(activeDays, rows, todayKey, subItems) {
     return a.localeCompare(b);
   });
   var isMobile = window.innerWidth <= 768;
-  var colMin   = isMobile ? '120px' : '260px';
-  var lblWidth = isMobile ? '80px'  : '140px';
+  var colMin   = isMobile ? '72px'  : '260px';
+  var lblWidth = isMobile ? '52px'  : '140px';
   var gridCols = lblWidth + ' ' + activeDays.map(function() { return 'minmax(' + colMin + ',1fr)'; }).join(' ');
   var hdr = '<div class="inv2-corner-cell"></div>'
     + activeDays.map(function(day) {
@@ -4489,6 +4489,10 @@ function renderInvoiceTracker() {
     + '<div class="inv2-grid-scroll">' + gridHtml + '</div>'
     + totalBar
     + '</div>';
+  setTimeout(function() {
+    var activeTab = document.querySelector('.inv2-month-tab.inv2-tab-active');
+    if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, 50);
 }
 
 // ── Modal (initial creation only — all editing is inline on cards) ─────────────
