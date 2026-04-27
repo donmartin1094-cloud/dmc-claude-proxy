@@ -4,6 +4,8 @@ var reportsFolderCollapsed = {};
 var reportsDailyViewMode = {}; // { [foreman]: 'month' | 'year' } per foreman folder
 var _invMigrationDone = false;
 var _invModalBrkRows = [];
+var invCalViewMode    = 'grid';  // 'grid' | 'calendar' — mobile only
+var invCalMonthOffset = 0;       // 0 = current month, negative = past
 
 // ── Reports Print / Export Utilities ─────────────────────────────────────────
 
@@ -4409,8 +4411,11 @@ function renderInvoiceTracker() {
     if (a !== null) { periodApproved += a; hasApproved = true; }
   });
 
+  var isMobCal = (invCalViewMode === 'calendar' && window.innerWidth <= 768);
   var gridHtml;
-  if (invoiceActiveWeek) {
+  if (isMobCal) {
+    gridHtml = _invCalMonthGrid(invCalMonthOffset);
+  } else if (invoiceActiveWeek) {
     var wkAllDays = _invWeekFromMonday(invoiceActiveWeek);
     var wkKeySet  = {};
     rows.forEach(function(inv) { wkKeySet[inv.dateOfWork] = true; });
@@ -4483,9 +4488,15 @@ function renderInvoiceTracker() {
     +     '</div>'
     +   '</div>'
     +   _invRenderMonthTabs(canEdit)
-    +   _invRenderWeekTabs()
+    +   (window.innerWidth <= 768
+        ? '<div class="inv2-view-toggle">'
+          + '<button class="inv2-view-btn' + (invCalViewMode === 'calendar' ? ' active' : '') + '" onclick="invCalViewMode=\'calendar\';renderInvoiceTracker();">📅 Calendar</button>'
+          + '<button class="inv2-view-btn' + (invCalViewMode === 'grid' ? ' active' : '') + '" onclick="invCalViewMode=\'grid\';renderInvoiceTracker();">▦ Grid</button>'
+          + '</div>'
+        : '')
+    +   (!isMobCal ? _invRenderWeekTabs() : '')
     + '</div>'
-    + (invSearchQuery ? '<div style="padding:4px 24px 2px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);">🔍 ' + rows.length + ' result' + (rows.length !== 1 ? 's' : '') + '</div>' : '')
+    + (!isMobCal && invSearchQuery ? '<div style="padding:4px 24px 2px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);">🔍 ' + rows.length + ' result' + (rows.length !== 1 ? 's' : '') + '</div>' : '')
     + '<div class="inv2-grid-scroll">' + gridHtml + '</div>'
     + totalBar
     + '</div>';
@@ -4494,6 +4505,232 @@ function renderInvoiceTracker() {
     if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, 50);
 }
+
+// ── Invoice Calendar Month Grid ────────────────────────────────────────────────
+
+function _invCalMonthGrid(monthOffset) {
+  var now = new Date();
+  now.setHours(0,0,0,0);
+  var todayKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  var base = new Date(now.getFullYear(), now.getMonth() + (monthOffset || 0), 1);
+  var yr = base.getFullYear();
+  var mo = base.getMonth();
+  var daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  var firstDow = new Date(yr, mo, 1).getDay();
+  var roster = (typeof foremanRoster !== 'undefined' && Array.isArray(foremanRoster)) ? foremanRoster : [];
+  var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var fmColors = ['#f5c518', '#5ab4f5', '#3d9e6a'];
+
+  function _init(name) {
+    var parts = (name || '').trim().split(/\s+/);
+    return parts.length >= 2
+      ? (parts[0][0] + parts[parts.length-1][0]).toUpperCase()
+      : ((parts[0] || '?')[0] || '?').toUpperCase();
+  }
+
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var hdrHtml = DOW.map(function(d) {
+    return '<div class="mob-cal-day-hdr">' + d + '</div>';
+  }).join('');
+
+  var cells = [];
+
+  // Leading cells from previous month
+  var prevDays = new Date(yr, mo, 0).getDate();
+  for (var i = 0; i < firstDow; i++) {
+    var pday = prevDays - firstDow + 1 + i;
+    cells.push('<div class="mob-cal-day-cell mob-cal-outside-month"><span class="mob-cal-day-num">' + pday + '</span></div>');
+  }
+
+  // Current month cells
+  for (var d = 1; d <= daysInMonth; d++) {
+    var date = new Date(yr, mo, d);
+    var dow = date.getDay();
+    var key = yr + '-' + String(mo+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var isWknd = dow === 0 || dow === 6;
+    var isHolD = (typeof holidays !== 'undefined') && holidays.has(key);
+    var isTodayCell = key === todayKey;
+
+    var dayInvs = invoiceList.filter(function(inv) { return inv.dateOfWork === key; });
+    var byForeman = {};
+    dayInvs.forEach(function(inv) {
+      var fm = inv.foreman || '(No Foreman)';
+      if (!byForeman[fm]) byForeman[fm] = [];
+      byForeman[fm].push(inv);
+    });
+    var hasAnyInv = dayInvs.length > 0;
+
+    var rowsHtml = '';
+    var rowCount = 0;
+
+    // Render roster foremen first (in order), then any extras
+    var rendered = {};
+    roster.forEach(function(fm, fIdx) {
+      if (!byForeman[fm]) return;
+      var invs = byForeman[fm];
+      var color = fmColors[fIdx] || fmColors[fmColors.length - 1];
+      var jobNo = invs[0].jobNo ? '#' + invs[0].jobNo : '';
+      var badge = invs.length > 1
+        ? '<span style="font-size:7px;background:rgba(245,197,24,0.3);border-radius:2px;padding:0 2px;margin-left:2px;">\xd72</span>'
+        : '';
+      var mt = rowCount === 0 ? '12px' : '1px';
+      rowsHtml += '<div class="mob-cal-foreman-row" style="margin-top:' + mt + ';border-left:3px solid ' + color + ';background:' + color + '22;color:var(--white);" onclick="_invOpenDaySheet(\'' + key + '\',\'' + fm.replace(/'/g, '') + '\')">'
+        + escHtml(_init(fm) + ' ' + jobNo) + badge
+        + '</div>';
+      rendered[fm] = true;
+      rowCount++;
+    });
+    Object.keys(byForeman).forEach(function(fm) {
+      if (rendered[fm]) return;
+      var invs = byForeman[fm];
+      var color = fmColors[2];
+      var jobNo = invs[0].jobNo ? '#' + invs[0].jobNo : '';
+      var badge = invs.length > 1
+        ? '<span style="font-size:7px;background:rgba(245,197,24,0.3);border-radius:2px;padding:0 2px;margin-left:2px;">\xd72</span>'
+        : '';
+      var mt = rowCount === 0 ? '12px' : '1px';
+      rowsHtml += '<div class="mob-cal-foreman-row" style="margin-top:' + mt + ';border-left:3px solid ' + color + ';background:' + color + '22;color:var(--white);" onclick="_invOpenDaySheet(\'' + key + '\',\'' + fm.replace(/'/g, '') + '\')">'
+        + escHtml(_init(fm) + ' ' + jobNo) + badge
+        + '</div>';
+      rowCount++;
+    });
+
+    // Sub icons row
+    var daySubs = _invGetSubsForPeriod([key]);
+    var subIcons = daySubs.map(function(s) { return (_SUB_ICONS && _SUB_ICONS[s.type]) || '🔧'; }).join('');
+    var subRow = subIcons ? '<div class="inv2-cal-sub-row">' + subIcons + '</div>' : '';
+
+    var holLbl = isHolD
+      ? '<span style="position:absolute;bottom:2px;left:3px;font-family:\'DM Mono\',monospace;font-size:6px;color:var(--red);pointer-events:none;">HOL</span>'
+      : '';
+
+    var cellClass = 'mob-cal-day-cell';
+    var cellStyle = '';
+    if (!hasAnyInv && (isWknd || isHolD)) cellClass += ' mob-cal-lilac';
+    if (isTodayCell) cellStyle = 'outline:2px solid var(--stripe);outline-offset:-2px;z-index:1;';
+
+    cells.push('<div class="' + cellClass + '" style="' + cellStyle + '">'
+      + '<span class="mob-cal-day-num">' + d + '</span>'
+      + rowsHtml
+      + subRow
+      + holLbl
+      + '</div>');
+  }
+
+  // Trailing cells to fill 42-cell grid
+  var needed = 42 - cells.length;
+  for (var n = 1; n <= needed; n++) {
+    cells.push('<div class="mob-cal-day-cell mob-cal-outside-month"><span class="mob-cal-day-num">' + n + '</span></div>');
+  }
+
+  var navHtml = '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px 4px;font-family:\'DM Mono\',monospace;">'
+    + '<button onclick="_invCalNav(-1)" style="background:none;border:none;color:var(--concrete);font-size:18px;cursor:pointer;padding:2px 8px;">&#9664;</button>'
+    + '<span style="font-size:11px;font-weight:700;color:var(--white);letter-spacing:1px;">' + MONTH_NAMES[mo] + ' ' + yr + '</span>'
+    + '<button onclick="_invCalNav(1)" style="background:none;border:none;color:var(--concrete);font-size:18px;cursor:pointer;padding:2px 8px;">&#9654;</button>'
+    + '</div>';
+
+  return navHtml + '<div class="mob-cal-overall-grid">' + hdrHtml + cells.join('') + '</div>';
+}
+
+function _invCalNav(dir) {
+  invCalMonthOffset += dir;
+  renderInvoiceTracker();
+}
+
+// ── Invoice Day Sheet ──────────────────────────────────────────────────────────
+
+function _invOpenDaySheet(dateKey, foremanName) {
+  var existing = document.getElementById('invDaySheet');
+  if (existing) existing.remove();
+
+  var dayInvs = invoiceList.filter(function(inv) {
+    return inv.dateOfWork === dateKey && (inv.foreman || '(No Foreman)') === foremanName;
+  });
+  if (!dayInvs.length) return;
+
+  var canEdit = (typeof isAdmin === 'function' && isAdmin())
+             || (typeof canEditTab === 'function' && canEditTab('ap'));
+
+  var dp = dateKey.split('-');
+  var dt = new Date(parseInt(dp[0]), parseInt(dp[1]) - 1, parseInt(dp[2]));
+  var dateLabel = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+  // Stop toggle (only if 2+ invoices for this foreman on this day)
+  var stopToggleHtml = '';
+  if (dayInvs.length > 1) {
+    stopToggleHtml = '<div class="inv2-stop-toggle">'
+      + '<button class="inv2-stop-btn active" id="invStopBtn0" onclick="_invSetDaySheetStop(0)">First Stop</button>'
+      + '<button class="inv2-stop-btn" id="invStopBtn1" onclick="_invSetDaySheetStop(1)">Second Stop</button>'
+      + '</div>';
+  }
+
+  // Pre-render all stop cards (show/hide via display)
+  var cardsHtml = dayInvs.map(function(inv, i) {
+    var editBtn = canEdit
+      ? '<button class="inv2-edit-btn" onclick="_closeInvDaySheet();openInvoiceModal(\'' + inv.id + '\')">&#9998; Edit Invoice</button>'
+      : '';
+    return '<div id="invStop' + i + '"' + (i > 0 ? ' style="display:none;"' : '') + '>'
+      + _invRenderCard(inv)
+      + editBtn
+      + '</div>';
+  }).join('');
+
+  // Sub section
+  var daySubs = _invGetSubsForPeriod([dateKey]);
+  var subColors = { Milling: '#3b82f6', Grading: '#f5c518', QC: '#3d9e6a', Tack: '#e8813a', Rubber: '#555555', Lowbed: '#8b5cf6' };
+  var subsHtml = '';
+  if (daySubs.length > 0) {
+    subsHtml = '<div style="padding:6px 0 2px;font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Subcontractors</div>'
+      + '<div class="inv2-sub-chips">'
+      + daySubs.map(function(s) {
+          var ic = (_SUB_ICONS && _SUB_ICONS[s.type]) || '🔧';
+          var col = subColors[s.type] || '#888';
+          return '<span class="sa-chip" style="background:' + col + '33;border-color:' + col + ';color:var(--white);">'
+            + ic + ' ' + escHtml(s.subCompany || '') + (s.jobRef ? ' — ' + escHtml(s.jobRef) : '')
+            + '</span>';
+        }).join('')
+      + '</div>';
+  }
+
+  // Add invoice button
+  var fmSafe = foremanName.replace(/'/g, '');
+  var addBtn = canEdit
+    ? '<button class="inv-btn" style="width:100%;margin-top:8px;" onclick="_closeInvDaySheet();openInvoiceModal(null,{dateOfWork:\'' + dateKey + '\',foreman:\'' + fmSafe + '\'})">+ Add Invoice for this day</button>'
+    : '';
+
+  var sheetHtml = '<div class="inv-modal-overlay" id="invDaySheet" onclick="if(event.target===this)_closeInvDaySheet();">'
+    + '<div class="inv-modal">'
+    +   '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:8px;">'
+    +     '<div>'
+    +       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1px;color:var(--white);">' + escHtml(dateLabel) + '</div>'
+    +       '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--stripe);margin-top:2px;">' + escHtml(foremanName) + '</div>'
+    +     '</div>'
+    +     '<button onclick="_closeInvDaySheet()" style="background:none;border:none;color:var(--concrete);font-size:20px;cursor:pointer;padding:0 4px;flex-shrink:0;">✕</button>'
+    +   '</div>'
+    +   stopToggleHtml
+    +   cardsHtml
+    +   subsHtml
+    +   addBtn
+    + '</div>'
+    + '</div>';
+
+  document.body.insertAdjacentHTML('beforeend', sheetHtml);
+}
+
+function _invSetDaySheetStop(idx) {
+  for (var i = 0; i < 4; i++) {
+    var card = document.getElementById('invStop' + i);
+    if (card) card.style.display = (i === idx) ? '' : 'none';
+    var btn = document.getElementById('invStopBtn' + i);
+    if (btn) btn.className = 'inv2-stop-btn' + (i === idx ? ' active' : '');
+  }
+}
+
+function _closeInvDaySheet() {
+  var el = document.getElementById('invDaySheet');
+  if (el) el.remove();
+}
+
 
 // ── Modal (initial creation only — all editing is inline on cards) ─────────────
 function openInvoiceModal(id, prefill) {

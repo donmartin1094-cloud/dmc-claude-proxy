@@ -2170,6 +2170,27 @@
     .inv2-week-tab  { font-size: 8px !important; padding: 3px 5px !important; white-space: nowrap !important; flex-shrink: 0 !important; scroll-snap-align: start !important; }
     .inv2-month-tabs,
     .inv2-week-tabs { -webkit-overflow-scrolling: touch !important; scroll-snap-type: x mandatory !important; }
+    /* Invoice calendar view toggle */
+    .inv2-view-toggle { display:flex; gap:4px; padding:4px 8px; flex-shrink:0; }
+    .inv2-view-btn { font-size:9px; font-family:'DM Mono',monospace; font-weight:700;
+      padding:3px 8px; border-radius:4px; border:1px solid var(--asphalt-light);
+      cursor:pointer; background:var(--asphalt-mid); color:var(--concrete-dim); }
+    .inv2-view-btn.active { background:#f5c518; color:#000; border-color:#e0b000; }
+    /* Invoice calendar day cell sub-icons row */
+    .inv2-cal-sub-row { font-size:8px; line-height:1; margin-top:1px; letter-spacing:1px; }
+    /* Invoice day sheet stop toggle */
+    #invDaySheet .inv2-stop-toggle { display:flex; gap:6px; padding:8px 0;
+      border-bottom:1px solid var(--asphalt-light); margin-bottom:8px; }
+    #invDaySheet .inv2-stop-btn { flex:1; font-size:11px; font-family:'DM Mono',monospace;
+      font-weight:700; padding:6px; border-radius:4px; border:1px solid var(--asphalt-light);
+      cursor:pointer; background:var(--asphalt-mid); color:var(--concrete-dim); text-align:center; }
+    #invDaySheet .inv2-stop-btn.active { background:#f5c518; color:#000; border-color:#e0b000; }
+    #invDaySheet .inv2-edit-btn { width:100%; margin-top:8px; padding:10px;
+      background:var(--asphalt-light); border:1px solid var(--asphalt-light);
+      border-radius:var(--radius); font-size:12px; font-family:'DM Mono',monospace;
+      font-weight:700; color:var(--concrete); cursor:pointer; text-align:center; }
+    #invDaySheet .inv2-sub-chips { display:flex; flex-wrap:wrap; gap:4px;
+      padding:8px 0; border-top:1px solid var(--asphalt-light); margin-top:8px; }
   }
 
   /* ── Bid Main View redesign ── */
