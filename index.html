@@ -6332,9 +6332,12 @@ function _homeLowbedSectionHtml() {
               var fromLabel = (m.from && m.from !== '__garage__') ? m.from : 'Garage';
               var toLabel = _lbResolveLabel(m.to);
               var strike = st === 'complete' ? 'text-decoration:line-through;opacity:0.5;' : '';
+              var driverEl = _homeIsAdmin()
+                ? '<button onclick="event.stopPropagation();_lbAdminAssignModal(\'' + gId.replace(/'/g,'') + '\')" style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:3px;padding:1px 5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;">' + escHtml(driver) + '</button>'
+                : '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">' + escHtml(driver) + '</span>';
               return '<div style="padding:5px 9px;border-top:1px dashed rgba(123,79,166,0.2);' + strike + '">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:2px;">' +
-                  '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">' + escHtml(driver) + '</span>' +
+                  driverEl +
                   '<span style="font-family:\'DM Mono\',monospace;font-size:6px;padding:1px 4px;border-radius:3px;color:' + msc + ';background:rgba(0,0,0,0.2);border:1px solid ' + msc + '33;">' + msl + '</span>' +
                 '</div>' +
                 '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
@@ -19735,6 +19738,171 @@ function _lbResolveLabel(toVal) {
 
 function _lbToggleCard(groupId) {
   _lbCardOpen[groupId] = !_lbCardOpen[groupId];
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbAdminAssignModal(groupId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var jMoves = groups.filter(function(m) {
+    if (!m.manual) return false;
+    var gk = m.jobGroupId && m.jobGroupId.startsWith('job_') ? m.jobGroupId
+      : (m.to && m.to !== '__garage__') ? 'job_' + m.to : 'single_' + m.id;
+    return gk === groupId;
+  });
+  if (!jMoves.length) return;
+
+  var destLabel = _lbResolveLabel(jMoves[0].to);
+  var safeGId = groupId.replace(/'/g, '');
+
+  var accts = [];
+  try { accts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]'); } catch(e) {}
+  var lowbedDrivers = accts.filter(function(a) {
+    return (a.driverTypes || []).includes('lowbed') || a.role === 'lowbed_driver' || a.role === 'rental_lowbed_driver';
+  });
+
+  function driverOptsForClass(reqClass) {
+    var reqTierIdx = _LB_TIER_ORDER.indexOf(reqClass);
+    var eligible = lowbedDrivers.filter(function(d) {
+      return _LB_TIER_ORDER.indexOf(d.lowbedClass || 'heavy') >= reqTierIdx;
+    });
+    var opts = '<option value="">— Select driver —</option>';
+    eligible.forEach(function(d) {
+      var n = d.displayName || d.name || d.username || '';
+      opts += '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>';
+    });
+    return opts;
+  }
+
+  var seenIds = {};
+  var allItems = [];
+  jMoves.forEach(function(m) {
+    (m.items || []).forEach(function(it) {
+      if (it.id && !seenIds[it.id]) { seenIds[it.id] = true; allItems.push({ item: it, moveId: m.id }); }
+    });
+  });
+
+  var EQ_ICONS_A = { paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️', loader:'🚜', mecalac:'🔩',
+    skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛', lowbed:'🚚', tack_truck:'🛢️',
+    water_truck:'💧', generator:'⚡', trailer:'🔗', other:'📦' };
+
+  var equipRowsHtml = allItems.length
+    ? allItems.map(function(entry) {
+        var it = entry.item;
+        var lc = (_LB_RULES[it.type] || { loadClass: 'light' }).loadClass;
+        var reqClass = lc === 'skip' ? 'light' : lc;
+        var ico = EQ_ICONS_A[it.type] || '📦';
+        var assigned = it.assignedDriver || '';
+        var safeItemId = (it.id || '').replace(/'/g, '');
+        var safeMoveId = (entry.moveId || '').replace(/'/g, '');
+        var aColor = assigned ? '#7ecb8f' : 'rgba(245,197,24,0.8)';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed rgba(123,79,166,0.15);min-height:44px;">' +
+          '<span style="font-size:15px;flex-shrink:0;">' + ico + '</span>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;color:#e2d9f3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(it.name || it.type) + '</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(167,139,250,0.5);">' + reqClass + ' class</div>' +
+          '</div>' +
+          '<select onchange="_lbAdminAssignItemSave(\'' + safeGId + '\',\'' + safeMoveId + '\',\'' + safeItemId + '\',this.value)" ' +
+            'style="flex-shrink:0;background:rgba(10,10,25,0.8);border:1px solid rgba(90,180,245,0.2);border-radius:3px;color:' + aColor + ';font-family:\'DM Mono\',monospace;font-size:8px;padding:3px 5px;cursor:pointer;outline:none;max-width:130px;">' +
+            (assigned ? '<option value="' + escHtml(assigned) + '">' + escHtml(assigned) + '</option>' : '') +
+            driverOptsForClass(reqClass) +
+          '</select>' +
+        '</div>';
+      }).join('')
+    : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(155,148,136,0.5);padding:8px 0;">No equipment found.</div>';
+
+  var stC = function(s) { return s === 'complete' ? '#4a7a4a' : s === 'in_progress' ? '#f0d060' : '#7ab3f0'; };
+  var stL = function(s) { return s === 'complete' ? '✓ Done' : s === 'in_progress' ? '⚡ Active' : '⏳ Pending'; };
+
+  var moveRowsHtml = jMoves.map(function(m, mi) {
+    var st = m.status || 'pending';
+    var sc = stC(st); var sl = stL(st);
+    var safeMoveId = (m.id || '').replace(/'/g, '');
+    var tierIdx = 0;
+    (m.items || []).forEach(function(it) {
+      var lc = (_LB_RULES[it.type] || { loadClass: 'light' }).loadClass;
+      if (lc === 'skip') return;
+      var i = _LB_TIER_ORDER.indexOf(lc);
+      if (i > tierIdx) tierIdx = i;
+    });
+    var reqClass = _LB_TIER_ORDER[tierIdx] || 'light';
+    var curDriver = m.driverName || '';
+    var dColor = curDriver ? '#7ecb8f' : 'rgba(245,197,24,0.8)';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed rgba(123,79,166,0.15);min-height:44px;">' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.4);margin-bottom:2px;">Move ' + (mi + 1) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:4px;">' +
+          '<span style="font-family:\'DM Mono\',monospace;font-size:7px;padding:1px 4px;border-radius:3px;color:' + sc + ';background:rgba(0,0,0,0.2);border:1px solid ' + sc + '33;">' + sl + '</span>' +
+          '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.4);">' + (m.items || []).length + ' pcs</span>' +
+        '</div>' +
+      '</div>' +
+      '<select onchange="_lbAdminAssignMoveSave(\'' + safeGId + '\',\'' + safeMoveId + '\',this.value)" ' +
+        'style="flex-shrink:0;background:rgba(10,10,25,0.8);border:1px solid rgba(90,180,245,0.2);border-radius:3px;color:' + dColor + ';font-family:\'DM Mono\',monospace;font-size:8px;padding:3px 5px;cursor:pointer;outline:none;max-width:130px;">' +
+        '<option value="">⚠ Unassigned</option>' +
+        (curDriver ? '<option value="' + escHtml(curDriver) + '" selected>' + escHtml(curDriver) + '</option>' : '') +
+        driverOptsForClass(reqClass) +
+      '</select>' +
+    '</div>';
+  }).join('');
+
+  var root = _lbModalRoot();
+  root.innerHTML =
+    '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:center;justify-content:center;padding:16px;">' +
+    '<div onclick="event.stopPropagation()" style="background:var(--asphalt-mid);border:1px solid rgba(167,139,250,0.3);border-radius:10px;width:90vw;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.8);">' +
+      '<div style="padding:14px 18px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:2px;color:#a78bfa;">Assign Moves</div>' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:2px;">' + escHtml(destLabel) + '</div>' +
+      '</div>' +
+      '<div style="flex:1;overflow-y:auto;padding:10px 16px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(167,139,250,0.5);margin-bottom:2px;">Equipment</div>' +
+        equipRowsHtml +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(167,139,250,0.5);margin-top:10px;margin-bottom:2px;">Moves</div>' +
+        moveRowsHtml +
+      '</div>' +
+      '<div style="padding:10px 16px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">' +
+        '<button onclick="_lbModalClose()" style="width:100%;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.4);border-radius:5px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;padding:10px 16px;cursor:pointer;font-weight:700;min-height:44px;">Done</button>' +
+      '</div>' +
+    '</div>' +
+    '</div>';
+}
+
+function _lbAdminAssignItemSave(groupId, moveId, itemId, driverName) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var now = Date.now();
+  for (var i = 0; i < groups.length; i++) {
+    if (groups[i].id !== moveId) continue;
+    var items = groups[i].items || [];
+    for (var j = 0; j < items.length; j++) {
+      if (items[j].id === itemId) {
+        items[j].assignedDriver = driverName || null;
+        items[j].assignedAt = driverName ? now : null;
+        break;
+      }
+    }
+    groups[i].items = items;
+    break;
+  }
+  localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+  try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+function _lbAdminAssignMoveSave(groupId, moveId, driverName) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var cu = (localStorage.getItem('dmc_u') || 'admin').trim();
+  var now = Date.now();
+  for (var i = 0; i < groups.length; i++) {
+    if (groups[i].id === moveId) {
+      groups[i].driverName = driverName;
+      groups[i].assignedBy = cu;
+      groups[i].assignedAt = now;
+      break;
+    }
+  }
+  localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+  try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
 }
 

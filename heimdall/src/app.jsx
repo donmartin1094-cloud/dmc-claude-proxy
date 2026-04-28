@@ -3287,9 +3287,16 @@ Be specific, practical, and flag any uncertainties clearly.`;
 
                     const _curRoleCS = (() => { try { const u=(localStorage.getItem('dmc_u')||'').toLowerCase(); return (JSON.parse(localStorage.getItem('pavescope_accounts')||'[]').find(a=>(a.username||'').toLowerCase()===u||(a.email||'').toLowerCase()===u)||{}).role||''; }catch(e){return '';} })();
                     const canChangeStatus = isLowbedDriver || _curRoleCS === 'rental_lowbed_driver';
-                    const _DNAMES = {'nightmare57':'Eric Sylvia','ericsylvia57@gmail.com':'Eric Sylvia','blydon':'Bill Lydon','billydon@donmartincorp.com':'Bill Lydon','igiron':'Ingrid Giron','igiron@donmartincorp.com':'Ingrid Giron'};
                     const _myUN = (localStorage.getItem('dmc_u')||'').toLowerCase();
-                    const _myFullName = _DNAMES[_myUN] || _myUN;
+                    const _myFullName = (() => {
+                      try {
+                        const _accts = JSON.parse(localStorage.getItem('pavescope_accounts')||'[]');
+                        const _me = _accts.find(a=>(a.username||'').toLowerCase()===_myUN||(a.email||'').toLowerCase()===_myUN);
+                        if (_me) return _me.displayName||_me.name||_me.username||_myUN;
+                      } catch(e) {}
+                      const _fb={'nightmare57':'Eric Sylvia','ericsylvia57@gmail.com':'Eric Sylvia','blydon':'Bill Lydon','billydon@donmartincorp.com':'Bill Lydon','igiron':'Ingrid Giron','igiron@donmartincorp.com':'Ingrid Giron'};
+                      return _fb[_myUN]||_myUN;
+                    })();
 
                     const resolveLoc = (val) => {
                       if (!val) return '—';
@@ -3419,19 +3426,41 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                       <div key={it.id} style={{display:'flex',alignItems:'center',gap:'4px',marginBottom:'2px'}}>
                                         <span style={{fontSize:'9px',flexShrink:0}}>{EQ_ICONS[it.type]||'📦'}</span>
                                         <span style={{fontFamily:"'DM Mono',monospace",fontSize:'8px',color:it.delivered?'rgba(126,203,143,0.6)':ms.tc,textDecoration:(it.delivered||ms.strike)?'line-through':'none',flex:1,opacity:it.delivered?0.6:1}}>{it.name||it.type}</span>
-                                        {(isAdminUser||isForeman) && <button onClick={()=>{const ni=(grp.items||[]).map(i=>i.id===it.id?{...i,delivered:!i.delivered}:i);upd({items:ni});}} style={{flexShrink:0,background:'none',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'2px',color:it.delivered?'#7ecb8f':'rgba(155,148,136,0.35)',fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'0 3px',cursor:'pointer'}}>{it.delivered?'✓':'+'}</button>}
+                                        {it.delivered && it.deliveredBy && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'6px',color:'rgba(126,203,143,0.45)',flexShrink:0,whiteSpace:'nowrap'}}>{it.deliveredBy} · {new Date(it.deliveredAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>}
+                                        {(isAdminUser||isForeman) && <button onClick={()=>{const nowDelivered=!it.delivered;const ni=(grp.items||[]).map(i=>i.id===it.id?{...i,delivered:nowDelivered,deliveredBy:nowDelivered?_myFullName:null,deliveredAt:nowDelivered?Date.now():null}:i);upd({items:ni});}} style={{flexShrink:0,background:'none',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'2px',color:it.delivered?'#7ecb8f':'rgba(155,148,136,0.35)',fontFamily:"'DM Mono',monospace",fontSize:'6px',padding:'0 3px',cursor:'pointer'}}>{it.delivered?'✓':'+'}</button>}
                                       </div>
                                     ))}
                                   </div>
                                 )}
                                 {canChangeStatus ? (
+                                  <>
+                                    <select value={grp.status||'pending'} onChange={e=>{
+                                      const newSt=e.target.value;
+                                      const curSt=grp.status||'pending';
+                                      const ord=['pending','in_progress','complete'];
+                                      if (ord.indexOf(newSt)<ord.indexOf(curSt)) { alert('Contact admin to reverse a completed move.'); return; }
+                                      if (newSt==='complete'&&!window.confirm('Mark this move complete? This cannot be undone.')) return;
+                                      const now=Date.now();
+                                      upd({status:newSt,statusChangedBy:_myFullName,statusChangedAt:now,statusHistory:[...(grp.statusHistory||[]),{status:newSt,changedBy:_myFullName,changedAt:now}]});
+                                    }} style={{width:'100%',background:'rgba(10,10,25,0.8)',border:'1px solid '+ms.bBorder,borderRadius:'3px',color:ms.bColor,fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none',marginTop:'3px'}}>
+                                      <option value='pending'>Pending</option>
+                                      <option value='in_progress'>In Progress</option>
+                                      <option value='complete'>Complete</option>
+                                    </select>
+                                    {(grp.statusHistory||[]).length>0&&(()=>{
+                                      const last=grp.statusHistory[grp.statusHistory.length-1];
+                                      const lbl=last.status==='complete'?'Complete':last.status==='in_progress'?'In Progress':'Pending';
+                                      const fmt=ts=>new Date(ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+                                      return <div style={{fontFamily:"'DM Mono',monospace",fontSize:'7px',color:'rgba(155,148,136,0.4)',marginTop:'3px'}}>Set to {lbl} by {last.changedBy} · {fmt(last.changedAt)}</div>;
+                                    })()}
+                                  </>
+                                ) : isAdminUser ? (
                                   <select value={grp.status||'pending'} onChange={e=>upd({status:e.target.value})} style={{width:'100%',background:'rgba(10,10,25,0.8)',border:'1px solid '+ms.bBorder,borderRadius:'3px',color:ms.bColor,fontFamily:"'DM Mono',monospace",fontSize:'8px',padding:'3px 5px',cursor:'pointer',outline:'none',marginTop:'3px'}}>
                                     <option value='pending'>Pending</option>
                                     <option value='in_progress'>In Progress</option>
                                     <option value='complete'>Complete</option>
+                                    {grp.status !== 'cancelled' && <option value='cancelled'>Cancelled</option>}
                                   </select>
-                                ) : isAdminUser && grp.status !== 'cancelled' ? (
-                                  <button onClick={()=>upd({status:'cancelled'})} style={{background:'rgba(217,79,61,0.07)',border:'1px solid rgba(217,79,61,0.25)',borderRadius:'3px',color:'rgba(217,79,61,0.65)',fontFamily:"'DM Mono',monospace",fontSize:'7px',padding:'2px 8px',cursor:'pointer',marginTop:'3px'}}>Cancel Move</button>
                                 ) : null}
                                 {(grp.notes||grp.deadline) && (
                                   <div style={{marginTop:'5px',paddingTop:'5px',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
