@@ -5708,11 +5708,9 @@ function _homeScanSlipsPicker() {
 function _homeScanSlipsPickerSelect(jobId) {
   var m = document.getElementById('_scanSlipsPickerModal');
   if (m) m.remove();
-  _openMixSlipScanner();
-  setTimeout(function() {
-    var sel = document.getElementById('_mssJobSel');
-    if (sel && jobId) sel.value = jobId;
-  }, 100);
+  var jb  = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  var ctx = jb ? { jobId: jobId, jobName: jb.name||'', jobNum: jb.jobNum||jb.number||'' } : null;
+  _openMixSlipScanner(ctx);
 }
 
 function _homeDailyOverviewSectionHtml() {
@@ -5821,9 +5819,13 @@ function _homeDailyOverviewSectionHtml() {
         'background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.3);border-radius:4px;padding:1px 4px;white-space:nowrap;">👤 ' + escHtml(op) + '</span>';
     }).join('');
 
+    if (typeof pavingSlips !== 'undefined' && pavingSlips.length === 0) { try { _slipsLoad(); } catch(e) {} }
     var todaySlips = (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(s) {
-      return s.date === todayKey && s.jobNum && f.jobNum &&
-             s.jobNum.toString().trim() === f.jobNum.toString().trim();
+      var sDate = (s.date || '').trim();
+      var sNum  = (s.jobNum || '').toString().trim().toLowerCase();
+      var fNum  = (f.jobNum || '').toString().trim().toLowerCase();
+      return sDate === todayKey &&
+        ((sNum && fNum && sNum === fNum) || (f.jobId && s.jobId && s.jobId === f.jobId));
     });
     var tonsByType   = {};
     var countsByType = {};
@@ -12870,7 +12872,11 @@ function _jfLinkedCounts(job) {
     (num && (e.jobNum||'').trim().toLowerCase() === num) ||
     (name && (e.jobName||'').trim().toLowerCase() === name)
   ).length;
-  return { foremanReports:fr, dailyOrders:doCount, aiaReqs:aiaCount, equipmentLogs:eqLogs + moveLogs };
+  var jfSlipCount = (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(sl) {
+    return (job.id && sl.jobId === job.id) ||
+           (num && (sl.jobNum||'').trim().toLowerCase() === num);
+  }).length;
+  return { foremanReports:fr, dailyOrders:doCount, aiaReqs:aiaCount, equipmentLogs:eqLogs + moveLogs, pavingSlips:jfSlipCount };
 }
 
 function openJobFolder(jobId) {
@@ -12989,6 +12995,7 @@ function _jfRenderTab(job, tab) {
             ['📅 Daily Orders',    linked.dailyOrders,    'daily'],
             ['🔧 Equip. Logs',     linked.equipmentLogs,  'equipment'],
             ['🏗 AIA Reqs',        linked.aiaReqs,        'aia'],
+            ['📄 Paving Slips',    linked.pavingSlips,    'slips'],
             ['🧾 Broker Bills',    (job.jobFolder?.brokerBills||[]).length, 'bills'],
             ['📎 Other Docs',      (job.jobFolder?.otherDocs||[]).length,   'other'],
           ].map(([label,count,tabKey])=>`
