@@ -58,6 +58,9 @@ function _openMixSlipScanner(jobContext) {
       '</div>'+
       '<div id="_mssPhaseTwo" style="display:none;padding:16px 18px 16px;"></div>'+
       '<div id="_mssTallyPanel" style="display:none;padding:8px 18px 14px;border-top:1px solid #1f1f1f;"></div>'+
+      '<div style="position:sticky;bottom:0;background:#111;border-top:1px solid #2a2a2a;padding:12px 18px;border-radius:0 0 10px 10px;">'+
+        '<button onclick="_closeMixSlipScanner()" style="width:100%;min-height:48px;background:#2d7a3e;border:none;border-radius:6px;color:#fff;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:1px;">&#128190; Save &amp; Close</button>'+
+      '</div>'+
     '</div>';
 
   document.body.appendChild(overlay);
