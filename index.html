@@ -5912,21 +5912,48 @@ function _homeDailyOverviewSectionHtml() {
         baseGroups[base].totalCount += countsByType[mt];
       });
 
+      // Photo (last in session) and load numbers per normalized key — separate pass over todaySlips
+      var _photoByBase = {};
+      var _loadsByKey  = {};
+      todaySlips.forEach(function(s) {
+        var mk  = _mssNormalizeMixKey(s.mixType || 'Unknown');
+        var rmM = mk.match(/\s+(\d+%RAP)\s*$/i);
+        var b   = rmM ? mk.slice(0, mk.length - rmM[0].length).trim() : mk;
+        if (s.photoUrl) _photoByBase[b] = s.photoUrl;
+        if (!_loadsByKey[mk]) _loadsByKey[mk] = [];
+        if (s.loadNumDaily != null) _loadsByKey[mk].push(s.loadNumDaily);
+      });
+
       // Columns — one per base type
       var _mono = 'font-family:\'DM Mono\',monospace;';
       var colsHtml = baseOrder.map(function(base, idx) {
         var grp = baseGroups[base];
         var borderCss = idx > 0 ? 'border-left:1px solid rgba(255,255,255,0.12);padding-left:16px;' : '';
+        var photoUrl  = _photoByBase[base] || '';
+        var thumbHtml = photoUrl
+          ? '<img src="' + escHtml(photoUrl) + '" onclick="event.stopPropagation();window.open(this.src,\'_blank\')" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;flex-shrink:0;" />'
+          : '<span style="font-size:20px;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;flex-shrink:0;">📄</span>';
         var rowsHtml = grp.variants.map(function(v) {
+          var normKey = base + (v.rap ? ' ' + v.rap : '');
+          var loads   = _loadsByKey[normKey] || [];
+          var loadStr = '';
+          if (loads.length > 0) {
+            if (loads.length <= 3) {
+              loadStr = loads.map(function(l){ return '#' + l; }).join(' ');
+            } else {
+              loadStr = '#' + Math.min.apply(null, loads) + '&ndash;' + Math.max.apply(null, loads);
+            }
+          }
           return '<div style="' + _mono + 'font-size:8.1px;color:var(--concrete-dim);padding:4px 0;white-space:nowrap;">' +
             (v.rap ? '<span style="color:rgba(167,139,250,0.65);margin-right:6px;">' + escHtml(v.rap) + '</span>' : '') +
             escHtml(String(v.count)) + ' Loads &nbsp; ' + v.tons.toFixed(1) + ' Tons' +
+            (loadStr ? ' &nbsp;<span style="color:rgba(255,255,255,0.5);">' + loadStr + '</span>' : '') +
           '</div>';
         }).join('');
         return '<div style="min-width:140px;flex:1;' + borderCss + '">' +
-          '<div style="' + _mono + 'font-size:8.8px;font-weight:800;color:#a78bfa;' +
-            'margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid rgba(167,139,250,0.3);">' +
-            escHtml(base) +
+          '<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid rgba(167,139,250,0.3);">' +
+            thumbHtml +
+            '<span style="' + _mono + 'font-size:8.8px;font-weight:800;color:#a78bfa;">' + escHtml(base) + '</span>' +
           '</div>' +
           rowsHtml +
         '</div>';
@@ -13296,7 +13323,7 @@ function _jfRenderTab(job, tab) {
           const dayTons  = daySlips.reduce((t,s)=>t+(parseFloat(s.tons)||0),0);
           const dayMix   = {};
           daySlips.forEach(sl=>{const m=sl.mixType||'Other';dayMix[m]=(dayMix[m]||0)+(parseFloat(sl.tons)||0);});
-          const mixBar   = Object.keys(dayMix).map(m=>`<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${escHtml(m)} <strong style="color:var(--stripe);">${fmtT(dayMix[m])}T</strong></span>`).join(' &nbsp; ');
+          const mixBar   = Object.keys(dayMix).map(m=>`<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${escHtml(m)} <strong style="color:#8B1A1A;">${fmtT(dayMix[m])} Tons</strong></span>`).join(' &nbsp; ');
           const isToday  = dateKey === today;
           const grpId    = 'jfSlipGrp_' + dateKey.replace(/-/g,'');
           const rows = daySlips.map(sl=>`
@@ -13304,7 +13331,7 @@ function _jfRenderTab(job, tab) {
               ${sl.photoUrl?`<img src="${escHtml(sl.photoUrl)}" style="width:38px;height:38px;object-fit:cover;border-radius:3px;border:1px solid var(--asphalt-light);cursor:pointer;" onclick="_laViewSlipPhoto('${sl.id}')">`
                 :`<div style="width:38px;height:38px;border-radius:3px;border:1px dashed var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--concrete-dim);">📄</div>`}
               <div style="flex:1;">
-                <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--white);font-weight:700;">${escHtml(sl.mixType||'—')} &nbsp;<span style="color:var(--stripe);">${fmtT(sl.tons)}T</span>${sl.rapPct>0?` &nbsp;<span style="font-size:9px;color:#5ab4f5;">RAP ${sl.rapPct}%</span>`:''}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--white);font-weight:700;">${escHtml(sl.mixType||'—')} &nbsp;<span style="color:#8B1A1A;">${fmtT(sl.tons)} Tons</span>${sl.rapPct>0?` &nbsp;<span style="font-size:9px;color:#5ab4f5;">RAP ${sl.rapPct}%</span>`:''}</div>
                 ${sl.mixCode?`<div style="font-family:'DM Mono',monospace;font-size:8px;color:#5ab4f5;margin-top:1px;">${escHtml(sl.mixCode)}</div>`:''}
                 <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);margin-top:2px;">${[sl.loadTime?'⏱ '+sl.loadTime:'',sl.ticketNo?'#'+sl.ticketNo:'',sl.truckNum?'Truck '+sl.truckNum:'',sl.driver?'👤 '+sl.driver:'',sl.plant,sl.autoScanned?'🤖 AI Scanned':''].filter(Boolean).join(' · ')}</div>
               </div>
@@ -13313,7 +13340,7 @@ function _jfRenderTab(job, tab) {
           return `<div style="border:1px solid ${isToday?'rgba(245,197,24,0.25)':'var(--asphalt-light)'};border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
             <div onclick="(function(){var b=document.getElementById('${grpId}');if(b)b.style.display=b.style.display==='none'?'block':'none';})()" style="background:${isToday?'rgba(245,197,24,0.08)':'var(--asphalt)'};padding:9px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
               <span style="font-family:'DM Mono',monospace;font-size:11px;color:${isToday?'var(--stripe)':'var(--white)'};font-weight:700;flex:1;">${isToday?'⬤ ':''}📅 ${escHtml(fmtDL(dateKey))}</span>
-              <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--stripe);font-weight:700;">${fmtT(dayTons)}T</span>
+              <span style="font-family:'DM Mono',monospace;font-size:11px;color:#8B1A1A;font-weight:700;">${fmtT(dayTons)} Tons</span>
               <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">(${daySlips.length} slip${daySlips.length!==1?'s':''})</span>
               ${isSlipAdmin?`<button onclick="event.stopPropagation();_laDeleteAllSlipsForDate('${dateKey}','${job.id}')" style="background:none;border:none;color:#666;font-size:11px;cursor:pointer;padding:6px 10px;min-height:32px;" title="Delete all slips for this date">🗑 Clear day</button>`:''}
               <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);">▾</span>
