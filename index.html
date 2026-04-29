@@ -5943,7 +5943,12 @@ function _homeDailyOverviewSectionHtml() {
         'Total: ' + todaySlips.length + ' Loads &middot; ' + scannedTotal.toFixed(1) + ' Tons' +
       '</div>';
 
-      tonnageSection = '<div style="margin-top:3px;padding:6px;background:rgba(0,0,0,0.15);border-radius:3px;">' +
+      var _tapJobId = escHtml(_fJobId);
+      tonnageSection = '<div onclick="openJobFolder(\'' + _tapJobId + '\');switchJfTab(\'' + _tapJobId + '\',\'slips\');"' +
+        ' ontouchstart="this.style.opacity=\'0.85\'" ontouchend="this.style.opacity=\'\'"' +
+        ' onmousedown="this.style.opacity=\'0.85\'" onmouseup="this.style.opacity=\'\'" onmouseleave="this.style.opacity=\'\'"' +
+        ' style="margin-top:3px;padding:6px;background:rgba(0,0,0,0.15);border-radius:3px;cursor:pointer;position:relative;">' +
+        '<span style="position:absolute;top:5px;right:7px;font-size:11px;color:rgba(167,139,250,0.45);pointer-events:none;user-select:none;">&#8250;</span>' +
         '<div style="display:flex;flex-wrap:wrap;gap:24px;">' + colsHtml + '</div>' +
         '<div style="border-top:1px solid rgba(255,255,255,0.15);margin:8px 0;"></div>' +
         subtotalsHtml +
