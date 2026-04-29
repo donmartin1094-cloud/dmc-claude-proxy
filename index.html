@@ -5820,12 +5820,19 @@ function _homeDailyOverviewSectionHtml() {
     }).join('');
 
     if (typeof pavingSlips !== 'undefined' && pavingSlips.length === 0) { try { _slipsLoad(); } catch(e) {} }
+    var _fJobMatch = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) {
+      var jn = (j.jobNum||j.number||'').toString().trim().toLowerCase();
+      var fn = (f.jobNum||'').toString().trim().toLowerCase();
+      return (fn && jn && fn === jn) ||
+             (f.jobName && j.name && f.jobName.trim().toLowerCase() === j.name.trim().toLowerCase());
+    });
+    var _fJobId = (_fJobMatch && _fJobMatch.id) || '';
     var todaySlips = (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(s) {
       var sDate = (s.date || '').trim();
       var sNum  = (s.jobNum || '').toString().trim().toLowerCase();
       var fNum  = (f.jobNum || '').toString().trim().toLowerCase();
       return sDate === todayKey &&
-        ((sNum && fNum && sNum === fNum) || (f.jobId && s.jobId && s.jobId === f.jobId));
+        ((sNum && fNum && sNum === fNum) || (_fJobId && s.jobId && s.jobId === _fJobId));
     });
     var tonsByType   = {};
     var countsByType = {};

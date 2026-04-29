@@ -275,7 +275,7 @@ function _mssSaveSlip() {
     id:            'slip_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
     jobId:         jobId || null,
     jobName:       job ? (job.name || '') : '',
-    jobNum:        job ? (job.jobNum || job.number || '') : '',
+    jobNum:        (job ? (job.jobNum || job.number || '') : '') || (_mssLockedJob ? (_mssLockedJob.jobNum || '') : ''),
     date:          date,
     mixType:       mix,
     tons:          tons,
