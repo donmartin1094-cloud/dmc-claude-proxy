@@ -5923,7 +5923,25 @@ function _homeDailyOverviewSectionHtml() {
 
   // Outer wrapper: exactly matches the map panel height (420px), section header at top (flex-shrink:0),
   // content fills remaining space so Filipe=40%, Louie=40%, SA=20% of the content area
-  var _debugHtml = '<div style="background:red;color:white;font-size:16px;padding:12px;margin-bottom:8px;border-radius:6px;">DAILY OVERVIEW IS RENDERING - slips: ' + pavingSlips.length + ' | today: ' + todayKey + '</div>';
+  var _s0 = pavingSlips[0] || {};
+  var _s1 = pavingSlips[1] || {};
+  var _todaySlips = pavingSlips.filter(function(s){ return s.date === todayKey; });
+  var _debugHtml = '<div style="background:#1a1a2e;color:#a78bfa;font-size:11px;padding:10px;margin-bottom:10px;border-radius:6px;word-break:break-all;line-height:1.8;">'
+    + '<b>DEBUG v3</b><br>'
+    + 'todayKey: ' + todayKey + '<br>'
+    + 'total slips: ' + pavingSlips.length + '<br>'
+    + 'slips matching todayKey: ' + _todaySlips.length + '<br>'
+    + 's0.date: [' + (_s0.date||'none') + ']<br>'
+    + 's0.jobNum: [' + (_s0.jobNum||'none') + ']<br>'
+    + 's0.jobId: [' + (_s0.jobId||'none') + ']<br>'
+    + 's1.date: [' + (_s1.date||'none') + ']<br>'
+    + 's1.jobNum: [' + (_s1.jobNum||'none') + ']<br>'
+    + 's1.jobId: [' + (_s1.jobId||'none') + ']<br>'
+    + 'schedData type: ' + typeof schedData + '<br>'
+    + 'schedData todayKey exists: ' + (!!schedData[todayKey]) + '<br>'
+    + 'schedData todayKey type: ' + typeof schedData[todayKey] + '<br>'
+    + 'schedData todayKey keys: ' + (schedData[todayKey] ? Object.keys(schedData[todayKey]).slice(0,5).join(', ') : 'none') + '<br>'
+    + '</div>';
   return _debugHtml + '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
     '<div style="flex-shrink:0;">' + hdr + '</div>' +
     '<div style="flex:1;min-height:0;display:flex;">' +
