@@ -5848,13 +5848,28 @@ function _homeDailyOverviewSectionHtml() {
       countsByType[mt] = (countsByType[mt] || 0) + 1;
       scannedTotal += (parseFloat(s.tons) || 0);
     });
+    var _mtLabel = function(raw) {
+      if (!raw) return 'Unknown';
+      var resolved = (typeof matDisplayName === 'function') ? matDisplayName(raw) : raw;
+      if (resolved !== raw) return resolved;
+      var mxList = (typeof mixTypesList !== 'undefined') ? mixTypesList : [];
+      var ciMatch = mxList.find(function(m) { return (m.desc||'').toLowerCase() === raw.toLowerCase(); });
+      if (ciMatch && ciMatch.displayName) return ciMatch.displayName;
+      var partial = mxList.find(function(m) {
+        var d = (m.desc||'').toLowerCase(), r = raw.toLowerCase();
+        return d && r && (d.indexOf(r) !== -1 || r.indexOf(d) !== -1);
+      });
+      if (partial && partial.displayName) return partial.displayName;
+      return '⚠️ ' + (raw.length > 20 ? raw.substring(0, 20) + '…' : raw);
+    };
     var tonnageSection = '';
     if (todaySlips.length > 0) {
       var tonLines = Object.keys(tonsByType).map(function(mt) {
         var pct = scannedTotal > 0 ? Math.round(tonsByType[mt] / scannedTotal * 100) : 0;
         var n   = countsByType[mt];
+        var lbl = _mtLabel(mt);
         return '<div style="font-family:\'DM Mono\',monospace;font-size:8.1px;color:var(--concrete-dim);display:flex;justify-content:space-between;padding:0 2px;">' +
-          '<span>' + escHtml(mt) + '</span>' +
+          '<span>' + escHtml(lbl) + '</span>' +
           '<span>' + n + 'ld &middot; ' + tonsByType[mt].toFixed(1) + 't &middot; ' + pct + '%</span>' +
           '</div>';
       }).join('');
