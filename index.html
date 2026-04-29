@@ -5855,6 +5855,56 @@ function _homeDailyOverviewSectionHtml() {
              (f.jobName && j.name && f.jobName.trim().toLowerCase() === j.name.trim().toLowerCase());
     });
     var _fJobId = (_fJobMatch && _fJobMatch.id) || '';
+
+    // Equipment tally: scheduled (f.equipment) vs. delivered (dmc_lowbed_groups items)
+    var tallyRow = '';
+    if (eqArr.length > 0) {
+      var _lbGs = [];
+      try { _lbGs = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e3) {}
+      var _schByType = {};
+      eqArr.forEach(function(e) {
+        var t = typeof e === 'object' ? (e.type || 'other') : 'other';
+        _schByType[t] = (_schByType[t] || 0) + 1;
+      });
+      var _delByType = {};
+      var _fJNum = (f.jobNum || '').toString().trim().toLowerCase();
+      var _fJNm  = (jobDisplayName || '').trim().toLowerCase();
+      _lbGs.forEach(function(grp) {
+        var dm = false;
+        if (_fJobId && grp.to === _fJobId) {
+          dm = true;
+        } else if (grp.to) {
+          var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+          var _tj = _bl.find(function(jb) { return String(jb.id) === String(grp.to); });
+          if (_tj) {
+            var _tjNum = (_tj.num || _tj.jobNum || _tj.number || '').toString().trim().toLowerCase();
+            var _tjNm  = (_tj.name || '').trim().toLowerCase();
+            if (_fJNum && _tjNum && _tjNum === _fJNum) dm = true;
+            if (_fJNm  && _tjNm  && _tjNm  === _fJNm)  dm = true;
+          } else {
+            if (_fJNm && grp.to.toString().trim().toLowerCase() === _fJNm) dm = true;
+          }
+        }
+        if (!dm) return;
+        (grp.items || []).forEach(function(it) {
+          if (it.delivered === true) {
+            var t2 = it.type || 'other';
+            _delByType[t2] = (_delByType[t2] || 0) + 1;
+          }
+        });
+      });
+      var _tallyChips = Object.keys(_schByType).map(function(t) {
+        var sch = _schByType[t] || 0;
+        var act = _delByType[t] || 0;
+        var cc = act >= sch ? '#7ecb8f' : (act > 0 ? '#e8a94c' : '#e85555');
+        var ic = EQ_ICONS[t] || '🔧';
+        return '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;font-weight:700;' +
+          'color:' + cc + ';background:' + cc + '18;border:1px solid ' + cc + '55;' +
+          'border-radius:4px;padding:1px 5px;white-space:nowrap;">' + ic + ' ' + act + '/' + sch + '</span>';
+      }).join('');
+      tallyRow = '<div style="display:flex;flex-wrap:wrap;gap:2px;flex-shrink:0;">' + _tallyChips + '</div>';
+    }
+
     var todaySlips = (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(s) {
       var sDate = (s.date || '').trim();
       var sNum  = (s.jobNum || '').toString().trim().toLowerCase();
@@ -6004,6 +6054,8 @@ function _homeDailyOverviewSectionHtml() {
         '</div>' +
         // Equipment chips — wrapping naturally
         (eqChips ? '<div style="display:flex;flex-wrap:wrap;gap:2px;overflow:hidden;flex-shrink:0;">' + eqChips + '</div>' : '') +
+        // Equipment tally: scheduled vs. delivered
+        tallyRow +
         // Operator chips
         (opChips ? '<div style="display:flex;flex-wrap:wrap;gap:2px;overflow:hidden;flex-shrink:0;">' + opChips + '</div>' : '') +
         // Scanned mix tonnage
@@ -7234,9 +7286,10 @@ async function _homeInitGps() {
   // Destroy old map instance if it exists
   if (_homeGps.map) { try { _homeGps.map.remove(); } catch(e){} _homeGps.map=null; }
 
-  // Pin explicit pixel height — flex layout may not have painted yet.
+  // Use rendered column height so map fills the flex-stretched GPS panel.
+  var _gpsCol = document.getElementById('homeGpsFleetPanel');
   mapEl.style.width  = '100%';
-  mapEl.style.height = '420px';
+  mapEl.style.height = (_gpsCol && _gpsCol.clientHeight > 0 ? _gpsCol.clientHeight : 420) + 'px';
 
   // Pass renderer explicitly so it is created during map init, not lazily
   // on the first layer add (which would fail if container is still 0-sized).
@@ -7418,14 +7471,14 @@ function renderHomeView(el) {
     const adminPanelHtml = _showGpsPanel
       ? (_isMobAdmin
           ? _homeAdminMobSectionsHtml()
-          : '<div class="home-admin-top" style="display:flex;gap:16px;align-items:flex-start;flex-shrink:0;">' +
+          : '<div class="home-admin-top" style="display:flex;gap:16px;align-items:stretch;flex-shrink:0;">' +
               '<div id="homeAdminDailyCol" style="flex:0 0 40%;min-width:200px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:visible;background:var(--asphalt-mid);">' +
                 _homeDailyOverviewSectionHtml() +
               '</div>' +
-              '<div id="homeGpsFleetPanel" style="flex:0 0 25%;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;position:relative;background:#111;">' +
+              '<div id="homeGpsFleetPanel" style="flex:0 0 25%;min-width:0;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;position:relative;background:#111;">' +
                 '<div class="home-gps-map-inner" id="homeGpsMapEl"></div>' +
               '</div>' +
-              '<div class="home-fleet-panel" id="homeFleetPanel" style="flex:0 0 35%;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
+              '<div class="home-fleet-panel" id="homeFleetPanel" style="flex:0 0 35%;min-width:0;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
                 '<div style="flex:1;min-height:0;overflow-y:auto;height:100%;" id="homeFleetScrollBody">' +
                   _homeLowbedSectionHtml() +
                 '</div>' +
