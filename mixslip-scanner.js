@@ -110,9 +110,14 @@ function _mssAIScan(b64, mimeType) {
     var isAmrize = /amrize/i.test(supplierRaw);
     var needsReview = !supplierRaw || /^unknown$/i.test(supplierRaw.trim());
 
-    var amrizePrompt = 'This is an Amrize (formerly Lafarge) hot mix asphalt delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"Amrize","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number (e.g. 1, 002). Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}';
+    var _mssTypeRef = (window.mixTypesList || JSON.parse(localStorage.getItem('pavescope_mix_types') || '[]'))
+      .map(function(m){ return (m.desc||'') + ' → ' + (m.displayName||''); }).join('\n');
+    var _mssTypeInstruction = _mssTypeRef
+      ? '\n\nKnown mix type codes and their display names:\n' + _mssTypeRef + '\nAfter extracting mixType, match it against this list and return the displayName instead of the raw string. If no match found, return the raw extracted string as-is.'
+      : '';
+    var amrizePrompt = 'This is an Amrize (formerly Lafarge) hot mix asphalt delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"Amrize","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number (e.g. 1, 002). Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}' + _mssTypeInstruction;
     var safeName = supplierRaw.replace(/"/g, '\\"');
-    var genericPrompt = 'This is a hot mix asphalt paving delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"'+safeName+'","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number. Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix designation e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}';
+    var genericPrompt = 'This is a hot mix asphalt paving delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"'+safeName+'","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number. Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix designation e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}' + _mssTypeInstruction;
 
     if (status) { status.innerHTML='&#129302; Supplier: '+(supplierRaw||'?')+' &#8212; extracting fields&#8230;'; }
 

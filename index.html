@@ -5713,6 +5713,26 @@ function _homeScanSlipsPickerSelect(jobId) {
   _openMixSlipScanner(ctx);
 }
 
+function _mssNormalizeMixKey(rawMixType) {
+  if (!rawMixType) return 'Unknown';
+  var nickname = rawMixType;
+  var resolved = (typeof matDisplayName === 'function') ? matDisplayName(rawMixType) : rawMixType;
+  if (resolved !== rawMixType) {
+    nickname = resolved;
+  } else {
+    var mxList = (typeof mixTypesList !== 'undefined') ? mixTypesList : [];
+    var r = rawMixType.toLowerCase().trim();
+    var m = mxList.find(function(x){ return (x.desc||'').toLowerCase().trim() === r; }) ||
+            mxList.find(function(x){ return (x.displayName||'').toLowerCase().trim() === r; }) ||
+            mxList.find(function(x){ var d=(x.desc||'').toLowerCase().trim(); return d && (d.indexOf(r)!==-1||r.indexOf(d)!==-1); }) ||
+            mxList.find(function(x){ var dn=(x.displayName||'').toLowerCase().trim(); return dn && (r.indexOf(dn)!==-1||dn.indexOf(r)!==-1); });
+    if (m && m.displayName) nickname = m.displayName;
+  }
+  var rapMatch = rawMixType.match(/(\d+)\s*%\s*RAP/i) || rawMixType.match(/RAP\s*(\d+)/i) || rawMixType.match(/(\d+)RAP/i);
+  var rapPct = rapMatch ? rapMatch[1] + '%RAP' : '';
+  return rapPct ? nickname + ' ' + rapPct : nickname;
+}
+
 function _homeDailyOverviewSectionHtml() {
   var _invHdrBtns =
     '<button onclick="event.stopPropagation();_invGenerateFromTodaySchedule()" style="background:none;border:1px solid rgba(245,197,24,0.35);border-radius:3px;color:rgba(245,197,24,0.75);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;white-space:nowrap;">Gen Invoice</button>' +
@@ -5843,7 +5863,7 @@ function _homeDailyOverviewSectionHtml() {
     var countsByType = {};
     var scannedTotal = 0;
     todaySlips.forEach(function(s) {
-      var mt = s.mixType || 'Unknown';
+      var mt = _mssNormalizeMixKey(s.mixType || 'Unknown');
       tonsByType[mt]   = (tonsByType[mt]   || 0) + (parseFloat(s.tons) || 0);
       countsByType[mt] = (countsByType[mt] || 0) + 1;
       scannedTotal += (parseFloat(s.tons) || 0);
