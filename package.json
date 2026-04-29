@@ -11,5 +11,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
   }
 }
