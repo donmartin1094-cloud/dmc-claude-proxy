@@ -5923,7 +5923,8 @@ function _homeDailyOverviewSectionHtml() {
 
   // Outer wrapper: exactly matches the map panel height (420px), section header at top (flex-shrink:0),
   // content fills remaining space so Filipe=40%, Louie=40%, SA=20% of the content area
-  return '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
+  var _debugHtml = '<div style="background:red;color:white;font-size:16px;padding:12px;margin-bottom:8px;border-radius:6px;">DAILY OVERVIEW IS RENDERING - slips: ' + pavingSlips.length + ' | today: ' + todayKey + '</div>';
+  return _debugHtml + '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
     '<div style="flex-shrink:0;">' + hdr + '</div>' +
     '<div style="flex:1;min-height:0;display:flex;">' +
       leftHalf +
