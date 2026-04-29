@@ -1821,6 +1821,7 @@
     .home-admin-mob-reorder-btn { display: flex !important; flex-shrink: 0; }
     .home-admin-mob-sections { display: flex !important; flex-direction: column; gap: 10px; width: 100%; }
     .home-admin-sect-card { background: var(--asphalt-mid); border: 1px solid var(--asphalt-light); border-radius: var(--radius-lg); overflow: hidden; }
+    .home-admin-sect-card[data-sect="daily"] { overflow: visible; }
     .home-admin-sect-hdr { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--concrete-dim); padding: 7px 12px 5px; border-bottom: 1px solid var(--asphalt-light); background: rgba(0,0,0,0.2); }
 
     /* ── Heimdall iframe: fill available screen on mobile ── */
@@ -5779,7 +5780,7 @@ function _homeDailyOverviewSectionHtml() {
     var color = (bt && bt.color) ? bt.color : '#3a3a3a';
     var fc    = (bt && bt.fontColor) ? bt.fontColor : '#fff';
 
-    var cardStyle = 'height:100%;display:flex;flex-direction:column;overflow:hidden;' +
+    var cardStyle = 'display:flex;flex-direction:column;overflow:visible;' +
       'background:' + color + '18;border-left:4px solid ' + color + ';';
 
     // Type badge (night/day/etc)
@@ -5986,7 +5987,7 @@ function _homeDailyOverviewSectionHtml() {
 
     return '<div style="'+cardStyle+'">' +
       hdrStrip +
-      '<div style="flex:1;padding:5px 9px 4px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">' +
+      '<div style="height:auto;padding:5px 9px 4px;overflow:visible;display:flex;flex-direction:column;gap:2px;">' +
         // Job name (full, wraps if needed)
         (jobDisplayName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:11.5px;font-weight:800;color:var(--white);' +
           'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(jobDisplayName) + '</div>' : '') +
@@ -6031,13 +6032,13 @@ function _homeDailyOverviewSectionHtml() {
 
   // ── Foreman assignments: 40% Filipe | 40% Louie | 20% Special Actions
   var leftHalf =
-    '<div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">' +
-      // Filipe 40%
-      '<div style="flex:0 0 40%;min-height:0;overflow:hidden;border-bottom:1px solid rgba(255,255,255,0.06);">' + filipeCard + '</div>' +
-      // Louie 40%
-      '<div style="flex:0 0 40%;min-height:0;overflow:hidden;border-bottom:1px solid rgba(255,255,255,0.06);">' + louieCard + '</div>' +
-      // Special Actions 20% — always soft yellow with left accent border
-      '<div style="flex:0 0 20%;min-height:0;overflow:hidden;' +
+    '<div style="flex:1;display:flex;flex-direction:column;overflow:visible;">' +
+      // Filipe — natural height
+      '<div style="flex:none;width:100%;overflow:visible;border-bottom:1px solid rgba(255,255,255,0.06);">' + filipeCard + '</div>' +
+      // Louie — natural height
+      '<div style="flex:none;width:100%;overflow:visible;border-bottom:1px solid rgba(255,255,255,0.06);">' + louieCard + '</div>' +
+      // Special Actions — natural height, always soft yellow with left accent border
+      '<div style="flex:none;width:100%;overflow:visible;' +
         'background:rgba(245,197,24,0.07);' +
         'border-left:4px solid rgba(245,197,24,0.55);' +
         'border-top:1px solid rgba(245,197,24,0.15);' +
@@ -6049,7 +6050,7 @@ function _homeDailyOverviewSectionHtml() {
 
   // Outer wrapper: exactly matches the map panel height (420px), section header at top (flex-shrink:0),
   // content fills remaining space so Filipe=40%, Louie=40%, SA=20% of the content area
-  return '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
+  return '<div style="border-bottom:1px solid var(--asphalt-light);height:auto;min-height:420px;display:flex;flex-direction:column;overflow:visible;">' +
     '<div style="flex-shrink:0;">' + hdr + '</div>' +
     '<div style="flex:1;min-height:0;display:flex;">' +
       leftHalf +
@@ -7418,13 +7419,13 @@ function renderHomeView(el) {
       ? (_isMobAdmin
           ? _homeAdminMobSectionsHtml()
           : '<div class="home-admin-top" style="display:flex;gap:16px;align-items:flex-start;flex-shrink:0;">' +
-              '<div id="homeAdminDailyCol" style="flex:0 0 22%;min-width:200px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;background:var(--asphalt-mid);">' +
+              '<div id="homeAdminDailyCol" style="flex:0 0 40%;min-width:200px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:visible;background:var(--asphalt-mid);">' +
                 _homeDailyOverviewSectionHtml() +
               '</div>' +
-              '<div id="homeGpsFleetPanel" style="flex:0 0 36%;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;position:relative;background:#111;">' +
+              '<div id="homeGpsFleetPanel" style="flex:0 0 25%;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;position:relative;background:#111;">' +
                 '<div class="home-gps-map-inner" id="homeGpsMapEl"></div>' +
               '</div>' +
-              '<div class="home-fleet-panel" id="homeFleetPanel" style="flex:1;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
+              '<div class="home-fleet-panel" id="homeFleetPanel" style="flex:0 0 35%;min-width:0;height:420px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;">' +
                 '<div style="flex:1;min-height:0;overflow-y:auto;height:100%;" id="homeFleetScrollBody">' +
                   _homeLowbedSectionHtml() +
                 '</div>' +
