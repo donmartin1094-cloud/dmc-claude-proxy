@@ -5715,20 +5715,21 @@ function _homeScanSlipsPickerSelect(jobId) {
 
 function _mssNormalizeMixKey(rawMixType) {
   if (!rawMixType) return 'Unknown';
-  var nickname = rawMixType;
-  var resolved = (typeof matDisplayName === 'function') ? matDisplayName(rawMixType) : rawMixType;
-  if (resolved !== rawMixType) {
+  var cleaned = rawMixType.replace(/(\d+)D\b/g, '$1G').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  var nickname = cleaned;
+  var resolved = (typeof matDisplayName === 'function') ? matDisplayName(cleaned) : cleaned;
+  if (resolved !== cleaned) {
     nickname = resolved;
   } else {
     var mxList = (typeof mixTypesList !== 'undefined') ? mixTypesList : [];
-    var r = rawMixType.toLowerCase().trim();
+    var r = cleaned.toLowerCase();
     var m = mxList.find(function(x){ return (x.desc||'').toLowerCase().trim() === r; }) ||
             mxList.find(function(x){ return (x.displayName||'').toLowerCase().trim() === r; }) ||
             mxList.find(function(x){ var d=(x.desc||'').toLowerCase().trim(); return d && (d.indexOf(r)!==-1||r.indexOf(d)!==-1); }) ||
             mxList.find(function(x){ var dn=(x.displayName||'').toLowerCase().trim(); return dn && (r.indexOf(dn)!==-1||dn.indexOf(r)!==-1); });
     if (m && m.displayName) nickname = m.displayName;
   }
-  var rapMatch = rawMixType.match(/(\d+)\s*%\s*RAP/i) || rawMixType.match(/RAP\s*(\d+)/i) || rawMixType.match(/(\d+)RAP/i);
+  var rapMatch = cleaned.match(/(\d+)\s*%\s*RAP/i) || cleaned.match(/RAP\s*(\d+)/i) || cleaned.match(/(\d+)RAP/i);
   var rapPct = rapMatch ? rapMatch[1] + '%RAP' : '';
   return rapPct ? nickname + ' ' + rapPct : nickname;
 }

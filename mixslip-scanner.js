@@ -112,9 +112,10 @@ function _mssAIScan(b64, mimeType) {
 
     var _mssTypeRef = (window.mixTypesList || JSON.parse(localStorage.getItem('pavescope_mix_types') || '[]'))
       .map(function(m){ return (m.desc||'') + ' → ' + (m.displayName||''); }).join('\n');
-    var _mssTypeInstruction = _mssTypeRef
-      ? '\n\nKnown mix type codes and their display names:\n' + _mssTypeRef + '\nAfter extracting mixType, match it against this list and return the displayName instead of the raw string. If no match found, return the raw extracted string as-is.'
-      : '';
+    var _mssTypeInstruction = '\n\nIMPORTANT: The mixType field must be returned as a clean display name, not a raw code.\nGyration values are always a number followed by the letter G (e.g. 100G, 75G, 50G). If you read a gyration value ending in D (e.g. 100D), correct it to G (100G).\n'
+      + (_mssTypeRef
+        ? 'Match the extracted mix type against this list and return ONLY the displayName value.\nIf no match is found, return the extracted value with commas replaced by spaces.\nKnown types:\n' + _mssTypeRef
+        : 'Return the mixType with commas replaced by spaces.');
     var amrizePrompt = 'This is an Amrize (formerly Lafarge) hot mix asphalt delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"Amrize","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number (e.g. 1, 002). Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}' + _mssTypeInstruction;
     var safeName = supplierRaw.replace(/"/g, '\\"');
     var genericPrompt = 'This is a hot mix asphalt paving delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"'+safeName+'","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number. Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix designation e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}' + _mssTypeInstruction;
@@ -131,6 +132,7 @@ function _mssAIScan(b64, mimeType) {
       var text = (data2.content&&data2.content[0]&&data2.content[0].text)||'';
       try {
         var p = JSON.parse(text.replace(/```json|```/g,'').trim());
+        if (p.mixType) p.mixType = p.mixType.replace(/(\d+)D\b/g, '$1G').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
         if (!p.supplier && supplierRaw && !needsReview) p.supplier = supplierRaw;
         if (status) { status.innerHTML='&#10003; Scan complete &#8212; verify and save.'; status.style.color='#7ecb8f'; }
         _mssShowConfirmForm(p, needsReview);
