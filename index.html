@@ -5899,18 +5899,56 @@ function _homeDailyOverviewSectionHtml() {
     };
     var tonnageSection = '';
     if (todaySlips.length > 0) {
-      var tonLines = Object.keys(tonsByType).map(function(mt) {
-        var pct = scannedTotal > 0 ? Math.round(tonsByType[mt] / scannedTotal * 100) : 0;
-        var n   = countsByType[mt];
-        var lbl = _mtLabel(mt);
-        return '<div style="font-family:\'DM Mono\',monospace;font-size:8.1px;color:var(--concrete-dim);display:flex;justify-content:space-between;padding:0 2px;">' +
-          '<span style="word-break:break-word;overflow-wrap:anywhere;min-width:0;flex:1;padding-right:4px;">' + escHtml(lbl) + '</span>' +
-          '<span style="white-space:nowrap;flex-shrink:0;">' + n + ' Loads &middot; ' + tonsByType[mt].toFixed(1) + ' Tons &middot; ' + pct + '%</span>' +
+      // Group normalized keys by base type (strip trailing RAP% suffix)
+      var baseGroups = {};
+      var baseOrder  = [];
+      Object.keys(tonsByType).forEach(function(mt) {
+        var rapMatch = mt.match(/\s+(\d+%RAP)\s*$/i);
+        var base = rapMatch ? mt.slice(0, mt.length - rapMatch[0].length).trim() : mt;
+        var rap  = rapMatch ? rapMatch[1] : '';
+        if (!baseGroups[base]) { baseGroups[base] = { variants: [], totalTons: 0, totalCount: 0 }; baseOrder.push(base); }
+        baseGroups[base].variants.push({ rap: rap, tons: tonsByType[mt], count: countsByType[mt] });
+        baseGroups[base].totalTons  += tonsByType[mt];
+        baseGroups[base].totalCount += countsByType[mt];
+      });
+
+      // Columns — one per base type
+      var _mono = 'font-family:\'DM Mono\',monospace;';
+      var colsHtml = baseOrder.map(function(base, idx) {
+        var grp = baseGroups[base];
+        var borderCss = idx > 0 ? 'border-left:1px solid rgba(255,255,255,0.12);padding-left:16px;' : '';
+        var rowsHtml = grp.variants.map(function(v) {
+          return '<div style="' + _mono + 'font-size:8.1px;color:var(--concrete-dim);padding:4px 0;white-space:nowrap;">' +
+            (v.rap ? '<span style="color:rgba(167,139,250,0.65);margin-right:6px;">' + escHtml(v.rap) + '</span>' : '') +
+            escHtml(String(v.count)) + ' Loads &nbsp; ' + v.tons.toFixed(1) + ' Tons' +
           '</div>';
+        }).join('');
+        return '<div style="min-width:140px;flex:1;' + borderCss + '">' +
+          '<div style="' + _mono + 'font-size:8.8px;font-weight:800;color:#a78bfa;' +
+            'margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid rgba(167,139,250,0.3);">' +
+            escHtml(base) +
+          '</div>' +
+          rowsHtml +
+        '</div>';
       }).join('');
-      var totalLine = '<div style="font-family:\'DM Mono\',monospace;font-size:8.1px;font-weight:800;color:var(--concrete);display:flex;justify-content:space-between;padding:1px 2px;border-top:1px solid rgba(255,255,255,0.08);margin-top:1px;">' +
-        '<span>Total</span><span>' + todaySlips.length + ' Loads &middot; ' + scannedTotal.toFixed(1) + ' Tons</span></div>';
-      tonnageSection = '<div style="margin-top:3px;padding:3px;background:rgba(0,0,0,0.15);border-radius:3px;">' + tonLines + totalLine + '</div>';
+
+      var subtotalsHtml = baseOrder.map(function(base) {
+        var grp = baseGroups[base];
+        return '<div style="' + _mono + 'font-size:8.1px;color:var(--concrete-dim);padding:2px 0;">' +
+          escHtml(base) + ' Total: ' + grp.totalCount + ' Loads &middot; ' + grp.totalTons.toFixed(1) + ' Tons' +
+        '</div>';
+      }).join('');
+
+      var grandTotalLine = '<div style="' + _mono + 'font-size:8.1px;font-weight:800;color:#a78bfa;text-align:right;margin-top:4px;">' +
+        'Total: ' + todaySlips.length + ' Loads &middot; ' + scannedTotal.toFixed(1) + ' Tons' +
+      '</div>';
+
+      tonnageSection = '<div style="margin-top:3px;padding:6px;background:rgba(0,0,0,0.15);border-radius:3px;">' +
+        '<div style="display:flex;flex-wrap:wrap;gap:24px;">' + colsHtml + '</div>' +
+        '<div style="border-top:1px solid rgba(255,255,255,0.15);margin:8px 0;"></div>' +
+        subtotalsHtml +
+        grandTotalLine +
+      '</div>';
     }
 
     return '<div style="'+cardStyle+'">' +
