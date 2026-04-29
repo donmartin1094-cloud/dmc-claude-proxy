@@ -5971,15 +5971,16 @@ function _homeDailyOverviewSectionHtml() {
       '</div>';
 
       var _tapJobId = escHtml(_fJobId);
-      tonnageSection = '<div onclick="openJobFolder(\'' + _tapJobId + '\');switchJfTab(\'' + _tapJobId + '\',\'slips\');"' +
-        ' ontouchstart="this.style.opacity=\'0.85\'" ontouchend="this.style.opacity=\'\'"' +
-        ' onmousedown="this.style.opacity=\'0.85\'" onmouseup="this.style.opacity=\'\'" onmouseleave="this.style.opacity=\'\'"' +
-        ' style="margin-top:3px;padding:6px;background:rgba(0,0,0,0.15);border-radius:3px;cursor:pointer;position:relative;">' +
-        '<span style="position:absolute;top:5px;right:7px;font-size:11px;color:rgba(167,139,250,0.45);pointer-events:none;user-select:none;">&#8250;</span>' +
+      var viewSlipsBtn = '<div style="text-align:right;margin-top:2px;">' +
+        '<button onclick="openJobFolder(\'' + _tapJobId + '\');switchJfTab(\'' + _tapJobId + '\',\'slips\');"' +
+        ' style="background:none;border:none;color:rgba(255,255,255,0.5);' + _mono + 'font-size:12px;cursor:pointer;padding:12px 0 4px;min-height:44px;line-height:1;">&#128196; View All Slips &#8594;</button>' +
+        '</div>';
+      tonnageSection = '<div style="margin-top:3px;padding:6px;background:rgba(0,0,0,0.15);border-radius:3px;">' +
         '<div style="display:flex;flex-wrap:wrap;gap:24px;">' + colsHtml + '</div>' +
         '<div style="border-top:1px solid rgba(255,255,255,0.15);margin:8px 0;"></div>' +
         subtotalsHtml +
         grandTotalLine +
+        viewSlipsBtn +
       '</div>';
     }
 
