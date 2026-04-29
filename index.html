@@ -5916,16 +5916,7 @@ function _homeDailyOverviewSectionHtml() {
 
   // Outer wrapper: exactly matches the map panel height (420px), section header at top (flex-shrink:0),
   // content fills remaining space so Filipe=40%, Louie=40%, SA=20% of the content area
-  var _debugHtml = '<div style="background:#1a1a2e;color:#a78bfa;font-size:11px;padding:8px;margin-bottom:8px;border-radius:6px;word-break:break-all;">'
-    + '<b>DEBUG</b><br>'
-    + 'todayKey: ' + todayKey + '<br>'
-    + 'pavingSlips.length: ' + pavingSlips.length + '<br>'
-    + 'slip[0].date: ' + (pavingSlips[0] ? pavingSlips[0].date : 'none') + '<br>'
-    + 'slip[0].jobNum: ' + (pavingSlips[0] ? pavingSlips[0].jobNum : 'none') + '<br>'
-    + 'slip[0].jobId: ' + (pavingSlips[0] ? pavingSlips[0].jobId : 'none') + '<br>'
-    + 'schedData jobs: ' + (schedData && schedData.jobs ? JSON.stringify(schedData.jobs.map(function(j){return{num:j.jobNum,id:j.id||j.jobId}})) : 'none')
-    + '</div>';
-  return _debugHtml + '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
+  return '<div style="border-bottom:1px solid var(--asphalt-light);height:420px;display:flex;flex-direction:column;overflow:hidden;">' +
     '<div style="flex-shrink:0;">' + hdr + '</div>' +
     '<div style="flex:1;min-height:0;display:flex;">' +
       leftHalf +
@@ -20387,7 +20378,7 @@ function widgetForemanReport() {
   var reports = [];
   try { reports = JSON.parse(localStorage.getItem(FOREMAN_REPORTS_KEY) || '[]'); } catch(e) {}
   var myReports = reports.filter(function(r){ return (r.foremanUsername||'').toLowerCase() === u.toLowerCase(); });
-  var todayKey  = new Date().toISOString().slice(0, 10);
+  var _wd = new Date(); var todayKey = _wd.getFullYear() + '-' + String(_wd.getMonth()+1).padStart(2,'0') + '-' + String(_wd.getDate()).padStart(2,'0');
   var submittedToday = myReports.some(function(r){ return r.date === todayKey; });
 
   var recentHtml = myReports.slice(0, 3).map(function(r) {
@@ -26379,8 +26370,8 @@ function _crewConfirmInit() {
     if (!isAdmin()) return;
     var now = new Date();
     var h = now.getHours();
-    var todayKey    = now.toISOString().slice(0, 10);
-    var yesterdayKey = (function() { var d = new Date(now); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    var todayKey    = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+    var yesterdayKey = (function() { var d = new Date(now); d.setDate(d.getDate() - 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
 
     // 6:00–6:59 PM → confirm today's crews
     if (h === 18) _crewConfirmShow(todayKey, 'evening');

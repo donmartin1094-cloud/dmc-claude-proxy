@@ -160,7 +160,7 @@ function _mssShowConfirmForm(data, needsReview) {
   var defaultJob = jobs.find(function(j){ return j.jobProgress==='active'; }) || jobs[0];
   var defaultJobId = defaultJob ? defaultJob.id : '';
 
-  var today = new Date().toISOString().slice(0,10);
+  var _td = new Date(); var today = _td.getFullYear() + '-' + String(_td.getMonth()+1).padStart(2,'0') + '-' + String(_td.getDate()).padStart(2,'0');
   var d = data || {};
 
   var warningHtml = needsReview
@@ -253,7 +253,7 @@ function _mssSaveSlip() {
   var truck    = ((document.getElementById('_mssTruck')   ||{}).value || '').trim();
   var mix      = ((document.getElementById('_mssMixType') ||{}).value || '').trim();
   var tons     = parseFloat((document.getElementById('_mssTons')||{}).value) || 0;
-  var date     = ((document.getElementById('_mssDate')    ||{}).value) || new Date().toISOString().slice(0,10);
+  var date     = ((document.getElementById('_mssDate')    ||{}).value) || (function(){ var _d=new Date(); return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0'); })();
 
   var jobId, job;
   if (_mssLockedJob) {
