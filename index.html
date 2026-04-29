@@ -5725,6 +5725,12 @@ function _mssNormalizeMixKey(rawMixType) {
     var r = cleaned.toLowerCase();
     var m = mxList.find(function(x){ return (x.desc||'').toLowerCase().trim() === r; }) ||
             mxList.find(function(x){ return (x.displayName||'').toLowerCase().trim() === r; }) ||
+            mxList.find(function(x){
+              return (x.ticketCodes||[]).some(function(tc){ return tc.replace(/(\d+)D\b/g,'$1G').replace(/,/g,' ').replace(/\s+/g,' ').trim().toLowerCase() === r; });
+            }) ||
+            mxList.find(function(x){
+              return (x.ticketCodes||[]).some(function(tc){ var t=tc.replace(/(\d+)D\b/g,'$1G').replace(/,/g,' ').replace(/\s+/g,' ').trim().toLowerCase(); return t && (t.indexOf(r)!==-1||r.indexOf(t)!==-1); });
+            }) ||
             mxList.find(function(x){ var d=(x.desc||'').toLowerCase().trim(); return d && (d.indexOf(r)!==-1||r.indexOf(d)!==-1); }) ||
             mxList.find(function(x){ var dn=(x.displayName||'').toLowerCase().trim(); return dn && (r.indexOf(dn)!==-1||dn.indexOf(r)!==-1); });
     if (m && m.displayName) nickname = m.displayName;
@@ -27453,6 +27459,10 @@ function stngOpenAddMixType(editIdx) {
   if (existing) existing.remove();
   const isEdit = editIdx !== undefined;
   const m = isEdit ? mixTypesList[editIdx] : {};
+  var tcChipsHtml = (m.ticketCodes||[]).map(function(tc){
+    var esc = tc.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:2px 8px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete);" data-code="'+esc+'">'+esc+'<button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--concrete-dim);cursor:pointer;font-size:13px;padding:0 0 0 4px;line-height:1;">&times;</button></span>';
+  }).join('');
   const modal = document.createElement('div');
   modal.id = 'mixTypeFormModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9000;display:flex;align-items:center;justify-content:center;padding:24px;';
@@ -27477,6 +27487,14 @@ function stngOpenAddMixType(editIdx) {
           <label style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);letter-spacing:1px;display:block;margin-bottom:5px;">GYRATIONS</label>
           <input id="mtGyrations" class="form-input" placeholder="e.g. 65" value="${m.gyrations||''}" style="font-size:13px;" />
         </div>
+        <div>
+          <label style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);letter-spacing:1px;display:block;margin-bottom:5px;">TICKET CODES <span style="color:var(--concrete-dim);font-size:8px;">(one per variant — gyrations and RAP % may differ)</span></label>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <input id="mtTicketCodeInput" class="form-input" placeholder="e.g. SP-WMA 37.5 100G 20%RAP 64-28 SBC" style="font-size:12px;flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();_mtcAddCode();}" />
+            <button onclick="_mtcAddCode()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:var(--radius);padding:6px 12px;color:var(--concrete);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Add</button>
+          </div>
+          <div id="mtTicketCodesChips" style="display:flex;flex-wrap:wrap;gap:5px;min-height:18px;">${tcChipsHtml}</div>
+        </div>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
         <button onclick="document.getElementById('mixTypeFormModal').remove()" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:8px 16px;color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">Cancel</button>
@@ -27499,6 +27517,7 @@ function stngSaveMixType(editIdx) {
     desc,
     displayName: document.getElementById('mtDisplayName')?.value.trim() || '',
     gyrations:   document.getElementById('mtGyrations')?.value.trim() || '',
+    ticketCodes: _mtcGetCodes(),
   };
   // Sync displayName into materialDisplayNames map so schedule chips show it
   if (entry.displayName) { materialDisplayNames[entry.desc] = entry.displayName; saveMaterialDisplayNames(); }
@@ -27524,6 +27543,28 @@ function stngDeleteMixType(idx) {
   const _rdEl = document.getElementById('stng-roster-content');
   if (_rdEl && _rdEl.style.display !== 'none') renderSettingsMixMaterials(_rdEl);
   else renderSettingsMixTypes();
+}
+
+function _mtcAddCode() {
+  var inp = document.getElementById('mtTicketCodeInput');
+  var val = inp ? inp.value.trim() : '';
+  if (!val) return;
+  var chips = document.getElementById('mtTicketCodesChips');
+  if (!chips) return;
+  var esc = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  var span = document.createElement('span');
+  span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:2px 8px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete);';
+  span.dataset.code = val;
+  span.innerHTML = esc + '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--concrete-dim);cursor:pointer;font-size:13px;padding:0 0 0 4px;line-height:1;">&times;</button>';
+  chips.appendChild(span);
+  inp.value = '';
+  inp.focus();
+}
+
+function _mtcGetCodes() {
+  var chips = document.getElementById('mtTicketCodesChips');
+  if (!chips) return [];
+  return Array.from(chips.querySelectorAll('span[data-code]')).map(function(s){ return s.dataset.code; });
 }
 
 // ── Schedule block: Mix Type inline dropdown (like plant picker) ──────────────

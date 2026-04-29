@@ -110,11 +110,19 @@ function _mssAIScan(b64, mimeType) {
     var isAmrize = /amrize/i.test(supplierRaw);
     var needsReview = !supplierRaw || /^unknown$/i.test(supplierRaw.trim());
 
-    var _mssTypeRef = (window.mixTypesList || JSON.parse(localStorage.getItem('pavescope_mix_types') || '[]'))
-      .map(function(m){ return (m.desc||'') + ' → ' + (m.displayName||''); }).join('\n');
+    var _mssTypeRefLines = [];
+    (window.mixTypesList || JSON.parse(localStorage.getItem('pavescope_mix_types') || '[]'))
+      .forEach(function(m){
+        if (m.ticketCodes && m.ticketCodes.length) {
+          m.ticketCodes.forEach(function(tc){ _mssTypeRefLines.push(tc + ' → ' + (m.displayName||m.desc||'')); });
+        } else {
+          _mssTypeRefLines.push((m.desc||'') + ' → ' + (m.displayName||''));
+        }
+      });
+    var _mssTypeRefStr = _mssTypeRefLines.join('\n');
     var _mssTypeInstruction = '\n\nIMPORTANT: The mixType field must be returned as a clean display name, not a raw code.\nGyration values are always a number followed by the letter G (e.g. 100G, 75G, 50G). If you read a gyration value ending in D (e.g. 100D), correct it to G (100G).\n'
-      + (_mssTypeRef
-        ? 'Match the extracted mix type against this list and return ONLY the displayName value.\nIf no match is found, return the extracted value with commas replaced by spaces.\nKnown types:\n' + _mssTypeRef
+      + (_mssTypeRefStr
+        ? 'Match the extracted mix type against this list and return ONLY the displayName value.\nIf no match is found, return the extracted value with commas replaced by spaces.\nKnown types:\n' + _mssTypeRefStr
         : 'Return the mixType with commas replaced by spaces.');
     var amrizePrompt = 'This is an Amrize (formerly Lafarge) hot mix asphalt delivery ticket.\nExtract these fields exactly as printed. Return ONLY valid JSON, no markdown:\n{"supplier":"Amrize","plant":"plant location/address as printed","time":"load time e.g. 14:32","ticketNo":"ticket number","loadNumber":"LOAD NUMBER from bottom right corner — label may say Load, Load No, Load #, or be a standalone sequential number (e.g. 1, 002). Return null if not found in bottom right corner.","truckNum":"truck number","mixType":"asphalt mix e.g. SBC 37.5 or SIC 19.0","tons":0,"date":"YYYY-MM-DD"}' + _mssTypeInstruction;
     var safeName = supplierRaw.replace(/"/g, '\\"');
