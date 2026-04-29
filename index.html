@@ -6106,6 +6106,8 @@ function _homeFleetRerender() {
   if (isMob) {
     var lbCard = document.querySelector('.home-admin-sect-card[data-sect="lowbed"]');
     if (lbCard) lbCard.innerHTML = _homeLowbedSectionHtml();
+    var dailyCard = document.querySelector('.home-admin-sect-card[data-sect="daily"]');
+    if (dailyCard) dailyCard.innerHTML = _homeDailyOverviewSectionHtml();
   } else {
     var dailyCol = document.getElementById('homeAdminDailyCol');
     if (dailyCol) dailyCol.innerHTML = _homeDailyOverviewSectionHtml();
