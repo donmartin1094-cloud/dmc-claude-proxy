@@ -5780,7 +5780,7 @@ function _homeDailyOverviewSectionHtml() {
     var color = (bt && bt.color) ? bt.color : '#3a3a3a';
     var fc    = (bt && bt.fontColor) ? bt.fontColor : '#fff';
 
-    var cardStyle = 'display:flex;flex-direction:column;overflow:visible;' +
+    var cardStyle = 'display:flex;flex-direction:column;overflow:visible;height:100%;min-height:280px;' +
       'background:' + color + '18;border-left:4px solid ' + color + ';';
 
     // Type badge (night/day/etc)
@@ -6037,7 +6037,7 @@ function _homeDailyOverviewSectionHtml() {
 
     return '<div style="'+cardStyle+'">' +
       hdrStrip +
-      '<div style="height:auto;padding:5px 9px 4px;overflow:visible;display:flex;flex-direction:column;gap:2px;">' +
+      '<div style="flex:1;padding:5px 9px 4px;overflow:visible;display:flex;flex-direction:column;gap:2px;justify-content:space-between;">' +
         // Job name (full, wraps if needed)
         (jobDisplayName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:11.5px;font-weight:800;color:var(--white);' +
           'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(jobDisplayName) + '</div>' : '') +
@@ -6085,12 +6085,12 @@ function _homeDailyOverviewSectionHtml() {
   // ── Foreman assignments: 40% Filipe | 40% Louie | 20% Special Actions
   var leftHalf =
     '<div style="flex:1;display:flex;flex-direction:column;overflow:visible;">' +
-      // Filipe — natural height
-      '<div style="flex:none;width:100%;overflow:visible;border-bottom:1px solid rgba(255,255,255,0.06);">' + filipeCard + '</div>' +
-      // Louie — natural height
-      '<div style="flex:none;width:100%;overflow:visible;border-bottom:1px solid rgba(255,255,255,0.06);">' + louieCard + '</div>' +
+      // Filipe — flex:1 so both cards share equal height
+      '<div style="flex:1;display:flex;flex-direction:column;overflow:visible;border-bottom:1px solid rgba(255,255,255,0.06);">' + filipeCard + '</div>' +
+      // Louie — flex:1 so both cards share equal height
+      '<div style="flex:1;display:flex;flex-direction:column;overflow:visible;border-bottom:1px solid rgba(255,255,255,0.06);">' + louieCard + '</div>' +
       // Special Actions — natural height, always soft yellow with left accent border
-      '<div style="flex:none;width:100%;overflow:visible;' +
+      '<div style="flex:none;align-self:flex-start;width:100%;overflow:visible;' +
         'background:rgba(245,197,24,0.07);' +
         'border-left:4px solid rgba(245,197,24,0.55);' +
         'border-top:1px solid rgba(245,197,24,0.15);' +
