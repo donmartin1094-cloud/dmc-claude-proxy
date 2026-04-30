@@ -5857,7 +5857,18 @@ function _homeDailyOverviewSectionHtml() {
     var _fJobId = (_fJobMatch && _fJobMatch.id) || '';
 
     // Equipment tally: scheduled (f.equipment) vs. delivered (dmc_lowbed_groups items)
-    var tallyRow = '<div style="color:red;font-size:11px;">TALLY DEBUG</div>';
+    var _lbgRaw = localStorage.getItem('dmc_lowbed_groups');
+    var _lbgParsed = _lbgRaw ? JSON.parse(_lbgRaw) : [];
+    var _eqRaw = f.equipment || '[]';
+    var _eqParsed = []; try { _eqParsed = JSON.parse(_eqRaw); } catch(e){}
+    var tallyRow = '<div style="color:#a78bfa;font-size:10px;padding:4px;line-height:1.6;">'
+      + 'lbGroups: ' + _lbgParsed.length + '<br>'
+      + 'f.jobName: ' + (f.jobName||'none') + '<br>'
+      + 'f.jobNum: ' + (f.jobNum||'none') + '<br>'
+      + 'eqScheduled: ' + _eqParsed.length + '<br>'
+      + 'lbGroup[0].jobName: ' + (_lbgParsed[0] ? (_lbgParsed[0].jobName||'none') : 'no groups') + '<br>'
+      + 'lbGroup[0].moves[0].to: ' + (_lbgParsed[0] && _lbgParsed[0].moves && _lbgParsed[0].moves[0] ? (_lbgParsed[0].moves[0].to||'none') : 'no moves') + '<br>'
+      + '</div>';
     if (eqArr.length > 0) {
       var _lbGs = [];
       try { _lbGs = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e3) {}
