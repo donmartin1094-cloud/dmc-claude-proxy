@@ -520,7 +520,7 @@ function openMobBlockDetail(key, slot) {
     </div>` : '';
   const footBtns = canEdit ? [
     `<button class="sched-mob-sheet-btn" style="background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.4);color:var(--stripe);" onclick="generateDailyOrder('${key}','${slot}',event)">📋 Daily Order</button>`,
-    isAdmin() ? `<button class="sched-mob-sheet-btn" style="background:rgba(155,148,136,0.08);border:1px solid rgba(155,148,136,0.3);color:#9b9488;" onclick="rainOutBlock('${key}','${slot}');document.getElementById('_mobSheet').remove();">🌧 Rain Out</button>` : '',
+    isAdmin() ? `<button class="sched-mob-sheet-btn" style="background:rgba(155,148,136,0.08);border:1px solid rgba(155,148,136,0.3);color:#9b9488;" onclick="rainOutModal('${key}','${slot}');document.getElementById('_mobSheet').remove();">🌧 Rain Out</button>` : '',
     (bdata.type !== 'blank' && (fields.jobName||fields.jobNum)) ? `<button class="sched-mob-sheet-btn" style="background:rgba(126,203,143,0.1);border:1px solid rgba(126,203,143,0.4);color:#7ecb8f;" onclick="_schedCompleteJob('${key}','${slot}');document.getElementById('_mobSheet').remove();">✅ Complete</button>` : '',
     (bdata.type !== 'blank' && (fields.jobName||fields.jobNum)) ? `<button class="sched-mob-sheet-btn" style="background:rgba(90,180,245,0.08);border:1px solid rgba(90,180,245,0.35);color:#5ab4f5;" onclick="_schedCleanOutJob('${key}','${slot}');document.getElementById('_mobSheet').remove();">🔄 Clean Out</button>` : '',
     `<button class="sched-mob-sheet-btn sched-mob-sheet-close" onclick="document.getElementById('_mobSheet').remove()">✕ Close</button>`,
@@ -798,6 +798,152 @@ function rainOutBlock(key, slot) {
       null
     );
   }
+}
+
+// ── Rainout Modal — smarter reschedule with open-slot preview ─────────────────
+var _roPending = null; // { key, slot, moves: [{name, from, to}] }
+
+function _roFindNextOpenFrom(slot, fromKey) {
+  // First workday >= fromKey where the slot has no work scheduled
+  var scan = fromKey;
+  for (var ri = 0; ri < 90; ri++) {
+    if (!slotHasWork(scan, slot)) return scan;
+    scan = nextWorkday(scan);
+  }
+  return scan;
+}
+
+function _roCalcMoves(key, slot) {
+  // Collect today + every consecutive occupied workday that follows
+  var run = [];
+  var scan = key;
+  for (var ci = 0; ci < 365; ci++) {
+    if (slotHasWork(scan, slot)) {
+      run.push(scan);
+      scan = nextWorkday(scan);
+    } else {
+      break;
+    }
+  }
+  if (run.length === 0) return [];
+  // Assign each job to the next sequential open slot (sequentially non-overlapping)
+  var moves = [];
+  var searchFrom = nextWorkday(key);
+  for (var mi = 0; mi < run.length; mi++) {
+    var dest = _roFindNextOpenFrom(slot, searchFrom);
+    moves.push({ name: getBlockJobName(run[mi], slot), from: run[mi], to: dest });
+    searchFrom = nextWorkday(dest);
+  }
+  return moves;
+}
+
+function rainOutModal(key, slot) {
+  if (!isAdmin()) return;
+  // If already rained out, toggle off via original function
+  var cur = (schedData[key] || {})[slot];
+  if (cur && cur.rainedOut) { rainOutBlock(key, slot); return; }
+  if (!slotHasWork(key, slot)) {
+    alert('No job is scheduled on this block to rain out.');
+    return;
+  }
+  _roPending = { key: key, slot: slot, moves: _roCalcMoves(key, slot) };
+  _roOpenStep1();
+}
+
+function _roOpenStep1() {
+  if (!_roPending) return;
+  var key   = _roPending.key;
+  var slot  = _roPending.slot;
+  var moves = _roPending.moves;
+  var foreman = slot === 'top' ? (foremanRoster[0] || 'Filipe Joaquim') : (foremanRoster[1] || 'Louie Medeiros');
+  document.getElementById('_rainoutModal')?.remove();
+  var modal = document.createElement('div');
+  modal.id = '_rainoutModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9800;display:flex;align-items:center;justify-content:center;padding:24px;';
+  modal.innerHTML = `
+    <div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:28px;max-width:480px;width:90vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);display:flex;flex-direction:column;gap:14px;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:21px;letter-spacing:1.5px;color:#6a9fe0;">🌧 Rainout — What should happen to today's jobs?</div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);">${escHtml(foreman)} · ${escHtml(fmtScheduleDate(key))}</div>
+      <button onclick="_roOpenStep2()"
+        style="width:100%;min-height:48px;padding:14px 16px;background:rgba(80,130,220,0.12);border:2px solid rgba(80,130,220,0.45);border-radius:var(--radius-lg);color:#6a9fe0;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:800;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;">
+        <span>📅 Push Everything Back</span>
+        <span style="font-family:'DM Mono',monospace;font-size:9.5px;font-weight:400;color:rgba(106,159,224,0.7);">Find next open slot for ${moves.length} job${moves.length !== 1 ? 's' : ''} — preview before confirming</span>
+      </button>
+      <button onclick="rainOutBlock('${key}','${slot}');document.getElementById('_rainoutModal')?.remove();"
+        style="width:100%;min-height:48px;padding:14px 16px;background:rgba(155,148,136,0.08);border:2px solid rgba(155,148,136,0.3);border-radius:var(--radius-lg);color:#9b9488;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:800;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;">
+        <span>✋ Keep As-Is</span>
+        <span style="font-family:'DM Mono',monospace;font-size:9.5px;font-weight:400;color:rgba(155,148,136,0.6);">Mark rained out, cascade all following jobs +1 workday</span>
+      </button>
+      <button onclick="document.getElementById('_rainoutModal')?.remove();"
+        style="width:100%;min-height:48px;padding:10px 16px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);color:var(--concrete-dim);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">
+        Cancel
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+function _roOpenStep2() {
+  if (!_roPending) return;
+  var moves = _roPending.moves;
+  document.getElementById('_rainoutModal')?.remove();
+  var modal = document.createElement('div');
+  modal.id = '_rainoutModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9800;display:flex;align-items:center;justify-content:center;padding:24px;';
+  var previewRows = moves.map(function(m) {
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+      '<span style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(m.name) + '</span>' +
+      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:#6a9fe0;white-space:nowrap;flex-shrink:0;">→ ' + escHtml(fmtScheduleDate(m.to)) + '</span>' +
+    '</div>';
+  }).join('');
+  modal.innerHTML = `
+    <div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:28px;max-width:480px;width:90vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);display:flex;flex-direction:column;gap:14px;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:#6a9fe0;">📅 Confirm Schedule Push</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--concrete-dim);">Each job moves to its next available open slot:</div>
+      <div style="border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:10px 14px;background:rgba(0,0,0,0.2);">
+        ${previewRows}
+      </div>
+      <button onclick="_roExecutePush()"
+        style="width:100%;min-height:48px;padding:12px 16px;background:rgba(80,130,220,0.18);border:2px solid rgba(80,130,220,0.55);border-radius:var(--radius-lg);color:#6a9fe0;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:800;cursor:pointer;">
+        ✅ Confirm Push
+      </button>
+      <button onclick="_roOpenStep1()"
+        style="width:100%;min-height:48px;padding:10px 16px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);color:var(--concrete-dim);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">
+        ← Back
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+function _roExecutePush() {
+  if (!_roPending) return;
+  var key   = _roPending.key;
+  var slot  = _roPending.slot;
+  var moves = _roPending.moves;
+  // Process in reverse so later-source jobs are placed first,
+  // preventing any accidental overwrite of a not-yet-moved block.
+  for (var ei = moves.length - 1; ei >= 0; ei--) {
+    var m = moves[ei];
+    var src = (schedData[m.from] && schedData[m.from][slot])
+      ? JSON.parse(JSON.stringify(schedData[m.from][slot]))
+      : { type: 'blank', fields: {} };
+    src.rainedOut = false;
+    if (!schedData[m.to]) schedData[m.to] = {};
+    schedData[m.to][slot] = src;
+    // Clear source slot (all moved-from dates become blank)
+    if (!schedData[m.from]) schedData[m.from] = {};
+    schedData[m.from][slot] = { type: 'blank', fields: {} };
+  }
+  saveSchedDataDirect();
+  renderSchedule();
+  document.getElementById('_rainoutModal')?.remove();
+  var foreman = slot === 'top' ? (foremanRoster[0] || 'Filipe Joaquim') : (foremanRoster[1] || 'Louie Medeiros');
+  pushNotif('success', '🌧 Rainout — Schedule Pushed',
+    escHtml(foreman.split(' ')[0]) + '\'s ' + moves.length + ' job' + (moves.length !== 1 ? 's' : '') +
+    ' moved to next available open slots.',
+    null);
+  _roPending = null;
 }
 
 
@@ -2865,7 +3011,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
         <div class="sched-block-header-row1">
           <span class="sched-foreman-name">${ex.foreman||'Extra Crew'}</span>
         </div>
-        ${isAdmin() ? `<div class="sched-block-header-row2"><button class="sched-rainout-btn${bdata.rainedOut?' is-rained-out':''}" onclick="rainOutBlock('${key}','${slot}')" title="${bdata.rainedOut?'Remove rain-out flag':'Mark as rained out — pushes this job forward by 1 workday'}">🌧${bdata.rainedOut?' Rained Out':''}</button></div>` : ''}
+        ${isAdmin() ? `<div class="sched-block-header-row2"><button class="sched-rainout-btn${bdata.rainedOut?' is-rained-out':''}" onclick="rainOutModal('${key}','${slot}')" title="${bdata.rainedOut?'Remove rain-out flag':'Mark as rained out'}">🌧${bdata.rainedOut?' Rained Out':''}</button></div>` : ''}
       </div>`}
       <div class="sched-fields sched-drag-handle" draggable="true"
            ondragstart="schedBlockDragStart(event,'${key}','${slot}')"
@@ -4660,7 +4806,7 @@ function renderSchedule() {
                 <span class="sched-foreman-name">${slot==='top'?(foremanRoster[0]||'Filipe Joaquim'):(foremanRoster[1]||'Louie Medeiros')}</span>
                 ${((schedData[key]?.extras)||[]).some(x=>x.parentSlot===slot) ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:var(--stripe);letter-spacing:.4px;white-space:nowrap;margin-left:4px;">· 2nd Stop Today</span>' : ''}
                 <span style="flex:1;"></span>
-                ${!lookaheadBlockout && isAdmin() ? `<button class="sched-rainout-btn${isRainedOut?' is-rained-out':''}" onclick="rainOutBlock('${key}','${slot}')" title="${isRainedOut?'Remove rain-out flag':'Mark as rained out — pushes this job and all consecutive following jobs forward by 1 workday'}">🌧${isRainedOut?' Rained Out':''}</button>` : ''}
+                ${!lookaheadBlockout && isAdmin() ? `<button class="sched-rainout-btn${isRainedOut?' is-rained-out':''}" onclick="rainOutModal('${key}','${slot}')" title="${isRainedOut?'Remove rain-out flag':'Mark as rained out'}">🌧${isRainedOut?' Rained Out':''}</button>` : ''}
                 ${!lookaheadBlockout ? `<button onclick="generateDailyOrder('${key}','${slot}',event)" title="Generate Daily Order"
                   style="background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.35);border-radius:3px;color:#f5c518;font-family:'DM Sans',sans-serif;font-size:9px;font-weight:700;padding:2px 7px;cursor:pointer;white-space:nowrap;transition:all 0.12s;"
                   onmouseover="this.style.background='rgba(245,197,24,0.25)'"
