@@ -5857,7 +5857,7 @@ function _homeDailyOverviewSectionHtml() {
     var _fJobId = (_fJobMatch && _fJobMatch.id) || '';
 
     // Equipment tally: scheduled (f.equipment) vs. delivered (dmc_lowbed_groups items)
-    var tallyRow = '';
+    var tallyRow = '<div style="color:red;font-size:11px;">TALLY DEBUG</div>';
     if (eqArr.length > 0) {
       var _lbGs = [];
       try { _lbGs = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e3) {}
