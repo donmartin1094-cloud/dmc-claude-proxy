@@ -5857,63 +5857,72 @@ function _homeDailyOverviewSectionHtml() {
     var _fJobId = (_fJobMatch && _fJobMatch.id) || '';
 
     // Equipment tally: scheduled (f.equipment) vs. delivered (dmc_lowbed_groups items)
-    var _lbgRaw = localStorage.getItem('dmc_lowbed_groups');
-    var _lbgParsed = _lbgRaw ? JSON.parse(_lbgRaw) : [];
-    var _eqRaw = f.equipment || '[]';
-    var _eqParsed = []; try { _eqParsed = JSON.parse(_eqRaw); } catch(e){}
-    var tallyRow = '<div style="color:#a78bfa;font-size:10px;padding:4px;line-height:1.6;">'
-      + 'lbGroups: ' + _lbgParsed.length + '<br>'
-      + 'f.jobName: ' + (f.jobName||'none') + '<br>'
-      + 'f.jobNum: ' + (f.jobNum||'none') + '<br>'
-      + 'eqScheduled: ' + _eqParsed.length + '<br>'
-      + 'lbGroup[0].jobName: ' + (_lbgParsed[0] ? (_lbgParsed[0].jobName||'none') : 'no groups') + '<br>'
-      + 'lbGroup[0].moves[0].to: ' + (_lbgParsed[0] && _lbgParsed[0].moves && _lbgParsed[0].moves[0] ? (_lbgParsed[0].moves[0].to||'none') : 'no moves') + '<br>'
-      + '</div>';
-    if (eqArr.length > 0) {
-      var _lbGs = [];
-      try { _lbGs = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e3) {}
-      var _schByType = {};
-      eqArr.forEach(function(e) {
-        var t = typeof e === 'object' ? (e.type || 'other') : 'other';
-        _schByType[t] = (_schByType[t] || 0) + 1;
-      });
-      var _delByType = {};
-      var _fJNum = (f.jobNum || '').toString().trim().toLowerCase();
-      var _fJNm  = (jobDisplayName || '').trim().toLowerCase();
-      _lbGs.forEach(function(grp) {
-        var dm = false;
-        if (_fJobId && grp.to === _fJobId) {
-          dm = true;
-        } else if (grp.to) {
-          var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
-          var _tj = _bl.find(function(jb) { return String(jb.id) === String(grp.to); });
-          if (_tj) {
-            var _tjNum = (_tj.num || _tj.jobNum || _tj.number || '').toString().trim().toLowerCase();
-            var _tjNm  = (_tj.name || '').trim().toLowerCase();
-            if (_fJNum && _tjNum && _tjNum === _fJNum) dm = true;
-            if (_fJNm  && _tjNm  && _tjNm  === _fJNm)  dm = true;
-          } else {
-            if (_fJNm && grp.to.toString().trim().toLowerCase() === _fJNm) dm = true;
-          }
+    var _lbGs = [];
+    try { _lbGs = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e3) {}
+    var _schByType = {}, _schNamesByType = {};
+    eqArr.forEach(function(e) {
+      var t = typeof e === 'object' ? (e.type || 'other') : 'other';
+      var n = typeof e === 'object' ? (e.name || t) : String(e);
+      if (!_schNamesByType[t]) { _schNamesByType[t] = []; _schByType[t] = 0; }
+      _schByType[t]++;
+      _schNamesByType[t].push(n);
+    });
+    var _delByType = {}, _delNamesByType = {};
+    var _fJNum = (f.jobNum || '').toString().trim().toLowerCase();
+    var _fJNm  = (jobDisplayName || '').trim().toLowerCase();
+    _lbGs.forEach(function(grp) {
+      var dm = false;
+      if (_fJobId && grp.to === _fJobId) {
+        dm = true;
+      } else if (grp.to) {
+        var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+        var _tj = _bl.find(function(jb) { return String(jb.id) === String(grp.to); });
+        if (_tj) {
+          var _tjNum = (_tj.num || _tj.jobNum || _tj.number || '').toString().trim().toLowerCase();
+          var _tjNm  = (_tj.name || '').trim().toLowerCase();
+          if (_fJNum && _tjNum && _tjNum === _fJNum) dm = true;
+          if (_fJNm  && _tjNm  && _tjNm  === _fJNm)  dm = true;
+        } else {
+          if (_fJNm && grp.to.toString().trim().toLowerCase() === _fJNm) dm = true;
         }
-        if (!dm) return;
-        (grp.items || []).forEach(function(it) {
-          if (it.delivered === true) {
-            var t2 = it.type || 'other';
-            _delByType[t2] = (_delByType[t2] || 0) + 1;
-          }
-        });
+      }
+      if (!dm) return;
+      (grp.items || []).forEach(function(it) {
+        if (it.delivered === true) {
+          var t2 = it.type || 'other';
+          if (!_delNamesByType[t2]) { _delNamesByType[t2] = []; _delByType[t2] = 0; }
+          _delByType[t2]++;
+          _delNamesByType[t2].push(it.name || t2);
+        }
       });
-      var _tallyChips = Object.keys(_schByType).map(function(t) {
+    });
+    var _allTallyTypes = {};
+    Object.keys(_schByType).forEach(function(t) { _allTallyTypes[t] = true; });
+    Object.keys(_delByType).forEach(function(t) { _allTallyTypes[t] = true; });
+    var _EQ_TYPE_LBL = { paver:'Pavers', roller:'Rollers', milling:'Milling', excavator:'Excavators',
+      loader:'Loaders', skid_steer:'Skid Steers', compactor:'Compactors', dump_truck:'Dump Trucks',
+      lowbed:'Lowbeds', tack_truck:'Tack Trucks', water_truck:'Water Trucks',
+      generator:'Generators', trailer:'Trailers', other:'Other' };
+    var tallyRow = '';
+    if (Object.keys(_allTallyTypes).length > 0) {
+      var _tallyBlocks = Object.keys(_allTallyTypes).map(function(t) {
         var sch = _schByType[t] || 0;
-        var act = _delByType[t] || 0;
-        var cc = act >= sch ? '#7ecb8f' : (act > 0 ? '#e8a94c' : '#e85555');
+        var del = _delByType[t] || 0;
+        var delNames = _delNamesByType[t] || [];
+        var schNames = _schNamesByType[t] || [];
+        var needed = Math.max(0, sch - del);
         var ic = EQ_ICONS[t] || '🔧';
-        return '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;font-weight:700;' +
-          'color:' + cc + ';background:' + cc + '18;border:1px solid ' + cc + '55;' +
-          'border-radius:4px;padding:1px 5px;white-space:nowrap;">' + ic + ' ' + act + '/' + sch + '</span>';
+        var lbl = _EQ_TYPE_LBL[t] || t;
+        var sumColor = (del > 0 && del >= sch) ? '#7ecb8f' : del > 0 ? '#e8a94c' : '#e85555';
+        var total = sch || del;
+        return '<div style="font-family:\'DM Mono\',monospace;font-size:7.5px;margin-bottom:3px;padding:3px 5px;background:rgba(255,255,255,0.02);border-radius:4px;">' +
+          '<div style="font-weight:700;color:rgba(255,255,255,0.5);margin-bottom:1px;">' + ic + ' ' + lbl + '</div>' +
+          (delNames.length ? '<div style="color:#7ecb8f;">✅ On Job: ' + del + ' — ' + delNames.join(', ') + '</div>' : '') +
+          (needed > 0 ? '<div style="color:#e8a94c;">🚛 Needed: ' + needed + (schNames.length ? ' — ' + schNames.join(', ') : '') + '</div>' : '') +
+          '<div style="color:' + sumColor + ';">' + del + ' of ' + total + ' pieces on site</div>' +
+        '</div>';
       }).join('');
-      tallyRow = '<div style="display:flex;flex-wrap:wrap;gap:2px;flex-shrink:0;">' + _tallyChips + '</div>';
+      tallyRow = '<div style="margin-top:2px;">' + _tallyBlocks + '</div>';
     }
 
     var todaySlips = (typeof pavingSlips !== 'undefined' ? pavingSlips : []).filter(function(s) {
@@ -6534,7 +6543,7 @@ function _homeLowbedSectionHtml() {
               var toLabel = _lbResolveLabel(m.to);
               var strike = st === 'complete' ? 'text-decoration:line-through;opacity:0.5;' : '';
               var driverEl = _homeIsAdmin()
-                ? '<button onclick="event.stopPropagation();_lbAdminAssignModal(\'' + gId.replace(/'/g,'') + '\')" style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:3px;padding:1px 5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;">' + escHtml(driver) + '</button>'
+                ? '<button onclick="event.stopPropagation();_lbAdminAssignModal(\'' + gId.replace(/'/g,'') + '\')" style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:3px;padding:1px 5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;">Assign To</button>'
                 : '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + driverColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">' + escHtml(driver) + '</span>';
               return '<div style="padding:5px 9px;border-top:1px dashed rgba(123,79,166,0.2);' + strike + '">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:2px;">' +
@@ -19686,6 +19695,69 @@ function _lbGetEqStatus(eqId, groups) {
   return { status: 'available', label: 'At Garage', color: '#4a7a4a' };
 }
 
+function _lbGetEquipLocation(eqId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var completed = groups.filter(function(m) {
+    if (!m.items) return false;
+    return m.items.some(function(i) {
+      return i.id === eqId && (m.status === 'complete' || i.delivered === true);
+    });
+  });
+  if (!completed.length) return '__garage__';
+  completed.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  return completed[0].to || '__garage__';
+}
+
+function _lbGetEquipLocationName(eqId) {
+  var locId = _lbGetEquipLocation(eqId);
+  if (!locId || locId === '__garage__') return 'Garage';
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var j = bl.find(function(jb) { return String(jb.id) === String(locId); });
+  if (j) return (j.num ? '#' + j.num + ' — ' : '') + (j.name || String(locId));
+  return locId;
+}
+
+function _lbJobNumAutofill(jobNum) {
+  var num = (jobNum || '').toString().trim();
+  if (!num) return;
+  var sData = typeof schedData !== 'undefined' ? schedData : {};
+  var today = new Date().toISOString().split('T')[0];
+  var matches = [];
+  Object.keys(sData).forEach(function(dk) {
+    if (dk < today) return;
+    var dd = sData[dk] || {};
+    Object.keys(dd).forEach(function(sk) {
+      if (sk === 'dayNoteSA' || sk === 'extras') return;
+      var slot = dd[sk];
+      if (!slot || !slot.fields) return;
+      var fn = (slot.fields.jobNum || '').toString().trim();
+      if (fn && fn === num) matches.push({ date: dk, slot: slot });
+    });
+  });
+  if (!matches.length) return;
+  matches.sort(function(a, b) { return a.date.localeCompare(b.date); });
+  var best = matches[0];
+  var dateEl = document.getElementById('lb_date');
+  if (dateEl) dateEl.value = best.date;
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var bj = bl.find(function(j) {
+    return (j.num || j.jobNum || j.number || '').toString().trim() === num;
+  });
+  var toEl = document.getElementById('lb_to');
+  if (toEl && bj) {
+    toEl.value = String(bj.id);
+    toEl.disabled = true;
+    toEl.style.opacity = '0.6';
+  }
+  var dlEl = document.getElementById('lb_deadline');
+  if (dlEl && best.date) {
+    var isNight = (best.slot.type || '') === 'night';
+    var hr = isNight ? 18 : 6;
+    dlEl.value = best.date + 'T' + (hr < 10 ? '0' + hr : hr) + ':00';
+  }
+}
+
 function _lbModalRoot() {
   var el = document.getElementById('_lbMoveModalRoot');
   if (!el) { el = document.createElement('div'); el.id = '_lbMoveModalRoot'; document.body.appendChild(el); }
@@ -19746,6 +19818,18 @@ function _lbManualMoveOpen(mode) {
       return '<option value="' + escHtml(String(j.id)) + '">' + escHtml(lbl) + '</option>';
     }).join('');
 
+  var accts = [];
+  try { accts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]'); } catch(e9) {}
+  var lbDrivers = accts.filter(function(a) {
+    return (a.driverTypes || []).indexOf('lowbed') !== -1 || a.role === 'rental_lowbed_driver';
+  });
+  var driverOpts = '<option value="">Any (Unassigned)</option>' + lbDrivers.map(function(d) {
+    var n = d.displayName || d.name || d.username || String(d.id);
+    var tier = d.lowbedClass || '';
+    var lbl = n + (tier ? ' [' + tier + ']' : '');
+    return '<option value="' + escHtml(n) + '">' + escHtml(lbl) + '</option>';
+  }).join('');
+
   var EQ_ICONS_LB = { paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️', loader:'🚜',
     skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛', lowbed:'🚚', tack_truck:'🛢️',
     water_truck:'💧', generator:'⚡', trailer:'🔗', other:'📦' };
@@ -19776,6 +19860,7 @@ function _lbManualMoveOpen(mode) {
                      : avail.status === 'in_transit' ? '🚛 In Transit'
                      : avail.status === 'on_site'    ? '📍 On Site at job'
                      : '● ' + avail.label;
+      var locName  = _lbGetEquipLocationName(eq.id);
       var safeId   = escHtml(eq.id);
       var safeName = escHtml(eq.name || eq.id).replace(/'/g, '&#39;');
       var safeType = escHtml(eq.type || 'other');
@@ -19788,6 +19873,7 @@ function _lbManualMoveOpen(mode) {
         '<div style="flex:1;">' +
           '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#fff;">' + escHtml(eq.name || eq.id) + '</div>' +
           '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:' + avail.color + ';margin-top:1px;">' + availLabel + '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:rgba(155,148,136,0.4);margin-top:1px;font-style:italic;">Currently at: ' + escHtml(locName) + '</div>' +
         '</div>' +
         '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:rgba(126,203,143,0.6);">+ Add</span>' +
       '</div>';
@@ -19811,6 +19897,47 @@ function _lbManualMoveOpen(mode) {
   var lblS = 'font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;color:var(--concrete-dim);margin-bottom:4px;';
   var title = mode === 'job' ? '🚛 Job Setup — All Equipment' : '🚛 Manual Lowbed Move';
 
+  var formFields = '';
+  if (mode === 'single') {
+    formFields =
+      '<div><div style="' + lblS + '">JOB #</div>' +
+        '<input id="lb_jobnum" type="text" placeholder="e.g. 2501" oninput="_lbJobNumAutofill(this.value)" style="' + inpS + '"></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        '<div><div style="' + lblS + '">START DATE</div>' +
+          '<input id="lb_date" type="date" value="' + today + '" style="' + inpS + '"></div>' +
+        '<div><div style="' + lblS + '">DRIVER</div>' +
+          '<select id="lb_driver" style="' + inpS + '">' + driverOpts + '</select></div>' +
+      '</div>' +
+      '<div><div style="' + lblS + '">EQUIPMENT TO HAUL</div>' +
+        '<div id="lb_selected_chips" style="margin-bottom:8px;"></div>' +
+        eqAccordion +
+      '</div>' +
+      '<div><div style="' + lblS + '">TO</div>' +
+        '<select id="lb_to" style="' + inpS + '">' + locOpts + '</select></div>' +
+      '<div><div style="' + lblS + '">DEADLINE — MOVE MUST BE COMPLETE BY</div>' +
+        '<input id="lb_deadline" type="datetime-local" style="' + inpS + 'color-scheme:dark;"></div>' +
+      '<div><div style="' + lblS + '">NOTES</div>' +
+        '<textarea id="lb_notes" rows="2" placeholder="Special instructions…" style="' + inpS + 'resize:vertical;"></textarea></div>';
+  } else {
+    formFields =
+      '<div><div style="' + lblS + '">JOB #</div>' +
+        '<input id="lb_jobnum" type="text" placeholder="e.g. 2501" oninput="_lbJobNumAutofill(this.value)" style="' + inpS + '"></div>' +
+      '<div><div style="' + lblS + '">START DATE</div>' +
+        '<input id="lb_date" type="date" value="' + today + '" style="' + inpS + '"></div>' +
+      '<div><div style="' + lblS + '">EQUIPMENT TO HAUL</div>' +
+        '<div id="lb_selected_chips" style="margin-bottom:8px;"></div>' +
+        eqAccordion +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        '<div><div style="' + lblS + '">TO</div>' +
+          '<select id="lb_to" style="' + inpS + '">' + locOpts + '</select></div>' +
+        '<div><div style="' + lblS + '">DEADLINE</div>' +
+          '<input id="lb_deadline" type="datetime-local" style="' + inpS + 'color-scheme:dark;"></div>' +
+      '</div>' +
+      '<div><div style="' + lblS + '">NOTES</div>' +
+        '<textarea id="lb_notes" rows="2" placeholder="Special instructions…" style="' + inpS + 'resize:vertical;"></textarea></div>';
+  }
+
   var root = _lbModalRoot();
   root.innerHTML =
     '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;">' +
@@ -19821,26 +19948,7 @@ function _lbManualMoveOpen(mode) {
         '<button onclick="_lbModalClose()" style="background:none;border:none;color:var(--concrete-dim);font-size:16px;cursor:pointer;">✕</button>' +
       '</div>' +
       '<div style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;">' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          '<div><div style="' + lblS + '">DATE</div>' +
-            '<input id="lb_date" type="date" value="' + today + '" style="' + inpS + '"></div>' +
-          '<div><div style="' + lblS + '">DRIVER</div>' +
-            '<input id="lb_driver" type="text" placeholder="Driver name" style="' + inpS + '"></div>' +
-        '</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          '<div><div style="' + lblS + '">FROM</div>' +
-            '<select id="lb_from" style="' + inpS + '">' + locOpts + '</select></div>' +
-          '<div><div style="' + lblS + '">TO</div>' +
-            '<select id="lb_to" style="' + inpS + '">' + locOpts + '</select></div>' +
-        '</div>' +
-        '<div><div style="' + lblS + '">DEADLINE — MOVE MUST BE COMPLETE BY</div>' +
-          '<input id="lb_deadline" type="datetime-local" style="' + inpS + 'color-scheme:dark;"></div>' +
-        '<div><div style="' + lblS + '">EQUIPMENT TO HAUL</div>' +
-          '<div id="lb_selected_chips" style="margin-bottom:8px;"></div>' +
-          eqAccordion +
-        '</div>' +
-        '<div><div style="' + lblS + '">NOTES</div>' +
-          '<textarea id="lb_notes" rows="2" placeholder="Special instructions…" style="' + inpS + 'resize:vertical;"></textarea></div>' +
+        formFields +
       '</div>' +
       '<div style="display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">' +
         '<button onclick="_lbModalClose()" style="background:none;border:1px solid var(--asphalt-light);border-radius:5px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:7px 16px;cursor:pointer;">Cancel</button>' +
@@ -19903,14 +20011,23 @@ function _lbRenderChips() {
 function _lbManualMoveSave() {
   var driver   = (document.getElementById('lb_driver')   || {}).value || '';
   var date     = (document.getElementById('lb_date')     || {}).value || new Date().toISOString().split('T')[0];
-  var from     = (document.getElementById('lb_from')     || {}).value || '';
   var to       = (document.getElementById('lb_to')       || {}).value || '';
   var deadline = (document.getElementById('lb_deadline') || {}).value || '';
   var notes    = (document.getElementById('lb_notes')    || {}).value || '';
-  if (!driver.trim() || !_lbMoveItems.length) {
-    alert('Add a driver name and at least one piece of equipment.');
+  if (!_lbMoveItems.length) {
+    alert('Add at least one piece of equipment.');
     return;
   }
+  var fromCounts = {};
+  _lbMoveItems.forEach(function(item) {
+    var loc = _lbGetEquipLocation(item.id);
+    fromCounts[loc] = (fromCounts[loc] || 0) + 1;
+  });
+  var from = '__garage__', fromMax = 0;
+  Object.keys(fromCounts).forEach(function(loc) {
+    if (fromCounts[loc] > fromMax) { fromMax = fromCounts[loc]; from = loc; }
+  });
+  var driverName = _lbMoveMode === 'job' ? '' : driver.trim();
   var groups = [];
   try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
   var ts    = Date.now();
@@ -19922,10 +20039,10 @@ function _lbManualMoveSave() {
     : (_lbMoveMode === 'job' ? 'job_' + ts : 'single_' + newId);
   groups.push({
     id: newId, jobGroupId: jobGroupId, manual: true,
-    date: date, driverName: driver.trim(), from: from, to: to,
+    date: date, driverName: driverName, from: from, to: to,
     deadline: deadline, notes: notes, items: _lbMoveItems.slice(),
     status: 'pending', createdAt: ts,
-    isRental: /atow|andy/i.test(driver), rentalService: null,
+    isRental: /atow|andy/i.test(driverName), rentalService: null,
     rentalHours: 2, rentalMileage: 0, estimatedCost: 0,
     actualHours: null, actualCost: null
   });
@@ -20740,8 +20857,16 @@ function _fleetBuildCard(eq) {
         '<div class="fleet-eq-meta">'+escHtml(eq.id)+(eq.year?' · '+escHtml(eq.year):'')+(eq.make?' · '+escHtml(eq.make)+(eq.model?' '+escHtml(eq.model):''):'')+'</div>'+
       '</div>'+
       (eq.profilePhoto
-        ? '<div style="flex-shrink:0;position:relative;"><img src="'+escHtml(eq.profilePhoto)+'" style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--asphalt-light);display:block;"/><span style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:'+si.dot+';box-shadow:0 0 8px '+si.dot+';border:2px solid var(--asphalt-mid);"></span></div>'
-        : '<span style="width:10px;height:10px;border-radius:50%;background:'+si.dot+';box-shadow:0 0 8px '+si.dot+';flex-shrink:0;margin-top:4px;"></span>')+
+        ? '<div style="flex-shrink:0;position:relative;">'+
+            '<img src="'+escHtml(eq.profilePhoto)+'" style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--asphalt-light);display:block;"/>'+
+            '<span style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:'+si.dot+';box-shadow:0 0 8px '+si.dot+';border:2px solid var(--asphalt-mid);"></span>'+
+            '<span style="position:absolute;bottom:2px;right:2px;font-size:10px;opacity:0.65;line-height:1;pointer-events:none;">📷</span>'+
+          '</div>'
+        : '<div style="flex-shrink:0;position:relative;width:52px;height:52px;border-radius:8px;background:var(--asphalt);border:2px dashed var(--asphalt-light);display:flex;align-items:center;justify-content:center;">'+
+            '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--concrete-dim);line-height:1;">'+escHtml((typLabel||'?').charAt(0).toUpperCase())+'</span>'+
+            '<span style="position:absolute;bottom:1px;right:2px;font-size:9px;opacity:0.45;line-height:1;pointer-events:none;">📷</span>'+
+            '<span style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:'+si.dot+';box-shadow:0 0 8px '+si.dot+';border:2px solid var(--asphalt-mid);"></span>'+
+          '</div>')+
     '</div>'+
     // Status badge row
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">'+
@@ -21638,7 +21763,7 @@ function _fleetDetailHTML(eq) {
     var typeLabel = (FLEET_MAINT_TYPES.find(function(t){ return t.key===l.type; })||{label:l.type||'Maintenance'}).label;
     return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'+
       (l.photoUrl
-        ? '<img src="'+escHtml(l.photoUrl)+'" style="width:38px;height:38px;border-radius:5px;object-fit:cover;border:1px solid var(--asphalt-light);flex-shrink:0;margin-top:1px;" />'
+        ? '<img src="'+escHtml(l.photoUrl)+'" onclick="window.open(this.src)" title="View photo" style="cursor:pointer;width:38px;height:38px;border-radius:5px;object-fit:cover;border:1px solid var(--asphalt-light);flex-shrink:0;margin-top:1px;" />'
         : '<div style="width:38px;flex-shrink:0;"></div>')+
       '<div style="min-width:78px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);padding-top:2px;">'+escHtml(dt)+'</div>'+
       '<div style="flex:1;">'+
@@ -21671,9 +21796,14 @@ function _fleetDetailHTML(eq) {
             ? '<img src="'+escHtml(eq.profilePhoto)+'" style="width:90px;height:90px;border-radius:12px;object-fit:cover;border:2px solid var(--asphalt-light);display:block;"/>'
             : '<div style="width:90px;height:90px;border-radius:12px;background:var(--asphalt);border:2px dashed var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--concrete-dim);">\ud83d\udcf7</div>')+
           '<label style="position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:var(--stripe);border:2px solid var(--asphalt-mid);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;">'+
-            '\ud83d\udcf7'+
+            (_fleetProfileUploading[eq.id]
+              ? '<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>'
+              : '\ud83d\udcf7')+
             '<input type="file" accept="image/*" style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
           '</label>'+
+          (_fleetProfileUploadWarn[eq.id]
+            ? '<div style="position:absolute;top:100%;left:50%;transform:translateX(-50%);white-space:nowrap;margin-top:6px;font-family:\'DM Mono\',monospace;font-size:8px;color:#e8813a;text-align:center;">'+escHtml(_fleetProfileUploadWarn[eq.id])+'</div>'
+            : '')+
         '</div>'+
         // Left: name + status
         '<div style="flex:1;min-width:220px;">'+
@@ -22071,12 +22201,16 @@ function _fleetResolveIssue(equipId, issueId) {
 
 // ── Maintenance photo staging ─────────────────────────────────────────────────
 var _fleetMaintPhotoFile = null;
+var _fleetMaintPhotoBase64 = null;
+var _fleetProfileUploading = {};
+var _fleetProfileUploadWarn = {};
 
 function _fleetMaintPhotoChange(inputEl) {
   if (!inputEl || !inputEl.files || !inputEl.files.length) return;
   _fleetMaintPhotoFile = inputEl.files[0];
   var reader = new FileReader();
   reader.onload = function(e) {
+    _fleetMaintPhotoBase64 = e.target.result;
     var thumb = document.getElementById('_fleetMaintPhotoThumb');
     var preview = document.getElementById('_fleetMaintPhotoPreview');
     var zone = document.getElementById('_fleetMaintPhotoZone');
@@ -22089,6 +22223,7 @@ function _fleetMaintPhotoChange(inputEl) {
 
 function _fleetMaintPhotoClear() {
   _fleetMaintPhotoFile = null;
+  _fleetMaintPhotoBase64 = null;
   var preview = document.getElementById('_fleetMaintPhotoPreview');
   var zone = document.getElementById('_fleetMaintPhotoZone');
   if (preview) preview.style.display = 'none';
@@ -22100,18 +22235,56 @@ function _fleetProfilePhotoUpload(eqId, inputEl) {
   var file = inputEl.files[0];
   var idx = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
   if (idx < 0) return;
+  delete _fleetProfileUploadWarn[eqId];
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var base64 = ev.target.result;
+    if (file.size > 800 * 1024) {
+      var img = new Image();
+      img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var max = 1200, w = img.width, h = img.height;
+        if (w > h) { if (w > max) { h = Math.round(h * max / w); w = max; } }
+        else        { if (h > max) { w = Math.round(w * max / h); h = max; } }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        _fleetApplyProfilePhoto(eqId, canvas.toDataURL('image/jpeg', 0.85), file);
+      };
+      img.src = base64;
+    } else {
+      _fleetApplyProfilePhoto(eqId, base64, file);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function _fleetApplyProfilePhoto(eqId, base64, file) {
+  var idx = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
+  if (idx < 0) return;
   var eq = equipmentFleet[idx];
-  if (!storage) { alert('Firebase Storage is required. Please try again when online.'); return; }
+  eq.profilePhoto = base64;
+  _fleetProfileUploading[eqId] = true;
+  saveFleet();
+  _fleetRefreshDetail(eqId);
+  if (!storage) {
+    delete _fleetProfileUploading[eqId];
+    _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
+    _fleetRefreshDetail(eqId);
+    return;
+  }
   uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
     eq.photos = eq.photos || [];
-    eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: eq.photos.length === 0 });
-    // Always set profilePhoto from the primary photo
+    eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: !eq.photos.length });
     var primary = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0];
     if (primary) { eq.profilePhoto = primary.url; eq.profilePhotoPath = primary.path; }
+    delete _fleetProfileUploading[eqId];
     saveFleet();
     _fleetRefreshDetail(eqId);
   }).catch(function(err) {
-    alert('Photo upload failed: ' + err.message);
+    console.warn('[Fleet] Profile photo upload failed:', err.message);
+    delete _fleetProfileUploading[eqId];
+    _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
+    _fleetRefreshDetail(eqId);
   });
 }
 
@@ -22154,6 +22327,7 @@ function openLogMaintenanceForm(id) {
   modal.id = '_fleetMaintForm';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9200;display:flex;align-items:center;justify-content:center;padding:20px;';
 
+  var eqForForm = equipmentFleet.find(function(e){ return e.id===id; }) || {};
   var typeOpts = FLEET_MAINT_TYPES.map(function(t){ return '<option value="'+t.key+'">'+t.label+'</option>'; }).join('');
   var today = new Date().toISOString().slice(0,10);
 
@@ -22214,7 +22388,7 @@ function openLogMaintenanceForm(id) {
             '<span style="flex:1;"></span>'+
           '</div>'+
           '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+
-            '<input type="checkbox" id="_fleetMaintSetProfile" checked> Set as equipment profile photo'+
+            '<input type="checkbox" id="_fleetMaintSetProfile"'+(!eqForForm.profilePhoto ? ' checked' : '')+'> Set as equipment profile photo'+
           '</label>'+
         '</div>'+
       '</div>'+
@@ -22259,7 +22433,9 @@ function _fleetSubmitMaintenance(id) {
   var setProfile = document.getElementById('_fleetMaintSetProfile');
   var wantsProfile = setProfile && setProfile.checked;
   var photoFile = _fleetMaintPhotoFile;
+  var photoBase64 = _fleetMaintPhotoBase64;
   _fleetMaintPhotoFile = null;
+  _fleetMaintPhotoBase64 = null;
 
   saveFleet();
   document.getElementById('_fleetMaintForm').remove();
@@ -22281,6 +22457,8 @@ function _fleetSubmitMaintenance(id) {
     }).catch(function(err) {
       console.warn('[Fleet] Maintenance photo upload failed:', err.message);
     });
+  } else if (photoFile && !storage && (wantsProfile || !eq.profilePhoto) && photoBase64) {
+    _fleetApplyProfilePhoto(id, photoBase64, photoFile);
   }
 }
 
@@ -25084,6 +25262,7 @@ const DEFAULT_TEAM_ACCOUNTS = [
   { username:'IGiron',      email:'igiron@donmartincorp.com',             password:STOCK_PASSWORD,   role:'lowbed_driver',        displayName:'Ingrid Giron',     driverTypes:['lowbed','mixtruck'] },
   // ── Rental Lowbed Drivers ─────────────────────────────────────────────────
   { username:'ATow',        password:'DMCTow2025',                        role:'rental_lowbed_driver', displayName:"Andy's Towing" },
+  { username:'Chris',       email:'chris@donmartincorp.com',              password:'Projectdev',       role:'admin',    displayName:'Chris', readOnly:true },
 ];
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog
