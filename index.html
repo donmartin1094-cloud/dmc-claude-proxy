@@ -21815,9 +21815,7 @@ function _fleetDetailHTML(eq) {
             ? '<img src="'+escHtml(eq.profilePhoto)+'" style="width:90px;height:90px;border-radius:12px;object-fit:cover;border:2px solid var(--asphalt-light);display:block;"/>'
             : '<div style="width:90px;height:90px;border-radius:12px;background:var(--asphalt);border:2px dashed var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--concrete-dim);">\ud83d\udcf7</div>')+
           '<label style="position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:var(--stripe);border:2px solid var(--asphalt-mid);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;">'+
-            (_fleetProfileUploading[eq.id]
-              ? '<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>'
-              : '\ud83d\udcf7')+
+            '\ud83d\udcf7'+
             '<input type="file" accept="image/*" style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
           '</label>'+
           (_fleetProfileUploadWarn[eq.id]
@@ -22221,7 +22219,6 @@ function _fleetResolveIssue(equipId, issueId) {
 // ── Maintenance photo staging ─────────────────────────────────────────────────
 var _fleetMaintPhotoFile = null;
 var _fleetMaintPhotoBase64 = null;
-var _fleetProfileUploading = {};
 var _fleetProfileUploadWarn = {};
 
 function _fleetMaintPhotoChange(inputEl) {
@@ -22281,14 +22278,12 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   var idx = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
   if (idx < 0) return;
   equipmentFleet[idx].profilePhoto = base64;
-  _fleetProfileUploading[eqId] = true;
   delete _fleetProfileUploadWarn[eqId];
   // Persist base64 under a separate key so it survives page reload / sign-out
   try { localStorage.setItem('_fleet_photo_pending_' + eqId, base64); } catch(e) {}
   saveFleetLocal();
   _fleetRefreshDetail(eqId);
   if (!storage) {
-    _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
     return;
@@ -22302,21 +22297,19 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   Promise.race([_uploadPromise, _timeoutPromise]).then(function(result) {
     console.log('PHOTO: upload success, url=', result.url);
     var liveEq = equipmentFleet.find(function(e){ return e.id === eqId; });
-    if (!liveEq) { _fleetProfileUploading[eqId] = false; return; }
+    if (!liveEq) { return; }
     liveEq.photos = liveEq.photos || [];
     liveEq.photos.forEach(function(p){ p.isPrimary = false; });
     liveEq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: true });
     liveEq.profilePhoto = result.url;
     liveEq.profilePhotoPath = result.path;
     try { localStorage.removeItem('_fleet_photo_pending_' + eqId); } catch(e) {}
-    _fleetProfileUploading[eqId] = false;
     delete _fleetProfileUploadWarn[eqId];
     console.log('PHOTO: saveFleet called after url set');
     saveFleet();
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   }).catch(function(err) {
     console.log('PHOTO: upload failed', err);
-    _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   });
