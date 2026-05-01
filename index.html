@@ -22225,6 +22225,7 @@ function _fleetResolveIssue(equipId, issueId) {
 var _fleetMaintPhotoFile = null;
 var _fleetMaintPhotoBase64 = null;
 var _fleetProfileUploadWarn = {};
+var _fleetPhotoUploadInProgress = {};
 
 function _fleetMaintPhotoChange(inputEl) {
   if (!inputEl || !inputEl.files || !inputEl.files.length) return;
@@ -22290,12 +22291,14 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   var idx = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
   if (idx < 0) return;
   equipmentFleet[idx].profilePhoto = base64;
+  _fleetPhotoUploadInProgress[eqId] = true;
   delete _fleetProfileUploadWarn[eqId];
   // Persist base64 under a separate key so it survives page reload / sign-out
   try { localStorage.setItem('_fleet_photo_pending_' + eqId, base64); } catch(e) {}
   saveFleetLocal();
   _fleetRefreshDetail(eqId);
   if (!storage) {
+    _fleetPhotoUploadInProgress[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
     return;
@@ -22317,11 +22320,13 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
     liveEq.profilePhotoPath = result.path;
     try { localStorage.removeItem('_fleet_photo_pending_' + eqId); } catch(e) {}
     delete _fleetProfileUploadWarn[eqId];
+    _fleetPhotoUploadInProgress[eqId] = false;
     console.log('PHOTO: saveFleet called after url set');
     saveFleet();
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   }).catch(function(err) {
     console.log('PHOTO: upload failed', err);
+    _fleetPhotoUploadInProgress[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   });
@@ -25748,7 +25753,7 @@ async function fbLoadAll() {
         else if (key === 'gc_profiles') { localStorage.setItem('pavescope_fb_gc_profiles', JSON.stringify(val));  _checkLocalStorageSize();}
         else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
         else if (key === 'gcs')        { knownGCs = val; }
-        else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot();  _checkLocalStorageSize();}
+        else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (_fleetPhotoUploadInProgress[eq.id]) { var _mem = equipmentFleet.find(function(e){ return e.id===eq.id; }); if (_mem) { eq.profilePhoto = _mem.profilePhoto; eq.profilePhotoPath = _mem.profilePhotoPath; eq.photos = (_mem.photos||[]).slice(); } } if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot();  _checkLocalStorageSize();}
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
         else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
         else if (key === 'notifications') {
@@ -26104,7 +26109,7 @@ async function initApp(username) {
               }
               else if (key === 'accounts')   { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(val)); saveAccounts(val, { skipRemote: true });  _checkLocalStorageSize();}
               else if (key === 'gcs')        { knownGCs = val; localStorage.setItem('pavescope_gcs', JSON.stringify(val));  _checkLocalStorageSize();}
-              else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipCheckStatusChanges(); _fleetUpdateBadge(); if (activeTab === 'equipment') { var _eqv = document.getElementById('equipmentFleetView'); if(_eqv) renderEquipmentFleet(_eqv); }  _checkLocalStorageSize();}
+              else if (key === 'fleet')      { equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (_fleetPhotoUploadInProgress[eq.id]) { var _mem = equipmentFleet.find(function(e){ return e.id===eq.id; }); if (_mem) { eq.profilePhoto = _mem.profilePhoto; eq.profilePhotoPath = _mem.profilePhotoPath; eq.photos = (_mem.photos||[]).slice(); } } if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipCheckStatusChanges(); _fleetUpdateBadge(); if (activeTab === 'equipment') { var _eqv = document.getElementById('equipmentFleetView'); if(_eqv) renderEquipmentFleet(_eqv); }  _checkLocalStorageSize();}
               else if (key === 'lowbed_groups') { localStorage.setItem('dmc_lowbed_groups', JSON.stringify(val)); if (activeTab === 'equipment') { var _eqv2 = document.getElementById('equipmentFleetView'); if(_eqv2) renderEquipmentFleet(_eqv2); } if (typeof _homeFleetRerender === 'function') _homeFleetRerender(); _checkLocalStorageSize();}
               else if (key === 'hd_equip_names') { localStorage.setItem('hd_equip_names', JSON.stringify(val));  _checkLocalStorageSize();}
               else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); if (activeTab === 'reports') renderReports();  _checkLocalStorageSize();}
