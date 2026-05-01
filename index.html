@@ -2125,6 +2125,8 @@
   textarea.inv2-inline-input { resize:vertical; min-height:32px; }
   /* Fix 3 — visible dashed field outline scoped to invoice tracker */
   .inv-field { border:1px dashed #8B1A1A; border-radius:3px; background:transparent; width:auto; min-width:2ch; max-width:10ch; padding:1px 3px; text-align:center; display:inline-block; box-sizing:content-box; }
+  .inv-field:not(:empty) { border-color:transparent; min-width:0; }
+  .inv-field:not(:placeholder-shown) { border-color:transparent; min-width:0; }
   .inv-field:focus { border:1.5px solid #8B1A1A; outline:none; }
   @media (max-width: 768px) { .inv-field { min-height:44px; display:inline-flex; align-items:center; } }
   /* Sub divider row */

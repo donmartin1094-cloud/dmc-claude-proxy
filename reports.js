@@ -4140,9 +4140,6 @@ function _invRenderCard(inv) {
     +   (canEdit ? '<button class="inv2-add-mix" onclick="event.stopPropagation();invAddMixRowToCard(\'' + inv.id + '\')">+ Add Mix Type</button>' : '')
     + '</div>'
 
-    // ── PERFORATED DIVIDER ───────────────────────────────────────────────────
-    + '<div class="inv2-perf-wrap"><div class="inv2-perf-line"></div></div>'
-
     // ── BILLING (standalone, full width) ────────────────────────────────────
     +   '<div class="inv2-billing" style="width:auto;">'
     +     '<div class="inv2-billed-row">'
