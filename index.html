@@ -22305,7 +22305,8 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   }
   console.log('PHOTO: starting upload for', eqId);
   console.log('PHOTO: storage available?', !!storage);
-  var _uploadPromise = uploadFileToStorage(base64, 'equipment_photos/' + eqId + '/' + _fleetUuid());
+  var _eqName = (equipmentFleet[idx].name || eqId).replace(/[^a-zA-Z0-9 \-]/g, '').trim();
+  var _uploadPromise = uploadFileToStorage(base64, 'equipment_photos/' + _eqName + '/' + _eqName + '_' + Date.now() + '.jpg');
   var _timeoutPromise = new Promise(function(_, reject) {
     setTimeout(function(){ reject(new Error('Upload timed out after 30s')); }, 30000);
   });
@@ -22494,7 +22495,8 @@ function _fleetSubmitMaintenance(id) {
 
   if (photoFile && storage) {
     var logId = logEntry.id;
-    uploadFileToStorage(photoFile, 'equipment_photos/' + id + '/' + logId).then(function(result) {
+    var _eqNameM = (eq.name || id).replace(/[^a-zA-Z0-9 \-]/g, '').trim();
+    uploadFileToStorage(photoFile, 'equipment_photos/' + _eqNameM + '/maintenance/' + _eqNameM + '_maint_' + Date.now() + '.jpg').then(function(result) {
       var li = equipmentFleet.findIndex(function(e){ return e.id===id; });
       if (li < 0) return;
       var liveEq = equipmentFleet[li];
