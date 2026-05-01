@@ -22283,7 +22283,7 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   if (!storage) {
     _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
-    _fleetRefreshDetail(eqId);
+    var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
     return;
   }
   uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
@@ -22298,12 +22298,12 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
     _fleetProfileUploading[eqId] = false;
     delete _fleetProfileUploadWarn[eqId];
     saveFleet();
-    _fleetRefreshDetail(eqId);
+    var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   }).catch(function(err) {
     console.warn('[Fleet] Profile photo upload failed:', err.message);
     _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
-    _fleetRefreshDetail(eqId);
+    var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   });
 }
 
