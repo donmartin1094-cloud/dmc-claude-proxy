@@ -21814,10 +21814,12 @@ function _fleetDetailHTML(eq) {
           (eq.profilePhoto
             ? '<img src="'+escHtml(eq.profilePhoto)+'" style="width:90px;height:90px;border-radius:12px;object-fit:cover;border:2px solid var(--asphalt-light);display:block;"/>'
             : '<div style="width:90px;height:90px;border-radius:12px;background:var(--asphalt);border:2px dashed var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--concrete-dim);">\ud83d\udcf7</div>')+
-          '<label style="position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:var(--stripe);border:2px solid var(--asphalt-mid);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;">'+
-            '\ud83d\udcf7'+
-            '<input type="file" accept="image/*" style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
-          '</label>'+
+          (isAdmin()
+            ? '<label style="position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:var(--stripe);border:2px solid var(--asphalt-mid);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;">'+
+                '\ud83d\udcf7'+
+                '<input type="file" accept="image/*" style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
+              '</label>'
+            : '')+
           (_fleetProfileUploadWarn[eq.id]
             ? '<div style="position:absolute;top:100%;left:50%;transform:translateX(-50%);white-space:nowrap;margin-top:6px;font-family:\'DM Mono\',monospace;font-size:8px;color:#e8813a;text-align:center;">'+escHtml(_fleetProfileUploadWarn[eq.id])+'</div>'
             : '')+
@@ -21892,10 +21894,12 @@ function _fleetDetailHTML(eq) {
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'+
             '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--stripe);">Photos ('+(photos.length)+')</div>'+
             '<span style="flex:1;"></span>'+
-            '<label style="background:rgba(126,203,143,0.08);border:1px dashed rgba(126,203,143,0.4);border-radius:var(--radius);padding:4px 12px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
-              '📷 Add Photo'+
-              '<input type="file" accept="image/*" multiple style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
-            '</label>'+
+            (isAdmin()
+              ? '<label style="background:rgba(126,203,143,0.08);border:1px dashed rgba(126,203,143,0.4);border-radius:var(--radius);padding:4px 12px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+
+                  '📷 Add Photo'+
+                  '<input type="file" accept="image/*" multiple style="display:none;" onchange="_fleetProfilePhotoUpload(\''+eq.id+'\',this)">'+
+                '</label>'
+              : '')+
           '</div>'+
           (photos.length
             ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">'+thumbs+'</div>'
@@ -22421,9 +22425,11 @@ function openLogMaintenanceForm(id) {
             '<button onclick="_fleetMaintPhotoClear()" style="background:none;border:1px solid rgba(217,79,61,0.4);border-radius:var(--radius);padding:3px 8px;color:var(--red);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">\u2715 Remove</button>'+
             '<span style="flex:1;"></span>'+
           '</div>'+
-          '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+
-            '<input type="checkbox" id="_fleetMaintSetProfile"'+(!eqForForm.profilePhoto ? ' checked' : '')+'> Set as equipment profile photo'+
-          '</label>'+
+          (isAdmin()
+            ? '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+
+                '<input type="checkbox" id="_fleetMaintSetProfile"'+(!eqForForm.profilePhoto ? ' checked' : '')+'> Set as equipment profile photo'+
+              '</label>'
+            : '')+
         '</div>'+
       '</div>'+
       '<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">'+
