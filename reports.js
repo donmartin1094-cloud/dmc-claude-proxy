@@ -3436,6 +3436,7 @@ function _ccConfirmAltLocation(blockIdx, dateKey, sessionKey) {
 var invoiceActiveMonth = null; // 'YYYY-MM' or ['YYYY-01','YYYY-02','YYYY-03'] for Q1
 var invoiceActiveWeek  = null; // 'YYYY-MM-DD' Monday of selected week, or null = all weeks
 var invSearchQuery = '';
+var _invSearchDebounceTimer = null;
 var _invMixCount = 1;
 
 // ── Format helpers ────────────────────────────────────────────────────────────
@@ -3729,9 +3730,12 @@ function invCardBilledTotal(inv) {
 // ── Search ─────────────────────────────────────────────────────────────────────
 function invSetSearch(val) {
   invSearchQuery = val;
-  renderInvoiceTracker();
-  var inp = document.querySelector('.inv2-search-input');
-  if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  clearTimeout(_invSearchDebounceTimer);
+  _invSearchDebounceTimer = setTimeout(function() {
+    renderInvoiceTracker();
+    var inp = document.querySelector('.inv2-search-input');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }, 300);
 }
 
 // ── Inline edit helpers ────────────────────────────────────────────────────────
@@ -4477,6 +4481,7 @@ function renderInvoiceTracker() {
     + '</div>'
     : '';
 
+  var _scrollY = window.scrollY;
   wrap.innerHTML = '<div class="inv2-wrap">'
     + '<div class="inv2-header">'
     +   '<div class="inv2-title-row">'
@@ -4500,6 +4505,7 @@ function renderInvoiceTracker() {
     + '<div class="inv2-grid-scroll">' + gridHtml + '</div>'
     + totalBar
     + '</div>';
+  window.scrollTo(0, _scrollY);
   setTimeout(function() {
     var activeTab = document.querySelector('.inv2-month-tab.inv2-tab-active');
     if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
