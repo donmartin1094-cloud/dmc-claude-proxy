@@ -3994,10 +3994,10 @@ function _invMixRowsHtml(inv) {
   return (inv.mixItems || []).map(function(m, mi) {
     var rowTotal = (m.itemTotal && parseFloat(m.itemTotal)) ? invFmt(parseFloat(m.itemTotal)) : '—';
     return '<div class="inv2-mix-row" data-mix-row="' + inv.id + '-' + mi + '">'
-      + '<span class="inv2-editable inv2-mix-type" data-inv="' + inv.id + '" data-field="mixType" data-mi="' + mi + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(m.mixType || '—') + '</span>'
-      + '<span class="inv2-editable inv2-mix-num" data-inv="' + inv.id + '" data-field="tonQty" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.tonQty || '—') + '</span>'
-      + '<span class="inv2-editable inv2-mix-num" data-inv="' + inv.id + '" data-field="mixPrice" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.mixPrice && parseFloat(m.mixPrice) ? invFmt(parseFloat(m.mixPrice)) : '—') + '</span>'
-      + '<span class="inv2-editable inv2-mix-num inv2-mix-total-cell" data-inv="' + inv.id + '" data-field="itemTotal" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + rowTotal + '</span>'
+      + '<span class="inv2-editable inv-field inv2-mix-type" data-inv="' + inv.id + '" data-field="mixType" data-mi="' + mi + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(m.mixType || '—') + '</span>'
+      + '<span class="inv2-editable inv-field inv2-mix-num" data-inv="' + inv.id + '" data-field="tonQty" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.tonQty || '—') + '</span>'
+      + '<span class="inv2-editable inv-field inv2-mix-num" data-inv="' + inv.id + '" data-field="mixPrice" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.mixPrice && parseFloat(m.mixPrice) ? invFmt(parseFloat(m.mixPrice)) : '—') + '</span>'
+      + '<span class="inv2-editable inv-field inv2-mix-num inv2-mix-total-cell" data-inv="' + inv.id + '" data-field="itemTotal" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + rowTotal + '</span>'
       + (canEdit && inv.mixItems.length > 1
           ? '<button class="inv2-mix-del" onclick="event.stopPropagation();invRemoveMixRowFromCard(\'' + inv.id + '\',' + mi + ')" title="Remove">✕</button>'
           : '<span></span>')
@@ -4059,22 +4059,30 @@ function _invRenderCard(inv) {
   var diff     = differs ? (appRaw - billed) : null;
 
   function edSpan(field, val, cls) {
-    return '<span class="inv2-editable' + (cls ? ' ' + cls : '') + '" data-inv="' + inv.id + '" data-field="' + field + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(val || '—') + '</span>';
+    return '<span class="inv2-editable inv-field' + (cls ? ' ' + cls : '') + '" data-inv="' + inv.id + '" data-field="' + field + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(val || '—') + '</span>';
   }
   function edTruckCount(field, val) {
-    return '<span class="inv2-editable inv2-truck-count" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val || '—') + '</span>';
+    return '<span class="inv2-editable inv-field inv2-truck-count" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val || '—') + '</span>';
   }
   function edTruckCost(field, val) {
-    return '<span class="inv2-editable inv2-truck-cost" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val && parseFloat(val) ? invFmt(parseFloat(val)) : '—') + '</span>';
+    return '<span class="inv2-editable inv-field inv2-truck-cost" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val && parseFloat(val) ? invFmt(parseFloat(val)) : '—') + '</span>';
   }
 
   return '<div class="inv2-card" id="inv2-card-' + inv.id + '">'
 
-    // ── HEADER ──────────────────────────────────────────────────────────────
+    // ── HEADER — Line 1: GC name (bold); Line 2: Job # · Project name ────────
     + '<div class="inv2-card-header">'
-    +   '<div class="inv2-header-top">'
-    +     '<span class="inv2-job-no">' + edSpan('jobNo', inv.jobNo) + '</span>'
-    +     '<span class="inv2-gc-name">' + edSpan('gcName', inv.gcName) + '</span>'
+    +   '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;margin-bottom:3px;">'
+    +     '<div style="flex:1;min-width:0;">'
+    +       '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+    +         edSpan('gcName', inv.gcName)
+    +       '</div>'
+    +       '<div style="display:flex;align-items:baseline;gap:3px;flex-wrap:nowrap;margin-top:2px;overflow:hidden;">'
+    +         '<span style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#8B1A1A;flex-shrink:0;">' + edSpan('jobNo', inv.jobNo) + '</span>'
+    +         '<span style="color:var(--concrete-dim);font-size:10px;flex-shrink:0;">·</span>'
+    +         '<span class="inv2-project-name" style="margin-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + edSpan('jobName', inv.jobName) + '</span>'
+    +       '</div>'
+    +     '</div>'
     +     (canEdit
             ? '<div class="inv2-header-acts">'
                 + '<button class="inv2-icon-btn" onclick="event.stopPropagation();openInvoiceModal(\'' + inv.id + '\')" title="Edit in modal">✏️</button>'
@@ -4082,7 +4090,6 @@ function _invRenderCard(inv) {
                 + '</div>'
             : '')
     +   '</div>'
-    +   '<div class="inv2-project-name">' + edSpan('jobName', inv.jobName) + '</div>'
     +   '<div class="inv2-supplier-name">' + edSpan('supplier', inv.supplier) + '</div>'
     +   '<div class="inv2-inv-meta">'
     +     '<span class="inv2-inv-badge">' + edSpan('invoiceNo', inv.invoiceNo || 'INV #') + '</span>'
@@ -4093,10 +4100,41 @@ function _invRenderCard(inv) {
     +   '</div>'
     + '</div>'
 
+    // ── SPACER ───────────────────────────────────────────────────────────────
+    + '<div style="height:4px;"></div>'
+
+    // ── TRUCKING (before mix) ────────────────────────────────────────────────
+    + '<div class="inv2-trucking">'
+    +   '<div class="inv2-truck-hdr">Trucking</div>'
+    +   '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟡</span><span class="inv2-truck-lbl">DMC</span>' + edTruckCount('dmcCount', at.dmcCount) + edTruckCost('dmcCost', at.dmcCost) + '</div>'
+    +   (function() {
+          var brkRows = at.brkRows || [];
+          var rowsHtml = brkRows.length
+            ? brkRows.map(function(br, i) {
+                return '<div class="inv2-truck-row">'
+                  + '<span class="inv2-truck-icon">🔵</span>'
+                  + '<span class="inv2-editable inv-field inv2-truck-lbl" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="name" onclick="invBrkActivateEdit(this)" title="Click to change broker">' + escHtml(br.name || '—') + '</span>'
+                  + '<span class="inv2-editable inv-field inv2-truck-count" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="count" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.count || '—') + '</span>'
+                  + '<span class="inv2-editable inv-field inv2-truck-cost" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="cost" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.cost && parseFloat(br.cost) ? invFmt(parseFloat(br.cost)) : '—') + '</span>'
+                  + (canEdit ? '<button style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:11px;padding:0 3px;line-height:1;" onclick="event.stopPropagation();invRemoveBrkRow(\'' + inv.id + '\',' + i + ')" title="Remove">✕</button>' : '')
+                  + '</div>';
+              }).join('')
+            : '<div class="inv2-truck-row"><span class="inv2-truck-icon">🔵</span><span class="inv2-truck-lbl" style="color:var(--concrete-dim);font-style:italic;">No broker trucks</span></div>';
+          var addBtn = canEdit
+            ? '<button style="font-size:10px;padding:1px 6px;margin:1px 0 3px;background:none;border:1px dashed rgba(126,203,143,0.3);border-radius:3px;color:var(--concrete-dim);cursor:pointer;width:100%;" onclick="event.stopPropagation();invAddBrkRow(\'' + inv.id + '\')">+ Broker</button>'
+            : '';
+          return rowsHtml + addBtn;
+        }())
+    +   '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟢</span><span class="inv2-truck-lbl">Supplier</span>' + edTruckCount('supCount', at.supCount) + edTruckCost('supCost', at.supCost) + '</div>'
+    + '</div>'
+
+    // ── SPACER ───────────────────────────────────────────────────────────────
+    + '<div style="height:4px;"></div>'
+
     // ── MIX SECTION ─────────────────────────────────────────────────────────
     + '<div class="inv2-mix-section">'
     +   '<div class="inv2-mix-header">'
-    +     '<span>Mix Type</span><span>Tons</span><span>$/ton</span><span>Total</span><span></span>'
+    +     '<span>Mix Type</span><span style="text-align:right;">Tons</span><span style="text-align:right;">$/ton</span><span style="text-align:right;">Total</span><span></span>'
     +   '</div>'
     +   '<div data-mix-body="' + inv.id + '">' + _invMixRowsHtml(inv) + '</div>'
     +   (canEdit ? '<button class="inv2-add-mix" onclick="event.stopPropagation();invAddMixRowToCard(\'' + inv.id + '\')">+ Add Mix Type</button>' : '')
@@ -4105,41 +4143,15 @@ function _invRenderCard(inv) {
     // ── PERFORATED DIVIDER ───────────────────────────────────────────────────
     + '<div class="inv2-perf-wrap"><div class="inv2-perf-line"></div></div>'
 
-    // ── BOTTOM ──────────────────────────────────────────────────────────────
-    + '<div class="inv2-bottom">'
-
-    +   '<div class="inv2-trucking">'
-    +     '<div class="inv2-truck-hdr">Trucking</div>'
-    +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟡</span><span class="inv2-truck-lbl">DMC</span>' + edTruckCount('dmcCount', at.dmcCount) + edTruckCost('dmcCost', at.dmcCost) + '</div>'
-    +     (function() {
-            var brkRows = at.brkRows || [];
-            var rowsHtml = brkRows.length
-              ? brkRows.map(function(br, i) {
-                  return '<div class="inv2-truck-row">'
-                    + '<span class="inv2-truck-icon">🔵</span>'
-                    + '<span class="inv2-editable inv2-truck-lbl" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="name" onclick="invBrkActivateEdit(this)" title="Click to change broker">' + escHtml(br.name || '—') + '</span>'
-                    + '<span class="inv2-editable inv2-truck-count" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="count" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.count || '—') + '</span>'
-                    + '<span class="inv2-editable inv2-truck-cost" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="cost" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.cost && parseFloat(br.cost) ? invFmt(parseFloat(br.cost)) : '—') + '</span>'
-                    + (canEdit ? '<button style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:11px;padding:0 3px;line-height:1;" onclick="event.stopPropagation();invRemoveBrkRow(\'' + inv.id + '\',' + i + ')" title="Remove">✕</button>' : '')
-                    + '</div>';
-                }).join('')
-              : '<div class="inv2-truck-row"><span class="inv2-truck-icon">🔵</span><span class="inv2-truck-lbl" style="color:var(--concrete-dim);font-style:italic;">No broker trucks</span></div>';
-            var addBtn = canEdit
-              ? '<button style="font-size:10px;padding:1px 6px;margin:1px 0 3px;background:none;border:1px dashed rgba(126,203,143,0.3);border-radius:3px;color:var(--concrete-dim);cursor:pointer;width:100%;" onclick="event.stopPropagation();invAddBrkRow(\'' + inv.id + '\')">+ Broker</button>'
-              : '';
-            return rowsHtml + addBtn;
-          }())
-    +     '<div class="inv2-truck-row"><span class="inv2-truck-icon">🟢</span><span class="inv2-truck-lbl">Supplier</span>' + edTruckCount('supCount', at.supCount) + edTruckCost('supCost', at.supCost) + '</div>'
-    +   '</div>'
-
-    +   '<div class="inv2-billing">'
+    // ── BILLING (standalone, full width) ────────────────────────────────────
+    +   '<div class="inv2-billing" style="width:auto;">'
     +     '<div class="inv2-billed-row">'
     +       '<span class="inv2-billing-lbl">Billed</span>'
     +       '<span class="inv2-billed-amt' + (differs ? ' inv2-billed-differ' : '') + '" data-billed-for="' + inv.id + '">' + invFmt(billed) + '</span>'
     +     '</div>'
     +     '<div class="inv2-approved-row">'
     +       '<span class="inv2-billing-lbl">Approved</span>'
-    +       '<span class="inv2-editable inv2-approved-amt" data-inv="' + inv.id + '" data-field="approvedAmount" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">'
+    +       '<span class="inv2-editable inv-field inv2-approved-amt" data-inv="' + inv.id + '" data-field="approvedAmount" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">'
     +         (appRaw !== null ? invFmt(appRaw) : '—')
     +       '</span>'
     +     '</div>'
@@ -4148,7 +4160,7 @@ function _invRenderCard(inv) {
     +       (diff !== null ? (diff > 0 ? '▲ ' : '▼ ') + invFmt(Math.abs(diff)) : '')
     +     '</div>'
     +     '<div class="inv2-notes-wrap">'
-    +       '<span class="inv2-editable inv2-notes" data-inv="' + inv.id + '" data-field="invoiceNotes" data-area="1" onclick="invActivateEdit(this)" title="Click to add notes">'
+    +       '<span class="inv2-editable inv-field inv2-notes" data-inv="' + inv.id + '" data-field="invoiceNotes" data-area="1" onclick="invActivateEdit(this)" title="Click to add notes">'
     +         escHtml(inv.invoiceNotes || 'Notes…')
     +       '</span>'
     +     '</div>'
@@ -4159,7 +4171,6 @@ function _invRenderCard(inv) {
     +     '</div>'
     +   '</div>'
 
-    + '</div>' // .inv2-bottom
   + '</div>'; // .inv2-card
 }
 
