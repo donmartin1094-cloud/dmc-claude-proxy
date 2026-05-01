@@ -22286,21 +22286,24 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
     return;
   }
+  console.log('PHOTO: starting upload for', eqId);
+  console.log('PHOTO: storage available?', !!storage);
   uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
-    var i = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
-    if (i < 0) { _fleetProfileUploading[eqId] = false; return; }
-    var eq2 = equipmentFleet[i];
-    eq2.photos = eq2.photos || [];
-    var alreadyHasPrimary = eq2.photos.some(function(p){ return p.isPrimary; });
-    eq2.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: !alreadyHasPrimary });
-    var primary = eq2.photos.find(function(p){ return p.isPrimary; }) || eq2.photos[0];
-    if (primary) { eq2.profilePhoto = primary.url; eq2.profilePhotoPath = primary.path; }
+    console.log('PHOTO: upload success, url=', result.url);
+    var liveEq = equipmentFleet.find(function(e){ return e.id === eqId; });
+    if (!liveEq) { _fleetProfileUploading[eqId] = false; return; }
+    liveEq.photos = liveEq.photos || [];
+    liveEq.photos.forEach(function(p){ p.isPrimary = false; });
+    liveEq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: true });
+    liveEq.profilePhoto = result.url;
+    liveEq.profilePhotoPath = result.path;
     _fleetProfileUploading[eqId] = false;
     delete _fleetProfileUploadWarn[eqId];
+    console.log('PHOTO: saveFleet called after url set');
     saveFleet();
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
   }).catch(function(err) {
-    console.warn('[Fleet] Profile photo upload failed:', err.message);
+    console.log('PHOTO: upload failed', err);
     _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     var _eid = eqId; setTimeout(function(){ _fleetRefreshDetail(_eid); }, 0);
