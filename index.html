@@ -19223,6 +19223,11 @@ var equipmentFleet = (function() {
       var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0];
       if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path || ''; }
     }
+    // Restore a photo that was saved locally but whose upload was interrupted
+    if (!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) {
+      var _pending = localStorage.getItem('_fleet_photo_pending_' + eq.id);
+      if (_pending) eq.profilePhoto = _pending;
+    }
     return eq;
   });
 })();
@@ -22278,6 +22283,8 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   equipmentFleet[idx].profilePhoto = base64;
   _fleetProfileUploading[eqId] = true;
   delete _fleetProfileUploadWarn[eqId];
+  // Persist base64 under a separate key so it survives page reload / sign-out
+  try { localStorage.setItem('_fleet_photo_pending_' + eqId, base64); } catch(e) {}
   saveFleetLocal();
   _fleetRefreshDetail(eqId);
   if (!storage) {
@@ -22288,7 +22295,11 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   }
   console.log('PHOTO: starting upload for', eqId);
   console.log('PHOTO: storage available?', !!storage);
-  uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
+  var _uploadPromise = uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid());
+  var _timeoutPromise = new Promise(function(_, reject) {
+    setTimeout(function(){ reject(new Error('Upload timed out after 20s')); }, 20000);
+  });
+  Promise.race([_uploadPromise, _timeoutPromise]).then(function(result) {
     console.log('PHOTO: upload success, url=', result.url);
     var liveEq = equipmentFleet.find(function(e){ return e.id === eqId; });
     if (!liveEq) { _fleetProfileUploading[eqId] = false; return; }
@@ -22297,6 +22308,7 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
     liveEq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: true });
     liveEq.profilePhoto = result.url;
     liveEq.profilePhotoPath = result.path;
+    try { localStorage.removeItem('_fleet_photo_pending_' + eqId); } catch(e) {}
     _fleetProfileUploading[eqId] = false;
     delete _fleetProfileUploadWarn[eqId];
     console.log('PHOTO: saveFleet called after url set');
