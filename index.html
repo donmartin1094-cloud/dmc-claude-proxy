@@ -19227,17 +19227,31 @@ var equipmentFleet = (function() {
   });
 })();
 
-function saveFleet() {
-  // Only strip base64 data URLs, keep Firebase Storage URLs
-  var slim = equipmentFleet.map(function(eq) {
+function _fleetSlimForSave() {
+  return equipmentFleet.map(function(eq) {
     var e = Object.assign({}, eq);
     if (e.profilePhoto && e.profilePhoto.startsWith('data:')) { e.profilePhoto = null; e.profilePhotoPath = null; }
     if (e.photos) e.photos = e.photos.filter(function(p){ return p.url && !p.url.startsWith('data:'); });
+    if (e.maintenanceLogs) e.maintenanceLogs = e.maintenanceLogs.map(function(l) {
+      if (l.photoUrl && l.photoUrl.startsWith('data:')) return Object.assign({}, l, { photoUrl: null, photoPath: null });
+      return l;
+    });
     return e;
   });
+}
+
+function saveFleet() {
+  var slim = _fleetSlimForSave();
   localStorage.setItem(FLEET_KEY, JSON.stringify(slim));
   _checkLocalStorageSize();
   try { if (typeof fbSet === 'function') fbSet('fleet', slim); } catch(e) {}
+  _fleetUpdateBadge();
+}
+
+function saveFleetLocal() {
+  var slim = _fleetSlimForSave();
+  localStorage.setItem(FLEET_KEY, JSON.stringify(slim));
+  _checkLocalStorageSize();
   _fleetUpdateBadge();
 }
 
@@ -22261,28 +22275,33 @@ function _fleetProfilePhotoUpload(eqId, inputEl) {
 function _fleetApplyProfilePhoto(eqId, base64, file) {
   var idx = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
   if (idx < 0) return;
-  var eq = equipmentFleet[idx];
-  eq.profilePhoto = base64;
+  equipmentFleet[idx].profilePhoto = base64;
   _fleetProfileUploading[eqId] = true;
-  saveFleet();
+  delete _fleetProfileUploadWarn[eqId];
+  saveFleetLocal();
   _fleetRefreshDetail(eqId);
   if (!storage) {
-    delete _fleetProfileUploading[eqId];
+    _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     _fleetRefreshDetail(eqId);
     return;
   }
   uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid()).then(function(result) {
-    eq.photos = eq.photos || [];
-    eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: !eq.photos.length });
-    var primary = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0];
-    if (primary) { eq.profilePhoto = primary.url; eq.profilePhotoPath = primary.path; }
-    delete _fleetProfileUploading[eqId];
+    var i = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
+    if (i < 0) { _fleetProfileUploading[eqId] = false; return; }
+    var eq2 = equipmentFleet[i];
+    eq2.photos = eq2.photos || [];
+    var alreadyHasPrimary = eq2.photos.some(function(p){ return p.isPrimary; });
+    eq2.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), isPrimary: !alreadyHasPrimary });
+    var primary = eq2.photos.find(function(p){ return p.isPrimary; }) || eq2.photos[0];
+    if (primary) { eq2.profilePhoto = primary.url; eq2.profilePhotoPath = primary.path; }
+    _fleetProfileUploading[eqId] = false;
+    delete _fleetProfileUploadWarn[eqId];
     saveFleet();
     _fleetRefreshDetail(eqId);
   }).catch(function(err) {
     console.warn('[Fleet] Profile photo upload failed:', err.message);
-    delete _fleetProfileUploading[eqId];
+    _fleetProfileUploading[eqId] = false;
     _fleetProfileUploadWarn[eqId] = 'Photo saved locally — will sync when online';
     _fleetRefreshDetail(eqId);
   });
@@ -22437,20 +22456,24 @@ function _fleetSubmitMaintenance(id) {
   _fleetMaintPhotoFile = null;
   _fleetMaintPhotoBase64 = null;
 
-  saveFleet();
+  if (photoBase64) logEntry.photoUrl = photoBase64;
+  saveFleetLocal();
   document.getElementById('_fleetMaintForm').remove();
   _fleetRefreshDetail(id);
 
   if (photoFile && storage) {
-    uploadFileToStorage(photoFile, 'equipment_photos/' + id + '/' + logEntry.id).then(function(result) {
-      logEntry.photoUrl = result.url;
-      logEntry.photoPath = result.path;
-      // Add to eq.photos gallery
-      eq.photos = eq.photos || [];
-      eq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), source: 'maintenance', maintLogId: logEntry.id });
-      if (wantsProfile || !eq.profilePhoto) {
-        eq.profilePhoto = result.url;
-        eq.profilePhotoPath = result.path;
+    var logId = logEntry.id;
+    uploadFileToStorage(photoFile, 'equipment_photos/' + id + '/' + logId).then(function(result) {
+      var li = equipmentFleet.findIndex(function(e){ return e.id===id; });
+      if (li < 0) return;
+      var liveEq = equipmentFleet[li];
+      var liveLog = (liveEq.maintenanceLogs || []).find(function(l){ return l.id===logId; });
+      if (liveLog) { liveLog.photoUrl = result.url; liveLog.photoPath = result.path; }
+      liveEq.photos = liveEq.photos || [];
+      liveEq.photos.push({ url: result.url, path: result.path, addedAt: new Date().toISOString(), source: 'maintenance', maintLogId: logId });
+      if (wantsProfile || !liveEq.profilePhoto) {
+        liveEq.profilePhoto = result.url;
+        liveEq.profilePhotoPath = result.path;
       }
       saveFleet();
       _fleetRefreshDetail(id);
