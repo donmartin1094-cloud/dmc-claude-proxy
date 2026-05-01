@@ -5008,3 +5008,351 @@ window.addEventListener('resize', function() {
     }
   }, 200);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AR HOME — KPI DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _arKpiFilter = {};   // { gcName, jobId, jobNum }
+var _arKpiMonth  = '';   // '' = all year, 'YYYY-MM' = specific month
+var _arKpiCharts = [];   // Chart.js instances to destroy before re-render
+
+var _ARKPI_PALETTE = ['#a78bfa','#5ab4f5','#f5c518','#7ecb8f','#f06292','#e8814a','#4dd0e1','#ffb74d','#c084f5','#f9a8d4'];
+
+function _openARKPIs(params) {
+  _arKpiFilter = params || {};
+  _arKpiMonth  = '';
+  if (typeof switchTab === 'function') switchTab('ap');
+}
+
+function arKpiSetMonth(m) {
+  _arKpiMonth = m;
+  if (typeof renderArOverview === 'function') renderArOverview();
+}
+
+function arKpiClearFilter() {
+  _arKpiFilter = {};
+  if (typeof renderArOverview === 'function') renderArOverview();
+}
+
+function _arKpiGoToGC(gcName) {
+  _arKpiFilter = { gcName: gcName };
+  if (typeof setBacklogView === 'function') setBacklogView('gc');
+  if (typeof switchTab === 'function') switchTab('backlog');
+}
+
+function _arKpiMtLabel(raw) {
+  if (!raw) return 'Unknown';
+  if (typeof matDisplayName === 'function') {
+    var resolved = matDisplayName(raw);
+    if (resolved && resolved !== raw) return resolved;
+  }
+  var mxList = (typeof mixTypesList !== 'undefined') ? mixTypesList : [];
+  var r = (raw + '').toLowerCase().trim();
+  var m = mxList.filter(function(x){ return (x.desc||'').toLowerCase().trim() === r; })[0];
+  if (m && m.displayName) return m.displayName;
+  m = mxList.filter(function(x){ return (x.displayName||'').toLowerCase().trim() === r; })[0];
+  if (m && m.displayName) return m.displayName;
+  return raw;
+}
+
+function _arKpiFilteredInvoices() {
+  var invs = (invoiceList || []).slice();
+  var curYr = new Date().getFullYear();
+  if (_arKpiMonth) {
+    invs = invs.filter(function(inv) { return (inv.dateOfWork || '').substring(0, 7) === _arKpiMonth; });
+  } else {
+    invs = invs.filter(function(inv) { return (inv.dateOfWork || '').substring(0, 4) === String(curYr); });
+  }
+  if (_arKpiFilter.gcName) {
+    invs = invs.filter(function(inv) { return (inv.gcName || '') === _arKpiFilter.gcName; });
+  }
+  if (_arKpiFilter.jobNum) {
+    invs = invs.filter(function(inv) { return (inv.jobNo || '') === _arKpiFilter.jobNum; });
+  }
+  return invs;
+}
+
+function _buildARKPIDashboardHtml() {
+  var invs = _arKpiFilteredInvoices();
+  var curYr = new Date().getFullYear();
+  var esc = typeof escHtml === 'function' ? escHtml : function(s){ return s||''; };
+  var fmtD = function(v) { return '$'+(parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); };
+  var fmtPct = function(v, t) { return t > 0 ? (v/t*100).toFixed(1)+'%' : '—'; };
+  var thS = 'font-family:\'DM Mono\',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.8px;color:var(--concrete-dim);padding:5px 8px;text-align:left;white-space:nowrap;';
+
+  // ── Month picker ─────────────────────────────────────────────────────────
+  var monthsSet = {};
+  (invoiceList || []).forEach(function(inv) {
+    if (inv.dateOfWork) monthsSet[inv.dateOfWork.substring(0,7)] = true;
+  });
+  for (var mo = 1; mo <= 12; mo++) {
+    monthsSet[curYr + '-' + String(mo).padStart(2,'0')] = true;
+  }
+  var monthKeys = Object.keys(monthsSet).sort().reverse();
+  var MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var monthOptHtml = monthKeys.map(function(mk) {
+    var p = mk.split('-');
+    return '<option value="'+mk+'"'+((_arKpiMonth===mk)?' selected':'')+'>'+MN[parseInt(p[1])-1]+' '+p[0]+'</option>';
+  }).join('');
+
+  // ── Filter chip ──────────────────────────────────────────────────────────
+  var filterLabel = '';
+  if (_arKpiFilter.gcName) filterLabel = '🏢 '+esc(_arKpiFilter.gcName);
+  else if (_arKpiFilter.jobNum) filterLabel = 'Job #'+esc(_arKpiFilter.jobNum);
+  var filterChipHtml = filterLabel
+    ? '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:20px;padding:3px 12px;">'
+    +   '<span style="font-size:11px;color:#a78bfa;font-family:\'DM Sans\',sans-serif;">'+filterLabel+'</span>'
+    +   '<button onclick="arKpiClearFilter()" style="background:none;border:none;cursor:pointer;color:#a78bfa;font-size:12px;padding:0 0 0 4px;line-height:1;">✕ Clear</button>'
+    + '</div>'
+    : '';
+
+  var filterBarHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
+    + '<select onchange="arKpiSetMonth(this.value)" style="font-family:\'DM Mono\',monospace;font-size:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:4px;color:var(--white);padding:5px 10px;cursor:pointer;">'
+    +   '<option value=""'+(!_arKpiMonth?' selected':'')+'>All Year '+curYr+'</option>'
+    +   monthOptHtml
+    + '</select>'
+    + filterChipHtml
+    + '</div>';
+
+  // ── No-data state ────────────────────────────────────────────────────────
+  if (!invs.length) {
+    return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:12px;padding:16px 18px;">'
+      + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--white);margin-bottom:12px;">📊 AR / SALES KPI DASHBOARD</div>'
+      + filterBarHtml
+      + '<div style="text-align:center;padding:24px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">No invoice data for this period.</div>'
+      + '</div>';
+  }
+
+  // ── Revenue KPIs by GC ───────────────────────────────────────────────────
+  var byGC = {};
+  invs.forEach(function(inv) {
+    var gc = inv.gcName || 'Unknown';
+    if (!byGC[gc]) byGC[gc] = { billed:0, outstanding:0, shifts:0 };
+    var total = (inv.mixItems||[]).reduce(function(s,m){ return s+(parseFloat(m.itemTotal)||0); },0);
+    byGC[gc].billed += total;
+    var appAmt = parseFloat(((inv.approvedAmount||'')+'').replace(/[^0-9.\-]/g,''))||0;
+    if (!appAmt) byGC[gc].outstanding += total;
+    byGC[gc].shifts++;
+  });
+  var gcNames = Object.keys(byGC).sort(function(a,b){ return byGC[b].billed - byGC[a].billed; });
+  var grandBilled = gcNames.reduce(function(s,g){ return s+byGC[g].billed; },0);
+
+  var topGCs = gcNames.slice(0,6);
+  var gcPieLabels=[], gcPieData=[], gcPieColors=[];
+  topGCs.forEach(function(gc,i){ gcPieLabels.push(gc); gcPieData.push(byGC[gc].billed); gcPieColors.push(_ARKPI_PALETTE[i%_ARKPI_PALETTE.length]); });
+  var gcOtherBilled = gcNames.slice(6).reduce(function(s,g){ return s+byGC[g].billed; },0);
+  if (gcOtherBilled > 0){ gcPieLabels.push('Other'); gcPieData.push(gcOtherBilled); gcPieColors.push('#555'); }
+
+  var gcLegendHtml = gcPieLabels.map(function(gc,i) {
+    var safeGc = gc.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var isTop = i < topGCs.length;
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+      +'<div style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:'+gcPieColors[i]+'"></div>'
+      +'<div style="font-size:10px;color:var(--white);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+      +(isTop ? '<span style="cursor:pointer;border-bottom:1px dotted rgba(245,197,24,0.35);" onclick="event.stopPropagation();_arKpiGoToGC(\''+safeGc+'\')">'+esc(gc)+'</span>' : esc(gc))
+      +'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);white-space:nowrap;">'+fmtD(gcPieData[i])+' · '+fmtPct(gcPieData[i],grandBilled)+'</div>'
+      +'</div>';
+  }).join('');
+
+  var gcTableRows = gcNames.map(function(gc) {
+    var d = byGC[gc];
+    var safeGc = gc.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">'
+      +'<td style="padding:6px 8px;font-size:11px;cursor:pointer;" onclick="_arKpiGoToGC(\''+safeGc+'\')">'
+      +'<span style="color:var(--stripe);border-bottom:1px dotted rgba(245,197,24,0.4);">'+esc(gc)+'</span></td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:right;color:var(--white);">'+fmtD(d.billed)+'</td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:right;color:#8B1A1A;font-weight:700;">'+(d.outstanding>0?fmtD(d.outstanding):'—')+'</td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:center;color:var(--concrete-dim);">'+d.shifts+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var gcTableHtml = gcNames.length
+    ? '<div style="overflow-x:auto;margin-top:10px;">'
+    +'<table style="width:100%;border-collapse:collapse;">'
+    +'<thead><tr style="border-bottom:1px solid var(--asphalt-light);">'
+    +'<th style="'+thS+'">GC</th><th style="'+thS+'text-align:right;">Billed</th>'
+    +'<th style="'+thS+'text-align:right;">Outstanding</th><th style="'+thS+'text-align:center;">Shifts</th>'
+    +'</tr></thead><tbody>'+gcTableRows+'</tbody></table></div>'
+    : '';
+
+  // ── Sales KPIs by Mix / Supplier ─────────────────────────────────────────
+  var byMix={}, bySupplier={};
+  invs.forEach(function(inv) {
+    var sup = inv.supplier || 'Unknown';
+    (inv.mixItems||[]).forEach(function(m) {
+      var mt = m.mixType || 'Unknown';
+      var total = parseFloat(m.itemTotal)||0;
+      var tons  = parseFloat(m.tonQty)||0;
+      if (!byMix[mt]) byMix[mt]={tons:0,billed:0,loads:0};
+      byMix[mt].tons+=tons; byMix[mt].billed+=total; byMix[mt].loads++;
+      if (!bySupplier[sup]) bySupplier[sup]=0;
+      bySupplier[sup]+=total;
+    });
+  });
+
+  var mixNames = Object.keys(byMix).sort(function(a,b){ return byMix[b].tons-byMix[a].tons; });
+  var totalTons = mixNames.reduce(function(s,m){ return s+byMix[m].tons; },0);
+  var mixPieLabels=[], mixPieData=[], mixPieColors=[];
+  mixNames.forEach(function(mt,i){
+    mixPieLabels.push(_arKpiMtLabel(mt));
+    mixPieData.push(byMix[mt].tons);
+    mixPieColors.push(_ARKPI_PALETTE[i%_ARKPI_PALETTE.length]);
+  });
+
+  var mixLegendHtml = mixPieLabels.map(function(lbl,i) {
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+      +'<div style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:'+mixPieColors[i]+'"></div>'
+      +'<div style="font-size:10px;color:var(--white);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(lbl)+'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);white-space:nowrap;">'+(mixPieData[i]||0).toFixed(1)+' T · '+fmtPct(mixPieData[i],totalTons)+'</div>'
+      +'</div>';
+  }).join('');
+
+  var supNames = Object.keys(bySupplier).sort(function(a,b){ return bySupplier[b]-bySupplier[a]; });
+  var totalSupBilled = supNames.reduce(function(s,n){ return s+bySupplier[n]; },0);
+  var topSups = supNames.slice(0,6);
+  var supPieLabels=[], supPieData=[], supPieColors=[];
+  topSups.forEach(function(sup,i){ supPieLabels.push(sup); supPieData.push(bySupplier[sup]); supPieColors.push(_ARKPI_PALETTE[(i+3)%_ARKPI_PALETTE.length]); });
+  var supOtherAmt = supNames.slice(6).reduce(function(s,n){ return s+bySupplier[n]; },0);
+  if (supOtherAmt>0){ supPieLabels.push('Other'); supPieData.push(supOtherAmt); supPieColors.push('#555'); }
+
+  var supLegendHtml = supPieLabels.map(function(sup,i) {
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+      +'<div style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:'+supPieColors[i]+'"></div>'
+      +'<div style="font-size:10px;color:var(--white);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(sup)+'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);white-space:nowrap;">'+fmtD(supPieData[i])+' · '+fmtPct(supPieData[i],totalSupBilled)+'</div>'
+      +'</div>';
+  }).join('');
+
+  var mixTableRows = mixNames.map(function(mt) {
+    var d = byMix[mt];
+    var avgPT = d.tons>0 ? fmtD(d.billed/d.tons) : '—';
+    return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--white);">'+esc(_arKpiMtLabel(mt))+'</td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:right;color:var(--stripe);">'+(d.tons>0?d.tons.toFixed(1)+' T':'—')+'</td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:right;color:var(--white);">'+(d.billed>0?fmtD(d.billed):'—')+'</td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:right;color:var(--concrete-dim);">'+avgPT+'</td>'
+      +'<td style="padding:6px 8px;font-family:\'DM Mono\',monospace;font-size:10px;text-align:center;color:var(--concrete-dim);">'+d.loads+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var mixTableHtml = mixNames.length
+    ? '<div style="overflow-x:auto;margin-top:10px;">'
+    +'<table style="width:100%;border-collapse:collapse;">'
+    +'<thead><tr style="border-bottom:1px solid var(--asphalt-light);">'
+    +'<th style="'+thS+'">Mix Type</th><th style="'+thS+'text-align:right;">Tons</th>'
+    +'<th style="'+thS+'text-align:right;">Billed</th><th style="'+thS+'text-align:right;">Avg $/Ton</th>'
+    +'<th style="'+thS+'text-align:center;">Loads</th>'
+    +'</tr></thead><tbody>'+mixTableRows+'</tbody></table></div>'
+    : '';
+
+  // ── Section header ────────────────────────────────────────────────────────
+  var secHdr = '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--white);margin-bottom:12px;">📊 AR / SALES KPI DASHBOARD</div>';
+
+  // ── Left column ───────────────────────────────────────────────────────────
+  var leftCol = '<div style="flex:1;min-width:0;min-height:0;">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">💰 REVENUE BY GC</div>'
+    +'<div style="display:flex;justify-content:center;max-height:220px;"><canvas id="arKpiGCPie" style="max-height:220px;max-width:220px;"></canvas></div>'
+    +'<div style="margin-top:8px;">'+gcLegendHtml+'</div>'
+    +gcTableHtml
+    +'</div>';
+
+  // ── Divider ───────────────────────────────────────────────────────────────
+  var divider = '<div style="width:1px;background:var(--asphalt-light);flex-shrink:0;margin:0 18px;"></div>';
+
+  // ── Right column ──────────────────────────────────────────────────────────
+  var rightCol = '<div style="flex:1;min-width:0;min-height:0;">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">🪨 TONS BY MIX TYPE</div>'
+    +'<div style="display:flex;justify-content:center;max-height:200px;"><canvas id="arKpiMixPie" style="max-height:200px;max-width:200px;"></canvas></div>'
+    +'<div style="margin-top:8px;">'+mixLegendHtml+'</div>'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin:14px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">🏭 SPEND BY SUPPLIER</div>'
+    +'<div style="display:flex;justify-content:center;max-height:200px;"><canvas id="arKpiSupPie" style="max-height:200px;max-width:200px;"></canvas></div>'
+    +'<div style="margin-top:8px;">'+supLegendHtml+'</div>'
+    +mixTableHtml
+    +'</div>';
+
+  var colsHtml = '<div style="display:flex;gap:0;align-items:flex-start;">'
+    +leftCol+divider+rightCol
+    +'</div>';
+
+  return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:12px;padding:16px 18px;">'
+    +secHdr+filterBarHtml+colsHtml
+    +'</div>';
+}
+
+function _mountARKPICharts() {
+  _arKpiCharts.forEach(function(c){ try { c.destroy(); } catch(e){} });
+  _arKpiCharts = [];
+
+  if (typeof Chart === 'undefined') return;
+  var invs = _arKpiFilteredInvoices();
+  if (!invs.length) return;
+
+  var fmtD = function(v){ return '$'+(parseFloat(v)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}); };
+  var chartCfg = function(labels, data, colors, tooltipFmt) {
+    return {
+      type: 'doughnut',
+      data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)' }] },
+      options: {
+        responsive: true, maintainAspectRatio: true, cutout: '55%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function(ctx){ return ctx.label+': '+tooltipFmt(ctx.parsed); } } }
+        }
+      }
+    };
+  };
+
+  // GC pie
+  var gcEl = document.getElementById('arKpiGCPie');
+  if (gcEl) {
+    var byGC = {};
+    invs.forEach(function(inv){
+      var gc=inv.gcName||'Unknown';
+      if (!byGC[gc]) byGC[gc]=0;
+      byGC[gc]+=(inv.mixItems||[]).reduce(function(s,m){ return s+(parseFloat(m.itemTotal)||0); },0);
+    });
+    var gNames = Object.keys(byGC).sort(function(a,b){ return byGC[b]-byGC[a]; });
+    var gTop=gNames.slice(0,6), gOther=gNames.slice(6).reduce(function(s,g){ return s+byGC[g]; },0);
+    var gL=gTop.slice(), gD=gTop.map(function(g){ return byGC[g]; }), gC=gTop.map(function(g,i){ return _ARKPI_PALETTE[i%_ARKPI_PALETTE.length]; });
+    if (gOther>0){ gL.push('Other'); gD.push(gOther); gC.push('#555'); }
+    _arKpiCharts.push(new Chart(gcEl, chartCfg(gL, gD, gC, fmtD)));
+  }
+
+  // Mix pie
+  var mixEl = document.getElementById('arKpiMixPie');
+  if (mixEl) {
+    var byMix = {};
+    invs.forEach(function(inv){
+      (inv.mixItems||[]).forEach(function(m){
+        var mt=m.mixType||'Unknown';
+        if (!byMix[mt]) byMix[mt]=0;
+        byMix[mt]+=parseFloat(m.tonQty)||0;
+      });
+    });
+    var mNames=Object.keys(byMix).sort(function(a,b){ return byMix[b]-byMix[a]; });
+    var mL=mNames.map(function(mt){ return _arKpiMtLabel(mt); });
+    var mD=mNames.map(function(mt){ return byMix[mt]; });
+    var mC=mNames.map(function(mt,i){ return _ARKPI_PALETTE[i%_ARKPI_PALETTE.length]; });
+    _arKpiCharts.push(new Chart(mixEl, chartCfg(mL, mD, mC, function(v){ return (parseFloat(v)||0).toFixed(1)+' T'; })));
+  }
+
+  // Supplier pie
+  var supEl = document.getElementById('arKpiSupPie');
+  if (supEl) {
+    var byS = {};
+    invs.forEach(function(inv){
+      var sup=inv.supplier||'Unknown';
+      (inv.mixItems||[]).forEach(function(m){
+        if (!byS[sup]) byS[sup]=0;
+        byS[sup]+=parseFloat(m.itemTotal)||0;
+      });
+    });
+    var sNames=Object.keys(byS).sort(function(a,b){ return byS[b]-byS[a]; });
+    var sTop=sNames.slice(0,6), sOther=sNames.slice(6).reduce(function(s,n){ return s+byS[n]; },0);
+    var sL=sTop.slice(), sD=sTop.map(function(s){ return byS[s]; }), sC=sTop.map(function(s,i){ return _ARKPI_PALETTE[(i+3)%_ARKPI_PALETTE.length]; });
+    if (sOther>0){ sL.push('Other'); sD.push(sOther); sC.push('#555'); }
+    _arKpiCharts.push(new Chart(supEl, chartCfg(sL, sD, sC, fmtD)));
+  }
+}
