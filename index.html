@@ -22259,12 +22259,17 @@ function _fleetProfilePhotoUpload(eqId, inputEl) {
       var img = new Image();
       img.onload = function() {
         var canvas = document.createElement('canvas');
-        var max = 1200, w = img.width, h = img.height;
+        var max = 800, w = img.width, h = img.height;
         if (w > h) { if (w > max) { h = Math.round(h * max / w); w = max; } }
         else        { if (h > max) { w = Math.round(w * max / h); h = max; } }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        _fleetApplyProfilePhoto(eqId, canvas.toDataURL('image/jpeg', 0.85), file);
+        var resizedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        if (resizedBase64.length > 500 * 1024) {
+          resizedBase64 = canvas.toDataURL('image/jpeg', 0.5);
+        }
+        console.log('PHOTO: resized size =', resizedBase64.length);
+        _fleetApplyProfilePhoto(eqId, resizedBase64, file);
       };
       img.src = base64;
     } else {
@@ -22292,7 +22297,7 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   console.log('PHOTO: storage available?', !!storage);
   var _uploadPromise = uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid());
   var _timeoutPromise = new Promise(function(_, reject) {
-    setTimeout(function(){ reject(new Error('Upload timed out after 20s')); }, 20000);
+    setTimeout(function(){ reject(new Error('Upload timed out after 30s')); }, 30000);
   });
   Promise.race([_uploadPromise, _timeoutPromise]).then(function(result) {
     console.log('PHOTO: upload success, url=', result.url);
