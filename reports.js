@@ -4059,7 +4059,7 @@ function _invRenderCard(inv) {
   var diff     = differs ? (appRaw - billed) : null;
 
   function edSpan(field, val, cls) {
-    return '<span class="inv2-editable inv-field' + (cls ? ' ' + cls : '') + '" data-inv="' + inv.id + '" data-field="' + field + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(val || '—') + '</span>';
+    return '<span class="inv2-editable' + (cls ? ' ' + cls : '') + '" data-inv="' + inv.id + '" data-field="' + field + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(val || '—') + '</span>';
   }
   function edTruckCount(field, val) {
     return '<span class="inv2-editable inv-field inv2-truck-count" data-inv="' + inv.id + '" data-field="' + field + '" data-truck="1" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (val || '—') + '</span>';
