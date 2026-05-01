@@ -22247,11 +22247,13 @@ function _fleetMaintPhotoClear() {
 }
 
 function _fleetProfilePhotoUpload(eqId, inputEl) {
+  console.log('PHOTO: handler fired', eqId);
   if (!inputEl || !inputEl.files || !inputEl.files.length) return;
   var file = inputEl.files[0];
   var idx = equipmentFleet.findIndex(function(e){ return e.id===eqId; });
   if (idx < 0) return;
   delete _fleetProfileUploadWarn[eqId];
+  console.log('PHOTO: FileReader start');
   var reader = new FileReader();
   reader.onload = function(ev) {
     var base64 = ev.target.result;
