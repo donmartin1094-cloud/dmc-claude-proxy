@@ -22297,7 +22297,7 @@ function _fleetApplyProfilePhoto(eqId, base64, file) {
   }
   console.log('PHOTO: starting upload for', eqId);
   console.log('PHOTO: storage available?', !!storage);
-  var _uploadPromise = uploadFileToStorage(file, 'equipment_photos/' + eqId + '/' + _fleetUuid());
+  var _uploadPromise = uploadFileToStorage(base64, 'equipment_photos/' + eqId + '/' + _fleetUuid());
   var _timeoutPromise = new Promise(function(_, reject) {
     setTimeout(function(){ reject(new Error('Upload timed out after 30s')); }, 30000);
   });
