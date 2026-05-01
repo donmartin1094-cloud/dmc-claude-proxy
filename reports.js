@@ -1,4 +1,4 @@
-// reports.js — Reports feature module
+// reports.js — Reports feature module — cache bust v2
 
 var reportsFolderCollapsed = {};
 var reportsDailyViewMode = {}; // { [foreman]: 'month' | 'year' } per foreman folder
