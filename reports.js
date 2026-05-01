@@ -4481,7 +4481,8 @@ function renderInvoiceTracker() {
     + '</div>'
     : '';
 
-  var _scrollY = window.scrollY;
+  var _invGridScrollEl = wrap.querySelector('.inv2-grid-scroll');
+  var _invGridScrollTop = _invGridScrollEl ? _invGridScrollEl.scrollTop : 0;
   wrap.innerHTML = '<div class="inv2-wrap">'
     + '<div class="inv2-header">'
     +   '<div class="inv2-title-row">'
@@ -4505,7 +4506,8 @@ function renderInvoiceTracker() {
     + '<div class="inv2-grid-scroll">' + gridHtml + '</div>'
     + totalBar
     + '</div>';
-  window.scrollTo(0, _scrollY);
+  var _invGridScrollNew = wrap.querySelector('.inv2-grid-scroll');
+  if (_invGridScrollNew) _invGridScrollNew.scrollTop = _invGridScrollTop;
   setTimeout(function() {
     var activeTab = document.querySelector('.inv2-month-tab.inv2-tab-active');
     if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
