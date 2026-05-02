@@ -10964,7 +10964,11 @@ document.addEventListener('DOMContentLoaded', function() {
           URL.revokeObjectURL(url);
           _currentAudio = null;
         };
-        audio.play();
+        audio.play().catch(() => {
+          btn?.classList.remove('on');
+          URL.revokeObjectURL(url);
+          _currentAudio = null;
+        });
         return;
       } else {
         const errBody = await resp.json().catch(() => ({}));
