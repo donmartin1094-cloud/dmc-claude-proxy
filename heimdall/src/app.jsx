@@ -5889,7 +5889,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
           paver:'Pavers', roller:'Rollers', milling:'Milling Machines', excavator:'Excavators',
           loader:'Loaders', skid_steer:'Skid Steers', compactor:'Compactors', dump_truck:'Dump Trucks',
           lowbed:'Lowbeds', tack_truck:'Tack Trucks', tack_wagon:'Tack Wagons', rubber_machine:'Rubber Machines', water_truck:'Water Trucks',
-          mtv:'Material Transfer Vehicles', grader:'Graders',
+          mtv:'MTVs', grader:'Graders',
           generator:'Generators', trailer:'Trailers', other:'Other'
         };
         const available = fleetItems.filter(eq => !manualItems.find(i => i.id === eq.id));
@@ -5899,6 +5899,8 @@ Be specific, practical, and flag any uncertainties clearly.`;
           if (!byType[t]) byType[t] = [];
           byType[t].push(eq);
         });
+        const LB_PICKER_ORDER = ['paver','roller','skid_steer','excavator','mtv','compactor','water_truck'];
+        const orderedEntries = LB_PICKER_ORDER.filter(t => byType[t] && byType[t].length > 0).map(t => [t, byType[t]]);
 
         return (
           <div onClick={() => { setShowManualMove(false); setManualToLocked(false); }}
@@ -5977,22 +5979,24 @@ Be specific, practical, and flag any uncertainties clearly.`;
                       )}
                     </div>}
 
-                  {/* Grouped toggles */}
+                  {/* Grouped toggles — ordered: Pavers, Rollers, Skid Steers, Excavators, MTVs, Compactors, Water Trucks */}
                   <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
-                    {Object.entries(byType).map(([type, items]) => {
+                    {orderedEntries.map(([type, items]) => {
                       const isOpen = !!manualEqOpen[type];
+                      const selCount = manualItems.filter(i => i.type === type).length;
                       return (
                         <div key={type} style={{borderRadius:'6px',border:'1px solid rgba(255,255,255,0.07)',overflow:'hidden'}}>
                           {/* Type header — click to toggle */}
                           <button
                             onClick={() => setManualEqOpen(o => ({...o, [type]: !o[type]}))}
-                            style={{width:'100%',display:'flex',alignItems:'center',gap:'8px',padding:'7px 10px',background:'rgba(255,255,255,0.04)',border:'none',cursor:'pointer',textAlign:'left'}}>
+                            style={{width:'100%',minHeight:'44px',display:'flex',alignItems:'center',gap:'8px',padding:'7px 10px',background:'rgba(255,255,255,0.04)',border:'none',cursor:'pointer',textAlign:'left'}}>
                             <span style={{fontSize:'14px'}}>{EQ_ICONS[type]||'📦'}</span>
                             <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',fontWeight:700,color:'var(--white)',flex:1}}>
                               {EQ_TYPE_LABELS[type] || type}
+                              {!isOpen && selCount > 0 && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--stripe)',fontWeight:400,marginLeft:'5px'}}>({selCount} selected)</span>}
                             </span>
-                            <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>{items.length}</span>
-                            <span style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'var(--concrete-dim)',transform:isOpen?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▾</span>
+                            {(isOpen || selCount === 0) && <span style={{fontFamily:"'DM Mono',monospace",fontSize:'9px',color:'var(--concrete-dim)'}}>{items.length}</span>}
+                            <span style={{fontFamily:"'DM Mono',monospace",fontSize:'13px',color:'var(--concrete-dim)'}}>{isOpen ? '∨' : '›'}</span>
                           </button>
 
                           {/* Items in this type */}
@@ -6020,6 +6024,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                                   <div key={eq.id}
                                     onClick={handleClick}
                                     style={{display:'flex',alignItems:'center',gap:'8px',padding:'5px 8px',borderRadius:'4px',
+                                      minHeight:'44px',
                                       cursor:blocked?'not-allowed':'pointer',
                                       opacity:(!compat.ok||avail.status==='in_transit'||avail.status==='on_site')?0.55:1,
                                       background:rowBg,border:'1px solid '+rowBorder}}
@@ -6050,7 +6055,7 @@ Be specific, practical, and flag any uncertainties clearly.`;
                         </div>
                       );
                     })}
-                    {Object.keys(byType).length === 0 &&
+                    {orderedEntries.length === 0 &&
                       <div style={{fontFamily:"'DM Mono',monospace",fontSize:'10px',color:'rgba(155,148,136,0.4)',padding:'10px 0',textAlign:'center'}}>All equipment already added</div>}
                   </div>
                 </div>

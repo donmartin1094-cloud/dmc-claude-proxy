@@ -6638,6 +6638,8 @@ function _homeLowbedSectionHtml() {
     '<div style="display:flex;align-items:center;gap:5px;">' +
       '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + manualMoves.length + ' moves</span>' +
       (_homeIsAdmin() ? '<button onclick="_lbManualMovePick()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:3px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;font-weight:700;">+ Move</button>' : '') +
+      (_homeIsAdmin() ? '<button onclick="_lbAIGenerate()" style="background:rgba(126,203,143,0.1);border:1px solid rgba(126,203,143,0.4);border-radius:3px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;font-weight:700;">🤖 AI</button>' : '') +
+      (_homeIsAdmin() ? '<button onclick="_lbCheckScheduleConflicts()" style="background:rgba(232,129,58,0.08);border:1px solid rgba(232,129,58,0.3);border-radius:3px;color:#e8813a;font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;" title="Check for schedule conflicts">🔄</button>' : '') +
       '<button onclick="switchTab(\'heimdall\')" style="background:none;border:1px solid rgba(167,139,250,0.3);border-radius:3px;color:rgba(167,139,250,0.7);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;">Plan →</button>' +
       '<button onclick="_homeLowbedToggle()" style="background:none;border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:8px;padding:2px 7px;cursor:pointer;">' + (_homeLowbedOpen ? '▲' : '▼') + '</button>' +
     '</div>' +
@@ -19646,6 +19648,8 @@ function widgetLowbedMoves() {
       '<div style="display:flex;align-items:center;gap:5px;">' +
         '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + manualMoves.length + ' moves</span>' +
         (isAdmin() ? '<button onclick="_lbManualMovePick()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:4px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;font-weight:700;">+ Move</button>' : '') +
+        (isAdmin() ? '<button onclick="_lbAIGenerate()" style="background:rgba(126,203,143,0.1);border:1px solid rgba(126,203,143,0.4);border-radius:4px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;font-weight:700;">🤖 AI</button>' : '') +
+        (isAdmin() ? '<button onclick="_lbCheckScheduleConflicts()" style="background:rgba(232,129,58,0.08);border:1px solid rgba(232,129,58,0.3);border-radius:4px;color:#e8813a;font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;" title="Check for schedule conflicts">🔄</button>' : '') +
         '<button onclick="switchTab(\'heimdall\')" style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:2px 8px;cursor:pointer;">Open →</button>' +
       '</div>' +
     '</div>' +
@@ -19662,6 +19666,13 @@ var _lbMoveItems = [];
 var _lbEqOpen    = {};
 var _lbCardOpen  = {};
 var _lbEquipSelections = {};
+var _lbAISuggestions = [];
+var _lbPickerOpen = {};
+var _lbEqIcons = {
+  paver:'🟧', roller:'🔵', milling:'⚙️', excavator:'🏗️', loader:'🚜',
+  skid_steer:'🔧', compactor:'🟤', dump_truck:'🚛', lowbed:'🚚', tack_truck:'🛢️',
+  water_truck:'💧', generator:'⚡', trailer:'🔗', mtv:'🚜', other:'📦'
+};
 
 var _LB_TIER_ORDER = ['light', 'medium', 'heavy', 'monster'];
 
@@ -19747,6 +19758,365 @@ function _lbGetEquipLocationName(eqId) {
   var j = bl.find(function(jb) { return String(jb.id) === String(locId); });
   if (j) return (j.num ? '#' + j.num + ' — ' : '') + (j.name || String(locId));
   return locId;
+}
+
+// ── AI Lowbed Generator ──────────────────────────────────────────────────────
+
+function _lbAIGenerate() {
+  if (typeof schedData === 'undefined') { alert('Schedule data not loaded.'); return; }
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+
+  // Build 3-day window
+  var days = [];
+  for (var di = 0; di < 3; di++) {
+    var _d = new Date(today); _d.setDate(_d.getDate() + di);
+    var _dk = _d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0');
+    days.push({ key: _dk, date: _d });
+  }
+
+  // Collect all job+equipment slots from schedData
+  var mergedSlots = {};
+  days.forEach(function(day) {
+    var dd = schedData[day.key] || {};
+    var slotData = [];
+    ['top','bottom'].forEach(function(sk) { if (dd[sk] && dd[sk].fields) slotData.push(dd[sk]); });
+    (dd.extras || []).forEach(function(ex) { if (ex && ex.data && ex.data.fields) slotData.push(ex.data); });
+    slotData.forEach(function(slot) {
+      var f = slot.fields;
+      if (!f || !f.equipment) return;
+      var eqArr = []; try { eqArr = JSON.parse(f.equipment); } catch(e) { return; }
+      if (!eqArr.length) return;
+      var jMatch = bl.find(function(j) {
+        var jn = (j.jobNum||j.number||j.num||'').toString().trim().toLowerCase();
+        var fn = (f.jobNum||'').toString().trim().toLowerCase();
+        return (fn && jn && fn === jn) || (f.jobName && j.name && f.jobName.trim().toLowerCase() === j.name.trim().toLowerCase());
+      });
+      if (!jMatch) return;
+      var k = jMatch.id + '|' + day.key;
+      if (!mergedSlots[k]) mergedSlots[k] = { dateKey: day.key, date: day.date, jobId: jMatch.id, jobName: f.jobName || jMatch.name || '', jobNum: f.jobNum || jMatch.num || jMatch.number || '', equipment: [] };
+      eqArr.forEach(function(eq) { if (!mergedSlots[k].equipment.find(function(e) { return e.id === eq.id; })) mergedSlots[k].equipment.push(eq); });
+    });
+  });
+
+  var suggestedMoves = [];
+  var fleet = typeof equipmentFleet !== 'undefined' ? equipmentFleet : [];
+
+  Object.keys(mergedSlots).forEach(function(k) {
+    var slot = mergedSlots[k];
+    // What's already at this job
+    var alreadyThere = slot.equipment.filter(function(eq) { return _lbGetEquipLocation(eq.id) === slot.jobId; }).map(function(eq) { return eq.id; });
+    var needsMove = slot.equipment.filter(function(eq) { return alreadyThere.indexOf(eq.id) === -1; });
+    if (!needsMove.length) return;
+
+    // Filter by status
+    var toMove = [], flagged = [];
+    needsMove.forEach(function(eq) {
+      var fe = fleet.find(function(e) { return e.id === eq.id; });
+      var st = fe ? (fe.status || 'operational') : 'operational';
+      if (st === 'down') return;
+      if (st === 'limping' || st === 'maintenance') flagged.push({ id: eq.id, name: eq.name, type: eq.type, reason: st === 'limping' ? 'Limping — confirm OK to move' : 'In maintenance — confirm OK to move' });
+      toMove.push(eq);
+    });
+    if (!toMove.length) return;
+
+    toMove.forEach(function(eq) { eq._from = _lbGetEquipLocation(eq.id); });
+    var loads = _lbAIGroupLoads(toMove);
+    var deadlineStr = slot.dateKey + 'T06:00';
+
+    loads.forEach(function(load) {
+      var fromCounts = {};
+      load.forEach(function(eq) { fromCounts[eq._from] = (fromCounts[eq._from] || 0) + 1; });
+      var fromLoc = '__garage__', fromMax = 0;
+      Object.keys(fromCounts).forEach(function(loc) { if (fromCounts[loc] > fromMax) { fromMax = fromCounts[loc]; fromLoc = loc; } });
+      if (fromLoc === slot.jobId) return;
+
+      // Only pull from jobs approved for cleanout
+      if (fromLoc !== '__garage__') {
+        var approved = groups.some(function(m) { return m.to === fromLoc && (m.cleanoutApproved === true || m.status === 'complete'); });
+        if (!approved) fromLoc = '__garage__';
+      }
+
+      var tierOrder = ['light','medium','heavy','monster'];
+      var suggestedClass = 'light';
+      load.forEach(function(eq) { var cls = (_LB_RULES[eq.type]||{}).loadClass||'light'; if (tierOrder.indexOf(cls) > tierOrder.indexOf(suggestedClass)) suggestedClass = cls; });
+
+      var loadFlagged = flagged.filter(function(f) { return load.find(function(eq) { return eq.id === f.id; }); });
+      suggestedMoves.push({
+        from: fromLoc, fromName: fromLoc === '__garage__' ? 'Shop / Garage' : _lbGetEquipLocationName(fromLoc),
+        to: slot.jobId, toName: (slot.jobNum ? '#' + slot.jobNum + ' — ' : '') + slot.jobName,
+        items: load.map(function(eq) { return { id: eq.id, name: eq.name, type: eq.type }; }),
+        suggestedClass: suggestedClass, deadline: deadlineStr, date: slot.dateKey,
+        flagged: loadFlagged, confirmations: {}, approved: false, skipped: false
+      });
+    });
+  });
+
+  if (!suggestedMoves.length) { alert('All scheduled equipment is already at its destination — or no jobs with equipment found in the next 3 days.'); return; }
+  _lbAISuggestions = suggestedMoves;
+  _lbAIApprovalModal(suggestedMoves);
+}
+
+function _lbAIGroupLoads(items) {
+  var loads = [];
+  var remaining = items.slice();
+  var monsters = remaining.filter(function(eq) { return (_LB_RULES[eq.type]||{}).loadClass === 'monster'; });
+  remaining = remaining.filter(function(eq) { var cls = (_LB_RULES[eq.type]||{}).loadClass; return cls !== 'monster' && cls !== 'skip'; });
+  monsters.forEach(function(eq) { loads.push([eq]); });
+
+  var heavies = remaining.filter(function(eq) { return (_LB_RULES[eq.type]||{}).loadClass === 'heavy'; });
+  remaining = remaining.filter(function(eq) { return (_LB_RULES[eq.type]||{}).loadClass !== 'heavy'; });
+  heavies.forEach(function(heavy) {
+    var load = [heavy];
+    var pairWith = (_LB_RULES[heavy.type]||{}).canPairWith || [];
+    var toAdd = remaining.filter(function(eq) { return pairWith.indexOf(eq.type) !== -1; });
+    toAdd.forEach(function(eq) { load.push(eq); remaining = remaining.filter(function(r) { return r.id !== eq.id; }); });
+    loads.push(load);
+  });
+
+  while (remaining.length) {
+    var anchor = remaining[0]; remaining = remaining.slice(1);
+    var load = [anchor];
+    var anchorPairs = (_LB_RULES[anchor.type]||{}).canPairWith || [];
+    var i = 0;
+    while (i < remaining.length) {
+      var candidate = remaining[i];
+      var candidatePairs = (_LB_RULES[candidate.type]||{}).canPairWith || [];
+      if (anchorPairs.indexOf(candidate.type) !== -1 && candidatePairs.indexOf(anchor.type) !== -1) {
+        load.push(candidate); remaining.splice(i, 1);
+      } else { i++; }
+    }
+    loads.push(load);
+  }
+  return loads;
+}
+
+function _lbAISaveMoveRecord(move) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var ts = Date.now();
+  groups.push({
+    id: 'ai_' + ts, jobGroupId: 'job_' + move.to + '_' + ts, manual: true,
+    date: move.date, driverName: '', from: move.from, to: move.to,
+    deadline: move.deadline, notes: '', items: move.items,
+    status: 'pending', createdAt: ts, autoGenerated: true,
+    isRental: false, rentalService: null, rentalHours: 2, rentalMileage: 0,
+    estimatedCost: 0, actualHours: null, actualCost: null
+  });
+  localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+  try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+}
+
+function _lbAIApproveMove(idx) {
+  var move = _lbAISuggestions[idx];
+  if (!move || move.approved) return;
+  _lbAISaveMoveRecord(move);
+  _lbAISuggestions[idx].approved = true;
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+  _lbAIApprovalModal(_lbAISuggestions);
+}
+
+function _lbAISkipMove(idx) {
+  if (!_lbAISuggestions[idx]) return;
+  _lbAISuggestions[idx].skipped = true;
+  _lbAIApprovalModal(_lbAISuggestions);
+}
+
+function _lbAIConfirmFlagged(moveIdx, eqId, checked) {
+  if (!_lbAISuggestions[moveIdx]) return;
+  _lbAISuggestions[moveIdx].confirmations[eqId] = checked;
+  _lbAIApprovalModal(_lbAISuggestions);
+}
+
+function _lbAIApproveAll() {
+  _lbAISuggestions.forEach(function(move, idx) {
+    if (move.skipped || move.approved) return;
+    var hasPending = (move.flagged||[]).some(function(f) { return !move.confirmations[f.id]; });
+    if (!hasPending) { _lbAISaveMoveRecord(move); _lbAISuggestions[idx].approved = true; }
+  });
+  if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+  _lbAIApprovalModal(_lbAISuggestions);
+}
+
+function _lbAIApprovalModal(suggestedMoves) {
+  var root = _lbModalRoot();
+  var dateRange = '';
+  if (suggestedMoves.length) {
+    var _dates = suggestedMoves.map(function(m) { return m.date; }).filter(function(d,i,a) { return a.indexOf(d)===i; }).sort();
+    var _fmt = function(d) { var p=d.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1])-1]+' '+parseInt(p[2]); };
+    dateRange = _dates.length===1 ? _fmt(_dates[0]) : _fmt(_dates[0])+' – '+_fmt(_dates[_dates.length-1]);
+  }
+  var tierColors = { light:'#7ecb8f', medium:'#f5c518', heavy:'#e8813a', monster:'#e05555' };
+  var tierLabels = { light:'Light Load', medium:'Medium Load', heavy:'Heavy Load', monster:'Solo Monster' };
+  var movesHtml = suggestedMoves.map(function(move, idx) {
+    if (move.skipped) return '';
+    var tc = tierColors[move.suggestedClass]||'#aaa', tl = tierLabels[move.suggestedClass]||move.suggestedClass;
+    var itemsHtml = move.items.map(function(it) {
+      var isFl = (move.flagged||[]).find(function(f) { return f.id === it.id; });
+      return '<div style="display:flex;align-items:center;gap:5px;padding:2px 0;">' +
+        '<span>' + ((_lbEqIcons[it.type])||'📦') + '</span>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);">' + escHtml(it.name) + '</span>' +
+        (isFl ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#e8813a;"> ⚠️ ' + escHtml(isFl.reason) + '</span>' : '') +
+      '</div>';
+    }).join('');
+    var flagChecks = (move.flagged||[]).map(function(f) {
+      return '<label style="display:flex;align-items:center;gap:6px;margin-top:5px;cursor:pointer;">' +
+        '<input type="checkbox" onchange="_lbAIConfirmFlagged(' + idx + ',\'' + f.id.replace(/'/g,'') + '\',this.checked)"' + (move.confirmations[f.id]?' checked':'') + ' style="cursor:pointer;accent-color:#e8813a;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:#e8813a;">Confirm <b>' + escHtml(f.name) + '</b> is OK to move</span>' +
+      '</label>';
+    }).join('');
+    var dlFmt = '';
+    try { var _dl=new Date(move.deadline); dlFmt=_dl.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' at '+_dl.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); } catch(e2) { dlFmt=move.deadline; }
+    var hasPending = (move.flagged||[]).some(function(f) { return !move.confirmations[f.id]; });
+    return '<div style="background:' + (move.approved?'rgba(126,203,143,0.06)':'var(--asphalt)') + ';border:1px solid ' + (move.approved?'rgba(126,203,143,0.35)':'rgba(255,255,255,0.07)') + ';border-radius:8px;padding:12px;margin-bottom:8px;">' +
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">' + escHtml(move.fromName) + '</span>' +
+        '<span style="color:var(--concrete-dim);">→</span>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--white);flex:1;">' + escHtml(move.toName) + '</span>' +
+        '<span style="background:' + tc + '22;border:1px solid ' + tc + '66;border-radius:4px;padding:2px 7px;font-family:\'DM Mono\',monospace;font-size:8px;color:' + tc + ';white-space:nowrap;">' + tl + '</span>' +
+      '</div>' +
+      '<div style="padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:5px;margin-bottom:8px;">' + itemsHtml + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);margin-bottom:' + (flagChecks?'0':'8px') + ';">⏰ Deadline: <span style="color:var(--concrete);">' + escHtml(dlFmt) + '</span></div>' +
+      (flagChecks ? '<div style="background:rgba(232,129,58,0.06);border:1px solid rgba(232,129,58,0.2);border-radius:5px;padding:8px;margin-bottom:8px;">' + flagChecks + '</div>' : '') +
+      (move.approved
+        ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#7ecb8f;padding:4px 0;">✅ Approved</div>'
+        : '<div style="display:flex;gap:6px;">' +
+            '<button onclick="_lbAIApproveMove(' + idx + ')" ' + (hasPending?'disabled style="opacity:0.45;cursor:not-allowed;':'style="cursor:pointer;') + 'flex:1;background:rgba(126,203,143,0.1);border:1px solid rgba(126,203,143,0.4);border-radius:5px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;padding:8px;min-height:44px;">✅ Approve</button>' +
+            '<button onclick="_lbAISkipMove(' + idx + ')" style="flex:1;background:rgba(255,100,100,0.06);border:1px solid rgba(255,100,100,0.3);border-radius:5px;color:#ff8080;font-family:\'DM Mono\',monospace;font-size:9px;padding:8px;min-height:44px;cursor:pointer;">❌ Skip</button>' +
+          '</div>') +
+    '</div>';
+  }).join('');
+
+  var readyCount  = suggestedMoves.filter(function(m) { return !m.skipped && !m.approved && !(m.flagged||[]).some(function(f){return !m.confirmations[f.id];}); }).length;
+  var flagCount   = suggestedMoves.filter(function(m) { return !m.skipped && !m.approved && (m.flagged||[]).some(function(f){return !m.confirmations[f.id];}); }).length;
+  var approvedCnt = suggestedMoves.filter(function(m) { return m.approved; }).length;
+  var visibleCount = suggestedMoves.filter(function(m) { return !m.skipped; }).length;
+
+  root.innerHTML =
+    '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9700;display:flex;align-items:flex-end;justify-content:center;">' +
+      '<div onclick="event.stopPropagation()" style="background:var(--asphalt-mid);border:1px solid rgba(245,197,24,0.25);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,0.7);">' +
+        '<div style="padding:14px 16px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">' +
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:var(--stripe);">🤖 AI Lowbed Suggestions — ' + escHtml(dateRange) + '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:3px;">' + visibleCount + ' moves' + (flagCount?' · <span style="color:#e8813a;">' + flagCount + ' flagged for review</span>':'') + '</div>' +
+        '</div>' +
+        '<div style="flex:1;overflow-y:auto;padding:12px 14px;">' +
+          movesHtml +
+          (!visibleCount ? '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:20px;">All moves skipped.</div>' : '') +
+        '</div>' +
+        '<div style="padding:12px 14px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:8px;">' + readyCount + ' ready · ' + flagCount + ' flagged · ' + approvedCnt + ' approved</div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button onclick="_lbAIApproveAll()" style="flex:1;background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.5);border-radius:6px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:10px;min-height:48px;cursor:pointer;">✅ Approve All Ready</button>' +
+            '<button onclick="_lbModalClose()" style="flex:1;background:rgba(255,100,100,0.06);border:1px solid rgba(255,100,100,0.3);border-radius:6px;color:#ff8080;font-family:\'DM Mono\',monospace;font-size:10px;padding:10px;min-height:48px;cursor:pointer;">❌ Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+// ── Schedule Conflict Detection ──────────────────────────────────────────────
+
+function _lbCheckScheduleConflicts() {
+  if (typeof schedData === 'undefined') { alert('Schedule data not loaded.'); return; }
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var today = new Date(); today.setHours(0,0,0,0);
+  var days = [];
+  for (var di = 0; di < 3; di++) {
+    var _d = new Date(today); _d.setDate(_d.getDate() + di);
+    var _dk = _d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0');
+    days.push(_dk);
+  }
+
+  // Build schedule index: jobId+dateKey → Set of eqIds
+  var schedIdx = {};
+  days.forEach(function(dateKey) {
+    var dd = schedData[dateKey] || {};
+    var allSlots = [];
+    ['top','bottom'].forEach(function(sk) { if (dd[sk] && dd[sk].fields) allSlots.push(dd[sk]); });
+    (dd.extras||[]).forEach(function(ex) { if (ex&&ex.data&&ex.data.fields) allSlots.push(ex.data); });
+    allSlots.forEach(function(slot) {
+      var f = slot.fields;
+      if (!f||!f.equipment) return;
+      var eqArr = []; try { eqArr = JSON.parse(f.equipment); } catch(e) { return; }
+      if (!eqArr.length) return;
+      var jMatch = bl.find(function(j) {
+        var jn=(j.jobNum||j.number||j.num||'').toString().trim().toLowerCase();
+        var fn=(f.jobNum||'').toString().trim().toLowerCase();
+        return (fn&&jn&&fn===jn)||(f.jobName&&j.name&&f.jobName.trim().toLowerCase()===j.name.trim().toLowerCase());
+      });
+      if (!jMatch) return;
+      var k = jMatch.id + '|' + dateKey;
+      if (!schedIdx[k]) schedIdx[k] = {};
+      eqArr.forEach(function(eq) { schedIdx[k][eq.id] = true; });
+    });
+  });
+
+  var conflicts = [];
+  groups.forEach(function(move) {
+    if (move.status !== 'pending' || !move.autoGenerated) return;
+    var onSched = days.some(function(dateKey) {
+      var k = move.to + '|' + dateKey;
+      return schedIdx[k] && (move.items||[]).some(function(item) { return schedIdx[k][item.id]; });
+    });
+    if (!onSched) {
+      var jb = bl.find(function(j) { return String(j.id) === String(move.to); });
+      var destName = jb ? ((jb.num?'#'+jb.num+' — ':'')+(jb.name||move.to)) : _lbGetEquipLocationName(move.to);
+      conflicts.push({ moveId: move.id, move: move, toName: destName, reason: 'Equipment no longer scheduled for this job in the next 3 days' });
+    }
+  });
+
+  if (!conflicts.length) { alert('✅ No conflicts found. All pending auto-generated moves match the current schedule.'); return; }
+  _lbConflictsModal(conflicts);
+}
+
+function _lbConflictsModal(conflicts) {
+  var root = _lbModalRoot();
+  var cardsHtml = conflicts.map(function(c) {
+    var itemsHtml = (c.move.items||[]).map(function(it) {
+      return '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete);background:rgba(255,255,255,0.04);border-radius:3px;padding:1px 5px;">' + (_lbEqIcons[it.type]||'📦') + ' ' + escHtml(it.name) + '</span>';
+    }).join(' ');
+    return '<div style="background:var(--asphalt);border:1px solid rgba(232,129,58,0.3);border-radius:8px;padding:12px;margin-bottom:8px;">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#e8813a;margin-bottom:4px;">⚠️ ' + escHtml(c.toName) + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:6px;">' + escHtml(c.reason) + '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">' + itemsHtml + '</div>' +
+      '<div style="display:flex;gap:6px;">' +
+        '<button onclick="_lbConflictAction(\'regen\',\'' + c.moveId.replace(/'/g,'') + '\')" style="flex:1;background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:5px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:8px;min-height:44px;cursor:pointer;font-weight:700;">🔄 Regenerate</button>' +
+        '<button onclick="_lbConflictAction(\'keep\',\'' + c.moveId.replace(/'/g,'') + '\')" style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:5px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:8px;min-height:44px;cursor:pointer;">Keep</button>' +
+        '<button onclick="_lbConflictAction(\'cancel\',\'' + c.moveId.replace(/'/g,'') + '\')" style="flex:1;background:rgba(255,100,100,0.06);border:1px solid rgba(255,100,100,0.3);border-radius:5px;color:#ff8080;font-family:\'DM Mono\',monospace;font-size:9px;padding:8px;min-height:44px;cursor:pointer;">Cancel Move</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  root.innerHTML =
+    '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9700;display:flex;align-items:flex-end;justify-content:center;">' +
+      '<div onclick="event.stopPropagation()" style="background:var(--asphalt-mid);border:1px solid rgba(232,129,58,0.35);border-radius:12px 12px 0 0;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,0.7);">' +
+        '<div style="padding:14px 16px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">' +
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#e8813a;">🔄 Schedule Conflicts — ' + conflicts.length + ' found</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:3px;">Auto-generated moves that no longer match the current schedule</div>' +
+        '</div>' +
+        '<div style="flex:1;overflow-y:auto;padding:12px 14px;">' + cardsHtml + '</div>' +
+        '<div style="padding:12px 14px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">' +
+          '<button onclick="_lbModalClose()" style="width:100%;background:none;border:1px solid var(--asphalt-light);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:10px;min-height:48px;cursor:pointer;">Close</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function _lbConflictAction(action, moveId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  if (action === 'cancel' || action === 'regen') {
+    groups = groups.map(function(m) { if (m.id === moveId) m.status = 'cancelled'; return m; });
+    localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+    try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+    if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+  }
+  _lbModalClose();
+  if (action === 'regen') setTimeout(_lbAIGenerate, 150);
 }
 
 function _lbJobNumAutofill(jobNum) {
@@ -20081,6 +20451,52 @@ function _lbManualMoveSave() {
   try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
   _lbModalClose();
   if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
+}
+
+// ── Equipment Page — By Job cleanout modal (sets cleanoutApproved) ────────────
+
+function _fleetByJobCleanoutModal(jobId) {
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var jb = bl.find(function(j) { return String(j.id) === String(jobId); });
+  var jobName = jb ? ((jb.num ? '#' + jb.num + ' — ' : '') + (jb.name || jobId)) : jobId;
+  var root = _lbModalRoot();
+  root.innerHTML =
+    '<div onclick="_lbModalClose()" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;">' +
+      '<div onclick="event.stopPropagation()" style="background:var(--asphalt-mid);border:1px solid rgba(126,203,143,0.35);border-radius:10px;padding:20px;max-width:360px;width:100%;font-family:\'DM Mono\',monospace;">' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#7ecb8f;margin-bottom:12px;">🏁 Mark Job Complete — ' + escHtml(jobName) + '</div>' +
+        '<div style="font-size:11px;color:var(--concrete);margin-bottom:6px;">Equipment at this job will be available for reassignment. Drivers will be notified.</div>' +
+        '<div style="font-size:9px;color:var(--concrete-dim);margin-bottom:16px;">This job will appear as "Approved for Cleanout" and the AI generator can pull equipment from it.</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+          '<button onclick="_lbModalClose()" style="background:none;border:1px solid var(--asphalt-light);border-radius:4px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;padding:6px 14px;cursor:pointer;">Cancel</button>' +
+          '<button onclick="_fleetByJobCleanoutConfirm(\'' + String(jobId).replace(/'/g,'') + '\')" style="background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.4);border-radius:4px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:10px;padding:6px 14px;cursor:pointer;font-weight:700;">Approve Cleanout</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function _fleetByJobCleanoutConfirm(jobId) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var accounts = [];
+  try { accounts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]'); } catch(e) {}
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var jb = bl.find(function(j) { return String(j.id) === String(jobId); });
+  var jobName = jb ? ((jb.num ? '#' + jb.num + ' — ' : '') + (jb.name || jobId)) : jobId;
+  var drivers = new Set();
+  groups.forEach(function(m) {
+    if (String(m.to) !== String(jobId)) return;
+    m.cleanoutApproved = true;
+    if (m.driverName) drivers.add(m.driverName);
+  });
+  localStorage.setItem('dmc_lowbed_groups', JSON.stringify(groups));
+  try { if (typeof fbSet === 'function') fbSet('lowbed_groups', groups); } catch(e) {}
+  drivers.forEach(function(driverName) {
+    var acct = accounts.find(function(a) { return (a.displayName||'').toLowerCase() === driverName.toLowerCase(); });
+    pushNotif('info', '🏁 Job Complete', jobName + ' is complete — equipment available for pickup.', null, acct ? acct.username : null, null);
+  });
+  _lbModalClose();
+  var el = document.getElementById('equipmentFleetView');
+  if (el && typeof renderEquipmentFleet === 'function') renderEquipmentFleet(el);
 }
 
 function _lbResolveLabel(toVal) {
@@ -20452,6 +20868,7 @@ function _lbCleanoutConfirm(groupId) {
       : (m.to && m.to !== '__garage__') ? 'job_' + m.to : 'single_' + m.id;
     if (k === groupId) {
       m.status = 'complete';
+      m.cleanoutApproved = true;
       if (!destLabel) destLabel = _lbResolveLabel(m.to);
       if (m.driverName) drivers.add(m.driverName);
     }
@@ -20905,6 +21322,7 @@ function _fleetBuildCard(eq) {
       (eq.weightClass ? (function(){ var wc=FLEET_WEIGHT_CLASSES.find(function(w){return w.key===eq.weightClass;}); return wc?'<span style="background:rgba(0,0,0,0.2);color:'+wc.color+';font-family:\'DM Mono\',monospace;font-size:8px;font-weight:700;border-radius:4px;padding:2px 6px;border:1px solid '+wc.color+'55;">'+wc.label.toUpperCase()+'</span>':''; })() : '')+
       (openIssues ? '<span style="background:rgba(217,79,61,0.15);color:var(--red);font-family:\'DM Mono\',monospace;font-size:8px;font-weight:700;border-radius:4px;padding:2px 6px;">'+openIssues+' issue'+(openIssues>1?'s':'')+'</span>' : '')+
       (eq.assignedJobName ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--stripe);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">📍 '+escHtml(eq.assignedJobName)+'</span>' : '')+
+      (function(){ var _li=_lbGetEquipLocation(eq.id); return (_li&&_li!=='__garage__')?'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#5ab4f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">🚚 '+escHtml(_lbGetEquipLocationName(eq.id))+'</span>':''; })()+
     '</div>'+
     (eq.statusNote ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:10px;color:'+si.color+';background:'+si.bg+';border-radius:var(--radius);padding:4px 8px;margin-bottom:6px;">'+escHtml(eq.statusNote)+'</div>' : '')+
     gpsRow+
@@ -21084,6 +21502,53 @@ function _fleetBuildStatusSections(filtered) {
       '</div>';
   });
   return html || '<div style="padding:60px;text-align:center;color:var(--concrete-dim);font-size:13px;">No equipment matches your filter.</div>';
+}
+
+// ── Equipment Page — By Job view (lowbed-tracked location) ───────────────────
+
+function _fleetBuildByJobSections(filtered) {
+  var groups = [];
+  try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e) {}
+  var bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+
+  // Group equipment by lowbed-tracked location
+  var byJob = {}, atShop = [];
+  filtered.forEach(function(eq) {
+    var locId = _lbGetEquipLocation(eq.id);
+    if (locId === '__garage__') {
+      atShop.push(eq);
+    } else {
+      if (!byJob[locId]) byJob[locId] = { jobId: locId, eqs: [] };
+      byJob[locId].eqs.push(eq);
+    }
+  });
+
+  var html = '';
+
+  // Job cards
+  var jobIds = Object.keys(byJob).sort(function(a, b) {
+    var ja = bl.find(function(j) { return String(j.id)===a; });
+    var jb2 = bl.find(function(j) { return String(j.id)===b; });
+    return ((ja&&ja.num)||'').localeCompare((jb2&&jb2.num)||'');
+  });
+  jobIds.forEach(function(jobId) {
+    var entry = byJob[jobId];
+    var jb = bl.find(function(j) { return String(j.id) === String(jobId); });
+    var title = jb ? ((jb.num ? '#' + jb.num + ' — ' : '') + (jb.name || jobId)) : jobId;
+    var subtitle = jb ? (jb.gc ? 'GC: ' + jb.gc : '') : '';
+    var hasCleanout = groups.some(function(m) { return m.to === jobId && (m.cleanoutApproved === true || m.status === 'complete'); });
+    var cleanoutBadge = hasCleanout
+      ? '<span style="background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);border-radius:4px;padding:2px 8px;font-family:\'DM Mono\',monospace;font-size:8px;color:#7ecb8f;margin-left:6px;white-space:nowrap;">✓ Cleanout Approved</span>'
+      : (isAdmin() ? '<button onclick="event.stopPropagation();_fleetByJobCleanoutModal(\'' + String(jobId).replace(/'/g,'') + '\')" style="background:rgba(255,100,100,0.08);border:1px solid rgba(255,100,100,0.3);border-radius:4px;padding:3px 9px;font-family:\'DM Mono\',monospace;font-size:8px;color:#ff8080;cursor:pointer;white-space:nowrap;margin-left:6px;">🏁 Cleanout</button>' : '');
+    html += _fleetBuildLocationCard(title, '📍', subtitle || 'Lowbed-tracked location', entry.eqs, 'var(--stripe)', cleanoutBadge);
+  });
+
+  // At shop card
+  if (atShop.length) {
+    html += _fleetBuildLocationCard('AT SHOP', '🏠', 'Last known location: Garage / no move history', atShop, '#5ab4f5', '');
+  }
+
+  return html || '<div style="padding:60px;text-align:center;color:var(--concrete-dim);font-size:13px;">No lowbed move history found. Create moves to track equipment location.</div>';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -21400,6 +21865,8 @@ function renderEquipmentFleet(containerEl) {
     bodyHTML = _fleetBuildStatusSections(filtered);
   } else if (_fleetGroupBy === 'category') {
     bodyHTML = categorySections || '<div style="padding:60px;text-align:center;color:var(--concrete-dim);font-size:13px;">No equipment matches your filter.</div>';
+  } else if (_fleetGroupBy === 'job') {
+    bodyHTML = _fleetBuildByJobSections(filtered);
   } else {
     if (!filtered.length && active.length) {
       bodyHTML = '<div style="padding:60px;text-align:center;color:var(--concrete-dim);font-size:13px;">No equipment matches your filter.</div>';
@@ -21421,6 +21888,7 @@ function renderEquipmentFleet(containerEl) {
       _gbBtn('location','By Location')+
       _gbBtn('category','By Category')+
       _gbBtn('status',  'By Status'  )+
+      _gbBtn('job',     'By Job'     )+
     '</div>';
 
   containerEl.innerHTML =
