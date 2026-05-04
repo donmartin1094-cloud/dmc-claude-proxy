@@ -4037,6 +4037,83 @@ function invToggleStatus(id, field) {
   renderInvoiceTracker();
 }
 
+// ── Approve modal ──────────────────────────────────────────────────────────────
+function _invApproveModal(invId) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  var billed = invCardBilledTotal(inv);
+  var billedStr = invFmt(billed);
+  var titleLabel = escHtml(inv.invoiceNo || inv.jobName || invId);
+
+  var ov = document.createElement('div');
+  ov.id = '_invApproveOverlay_' + invId;
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9700;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = '<div style="background:#1c1c1c;border:1px solid rgba(255,255,255,0.12);border-radius:10px;width:90vw;max-width:400px;max-height:80vh;overflow-y:auto;padding:20px;font-family:\'DM Sans\',sans-serif;color:#fff;box-sizing:border-box;">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:14px;">&#x2705; Approve Invoice — ' + titleLabel + '</div>'
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;color:#f5c518;line-height:1;">' + billedStr + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:16px;">Billed Amount</div>'
+    + '<div style="font-size:13px;font-weight:600;margin-bottom:14px;">Is the billed amount correct?</div>'
+    + '<button onclick="_invApproveYes(\'' + invId + '\')" style="display:block;width:100%;min-height:48px;background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);border-radius:6px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;padding:12px;margin-bottom:8px;box-sizing:border-box;">&#x2705; Yes — Approve as Billed</button>'
+    + '<button id="_invAppNobtn_' + invId + '" onclick="_invApproveShowNo(\'' + invId + '\')" style="display:block;width:100%;min-height:48px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:rgba(255,255,255,0.7);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;padding:12px;box-sizing:border-box;">✗ No — Enter Different Amount</button>'
+    + '<div id="_invAppNoform_' + invId + '" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">'
+    +   '<div style="margin-bottom:10px;">'
+    +     '<label style="display:block;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:4px;">Approved Amount</label>'
+    +     '<input id="_invAppAmt_' + invId + '" type="number" step="0.01" value="' + billed.toFixed(2) + '" style="width:100%;box-sizing:border-box;background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.45);border-radius:4px;color:#fff;font-family:\'DM Sans\',sans-serif;font-size:14px;padding:8px 10px;outline:none;">'
+    +   '</div>'
+    +   '<div style="margin-bottom:14px;">'
+    +     '<label style="display:block;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:4px;">Discrepancy Notes</label>'
+    +     '<textarea id="_invAppNotes_' + invId + '" placeholder="Describe the discrepancy..." style="width:100%;box-sizing:border-box;background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.45);border-radius:4px;color:#fff;font-family:\'DM Sans\',sans-serif;font-size:13px;padding:8px 10px;outline:none;resize:vertical;min-height:60px;"></textarea>'
+    +   '</div>'
+    +   '<button onclick="_invApproveConfirmNo(\'' + invId + '\')" style="display:block;width:100%;min-height:48px;background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);border-radius:6px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;padding:12px;margin-bottom:8px;box-sizing:border-box;">&#x2705; Confirm Approval</button>'
+    +   '<button onclick="_invApproveClose(\'' + invId + '\')" style="display:block;width:100%;min-height:48px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:rgba(255,255,255,0.5);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;padding:12px;box-sizing:border-box;">Cancel</button>'
+    + '</div>'
+  + '</div>';
+  ov.addEventListener('click', function(e) { if (e.target === ov) _invApproveClose(invId); });
+  document.body.appendChild(ov);
+}
+
+function _invApproveClose(invId) {
+  var ov = document.getElementById('_invApproveOverlay_' + invId);
+  if (ov) ov.remove();
+}
+
+function _invApproveYes(invId) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  inv.approvedAmount = invCardBilledTotal(inv).toFixed(2);
+  inv.approved = true;
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  var card = document.getElementById('inv2-card-' + invId);
+  if (card) card.outerHTML = _invRenderCard(inv);
+  _invApproveClose(invId);
+}
+
+function _invApproveShowNo(invId) {
+  var btn = document.getElementById('_invAppNobtn_' + invId);
+  var form = document.getElementById('_invAppNoform_' + invId);
+  if (btn) btn.style.display = 'none';
+  if (form) form.style.display = 'block';
+}
+
+function _invApproveConfirmNo(invId) {
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  var amtEl = document.getElementById('_invAppAmt_' + invId);
+  var notesEl = document.getElementById('_invAppNotes_' + invId);
+  var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+  if (isNaN(amt) || amt < 0) { alert('Please enter a valid approved amount.'); return; }
+  var notes = notesEl ? notesEl.value.trim() : '';
+  inv.approvedAmount = amt.toFixed(2);
+  inv.approved = true;
+  if (notes) inv.invoiceNotes = (inv.invoiceNotes ? inv.invoiceNotes + '\n' + notes : notes);
+  inv.updatedAt = Date.now();
+  saveInvoiceList();
+  var card = document.getElementById('inv2-card-' + invId);
+  if (card) card.outerHTML = _invRenderCard(inv);
+  _invApproveClose(invId);
+}
+
 // ── Delete invoice ─────────────────────────────────────────────────────────────
 function deleteInvoice(id) {
   if (!confirm('Delete this invoice entry?')) return;
@@ -4095,7 +4172,7 @@ function _invRenderCard(inv) {
     +     '<span class="inv2-inv-badge">' + edSpan('invoiceNo', inv.invoiceNo || 'INV #') + '</span>'
     +     '<div class="inv2-status-btns">'
     +       '<button class="inv2-status-btn' + (inv.printed ? ' inv2-status-printed' : '') + '" onclick="event.stopPropagation();invToggleStatus(\'' + inv.id + '\',\'printed\')">' + (inv.printed ? '✔ Printed' : '🖨 Print') + '</button>'
-    +       '<button class="inv2-status-btn' + (inv.approved ? ' inv2-status-approved' : '') + '" onclick="event.stopPropagation();invToggleStatus(\'' + inv.id + '\',\'approved\')">' + (inv.approved ? '✔ Approved' : '✅ Approve') + '</button>'
+    +       '<button class="inv2-status-btn' + (inv.approved ? ' inv2-status-approved' : '') + '" onclick="event.stopPropagation();' + (inv.approved ? 'invToggleStatus(\'' + inv.id + '\',\'approved\')' : '_invApproveModal(\'' + inv.id + '\')') + '">' + (inv.approved ? '✔ Approved' : '✅ Approve') + '</button>'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -4134,7 +4211,7 @@ function _invRenderCard(inv) {
     // ── MIX SECTION ─────────────────────────────────────────────────────────
     + '<div class="inv2-mix-section">'
     +   '<div class="inv2-mix-header">'
-    +     '<span>Mix Type</span><span style="text-align:right;">Tons</span><span style="text-align:right;">$/ton</span><span style="text-align:right;">Total</span><span></span>'
+    +     '<span style="text-align:center;">Mix Type</span><span style="text-align:center;">Tons</span><span style="text-align:center;">$/ton</span><span style="text-align:center;">Total</span><span></span>'
     +   '</div>'
     +   '<div data-mix-body="' + inv.id + '">' + _invMixRowsHtml(inv) + '</div>'
     +   (canEdit ? '<button class="inv2-add-mix" onclick="event.stopPropagation();invAddMixRowToCard(\'' + inv.id + '\')">+ Add Mix Type</button>' : '')
