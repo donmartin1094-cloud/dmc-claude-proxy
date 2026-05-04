@@ -25942,6 +25942,9 @@ const DEFAULT_TEAM_ACCOUNTS = [
   // ── Rental Lowbed Drivers ─────────────────────────────────────────────────
   { username:'ATow',        password:'DMCTow2025',                        role:'rental_lowbed_driver', displayName:"Andy's Towing" },
   { username:'Chris',       email:'chris@donmartincorp.com',              password:'Projectdev',       role:'admin',    displayName:'Chris', readOnly:true },
+  // ── Foremans ──────────────────────────────────────────────────────────────
+  { username:'fjoaquim',    email:'fjoaquim@donmartincorp.com',           password:'DMC2024!',         role:'foreman',  displayName:'Filipe Joaquim', active:true, driverTypes:[] },
+  { username:'marruda',     email:'marruda@donmartincorp.com',            password:'DMC2024!',         role:'foreman',  displayName:'Mario Arruda',   active:true, driverTypes:[] },
 ];
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog
@@ -26496,6 +26499,21 @@ async function initApp(username) {
         localStorage.setItem('dmc_u', 'marruda');
         _checkLocalStorageSize();
         username = 'marruda';
+      }
+      // Ensure foreman accounts exist in stored roster
+      var _foremanDefaults = [
+        { username:'fjoaquim', displayName:'Filipe Joaquim', email:'fjoaquim@donmartincorp.com', password:'DMC2024!', role:'foreman', active:true, driverTypes:[] },
+        { username:'marruda',  displayName:'Mario Arruda',   email:'marruda@donmartincorp.com',  password:'DMC2024!', role:'foreman', active:true, driverTypes:[] }
+      ];
+      var _changed = false;
+      _foremanDefaults.forEach(function(fd) {
+        var exists = _accts.find(function(a) { return (a.username || '').toLowerCase() === fd.username; });
+        if (!exists) { _accts.push(fd); _changed = true; }
+      });
+      if (_changed) {
+        localStorage.setItem(_acctKey, JSON.stringify(_accts));
+        _checkLocalStorageSize();
+        if (typeof fbSet === 'function') fbSet('accounts', _accts);
       }
     } catch(e) {}
   })();
