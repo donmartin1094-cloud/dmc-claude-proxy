@@ -2817,10 +2817,12 @@ function renderExtraBlock(key, idx, ex, isLast) {
       }
       return `<div class="sched-field sched-field-operators">
         <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
-        <div class="op-chips-wrap mat-chips-wrap">${chips}
-          <input class="mat-inline-search" placeholder="Search mix…" autocomplete="off"
-            onfocus="openMatSearchFromInline(this,'${key}','${slot}')"
-            oninput="openMatSearchFromInline(this,'${key}','${slot}')" />
+        <div class="op-chips-wrap ${f.type === 'material' ? 'mat-chips-wrap' : ''}">${chips}
+          ${f.type === 'material'
+            ? `<input class="mat-inline-search" placeholder="Search mix…" autocomplete="off"
+                onfocus="openMatSearchFromInline(this,'${key}','${slot}')"
+                oninput="openMatSearchFromInline(this,'${key}','${slot}')" />`
+            : `<button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openPickerDropdown('${key}','${slot}','${f.key}','${f.type}')">+</button>`}
         </div>
       </div>`;
     }
@@ -5449,7 +5451,12 @@ function selectSchedJobName(e, key, slot, name, num) {
   const nameEl = document.querySelector(`[data-key="${key}"][data-slot="${slot}"][data-field="jobName"]`);
   if (nameEl) {
     nameEl.value = name;
-    if (typeof saveSchedField === 'function') saveSchedField(nameEl);
+    if (slot.startsWith('extra_')) {
+      var _snIdx = parseInt(slot.replace('extra_',''));
+      saveSchedFieldExtra(nameEl, key, _snIdx);
+    } else {
+      if (typeof saveSchedField === 'function') saveSchedField(nameEl);
+    }
     autoResize(nameEl);
   }
   // Auto-fill job # if blank
@@ -5457,16 +5464,29 @@ function selectSchedJobName(e, key, slot, name, num) {
     const numEl = document.querySelector(`[data-key="${key}"][data-slot="${slot}"][data-field="jobNum"]`);
     if (numEl && !numEl.value.trim()) {
       numEl.value = num;
-      if (typeof saveSchedField === 'function') saveSchedField(numEl);
+      if (slot.startsWith('extra_')) {
+        var _snIdx2 = parseInt(slot.replace('extra_',''));
+        saveSchedFieldExtra(numEl, key, _snIdx2);
+      } else {
+        if (typeof saveSchedField === 'function') saveSchedField(numEl);
+      }
       autoResize(numEl);
     }
     // Also update schedData directly
-    if (!schedData[key]) schedData[key] = {};
-    if (!schedData[key][slot]) schedData[key][slot] = { type:'blank', fields:{} };
-    if (!schedData[key][slot].fields) schedData[key][slot].fields = {};
-    if (!schedData[key][slot].fields.jobNum) {
-      schedData[key][slot].fields.jobNum = num;
-      saveSchedData();
+    if (slot.startsWith('extra_')) {
+      var _snIdx3 = parseInt(slot.replace('extra_',''));
+      if (schedData[key]?.extras?.[_snIdx3]?.data?.fields && !schedData[key].extras[_snIdx3].data.fields.jobNum) {
+        schedData[key].extras[_snIdx3].data.fields.jobNum = num;
+        saveSchedData();
+      }
+    } else {
+      if (!schedData[key]) schedData[key] = {};
+      if (!schedData[key][slot]) schedData[key][slot] = { type:'blank', fields:{} };
+      if (!schedData[key][slot].fields) schedData[key][slot].fields = {};
+      if (!schedData[key][slot].fields.jobNum) {
+        schedData[key][slot].fields.jobNum = num;
+        saveSchedData();
+      }
     }
   }
   const drop = document.getElementById(`sjn-${key}-${slot}`);
