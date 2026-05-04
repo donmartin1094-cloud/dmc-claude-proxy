@@ -5056,6 +5056,15 @@ function switchTab(tab) {
   }
   _historyNavFlag = false;
 
+  // Foreman route guard — block navigation to hidden tabs and redirect to schedule
+  if (typeof getCurrentRole === 'function' && getCurrentRole() === 'foreman' && !isAdmin()) {
+    var _foremanBlockedTabs = ['ap','apMix','apAia','apAnalytics','bids','bid','pricing','priced','awarded','chat','mail'];
+    if (_foremanBlockedTabs.includes(tab)) {
+      switchTab('schedule');
+      return;
+    }
+  }
+
   // Update header folder active state
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',

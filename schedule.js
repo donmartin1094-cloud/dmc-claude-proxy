@@ -1186,6 +1186,7 @@ const DEFAULT_TAB_PERMS = {
   lowbed_driver:   { ap:false, backlog:false, bids:false, chat:false, schedule:false, reports:false, equipment:'view', heimdall:'edit' },
   operator:   { ap:false,  backlog:false,  bids:false,  chat:false,  schedule:false,  reports:false,  equipment:'view', heimdall:false  },
   laborer:    { ap:false,  backlog:false,  bids:false,  chat:false,  schedule:false,  reports:false,  equipment:false,  heimdall:false  },
+  foreman:    { ap:false,  backlog:'view', bids:false,  chat:false,  schedule:'view', reports:'view', equipment:'view', heimdall:'view' },
 };
 
 function cloneDefaultTabPerms() {
@@ -1195,7 +1196,7 @@ function cloneDefaultTabPerms() {
 function hydrateTabPerms(raw) {
   const base = cloneDefaultTabPerms();
   const src = (raw && typeof raw === 'object') ? raw : {};
-  ['admin','controller','qc','staff','driver','lowbed_driver'].forEach(role => {
+  ['admin','controller','qc','staff','driver','lowbed_driver','foreman'].forEach(role => {
     const roleSrc = (src[role] && typeof src[role] === 'object') ? src[role] : {};
     base[role] = { ...base[role], ...roleSrc };
   });
@@ -1632,6 +1633,12 @@ function canSeeTab(tabId) {
   if (role === 'ar_staff') {
     return ['ap', 'apMix', 'apAia', 'schedule', 'reports'].includes(tabId);
   }
+  // Foremans: no AR, Bids, or Chat — evaluated before isHardcodedUser bypass
+  if (role === 'foreman') {
+    var _foremanHiddenTabs = ['ap', 'bids', 'chat'];
+    if (_foremanHiddenTabs.includes(tabId)) return false;
+    return true;
+  }
   // All other hardcoded accounts get full view access
   if (isHardcodedUser()) return true;
   const p = (tabPerms[role] || tabPerms.staff || {})[tabId];
@@ -1749,12 +1756,15 @@ function applyTabPermissions() {
   const role = getCurrentRole();
   const isDriverRole = role === 'driver' || role === 'lowbed_driver';
   const isArStaff    = role === 'ar_staff';
+  const isForeman    = role === 'foreman';
   const isATow       = (localStorage.getItem('dmc_u') || '').toLowerCase() === 'atow';
-  const restrictedHideIds = (isDriverRole || isArStaff || isATow)
-    ? ['tabEmployees','tabMail','tabSettings','toggleSettingsSubTabs','settingsSubTabs',
-       'collNavEmployees','collNavMail','collNavSettings','collNavSettingsSub',
-       'hdrFolderMail','hdrFolderEmp','hdrFolderTakeoffs']
-    : [];
+  const restrictedHideIds = isForeman
+    ? ['tabMail','collNavMail','hdrFolderMail','hdrFolderTakeoffs']
+    : (isDriverRole || isArStaff || isATow)
+      ? ['tabEmployees','tabMail','tabSettings','toggleSettingsSubTabs','settingsSubTabs',
+         'collNavEmployees','collNavMail','collNavSettings','collNavSettingsSub',
+         'hdrFolderMail','hdrFolderEmp','hdrFolderTakeoffs']
+      : [];
   restrictedHideIds.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
