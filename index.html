@@ -4890,7 +4890,7 @@ function pushNotif(type, title, message, jobId, targetUser, actionId) {
 
 function renderNotifBadge() {
   const currentUser = localStorage.getItem('dmc_u') || '';
-  const unread = notifications.filter(n => !n.read && (!n.targetUser || n.targetUser === currentUser)).length;
+  const unread = notifications.filter(n => !n.read && (!n.targetUser || (n.targetUser||'').toLowerCase() === (currentUser||'').toLowerCase())).length;
   const badge = document.getElementById('notifBadge');
   if (!badge) return;
   if (unread > 0) {
@@ -4905,7 +4905,7 @@ function renderNotifList() {
   const el = document.getElementById('notifList');
   if (!el) return;
   const currentUser = localStorage.getItem('dmc_u') || '';
-  const visible = notifications.filter(n => !n.targetUser || n.targetUser === currentUser);
+  const visible = notifications.filter(n => !n.targetUser || (n.targetUser||'').toLowerCase() === (currentUser||'').toLowerCase());
   if (!visible.length) {
     el.innerHTML = '<div style="padding:16px 12px;font-size:12px;color:var(--concrete-dim);text-align:center;">No notifications yet</div>';
     return;
@@ -5627,7 +5627,7 @@ function _homeNotifInlineHtml() {
   var recent = notifications.slice(0, 6);
   var colors = { success:'var(--green)', error:'var(--red)', info:'var(--blue)' };
   var cu = localStorage.getItem('dmc_u') || '';
-  var unread = notifications.filter(function(n){ return !n.read && (!n.targetUser || n.targetUser === cu); }).length;
+  var unread = notifications.filter(function(n){ return !n.read && (!n.targetUser || (n.targetUser||'').toLowerCase() === (cu||'').toLowerCase()); }).length;
   var rows = recent.length
     ? recent.map(function(n) {
         var c = colors[n.type] || 'var(--concrete-dim)';
@@ -8704,12 +8704,12 @@ function _stickyDeleteFromCloud(noteId) {
 
 function widgetStickyNotes() {
   var currentUser = localStorage.getItem('dmc_u') || 'unknown';
-  var myNotes = stickyNotes.filter(function(n) { return n.toUser === currentUser || n.fromUser === currentUser; });
+  var myNotes = stickyNotes.filter(function(n) { return (n.toUser||'').toLowerCase() === (currentUser||'').toLowerCase() || (n.fromUser||'').toLowerCase() === (currentUser||'').toLowerCase(); });
   var recent = myNotes.slice(0, 5);
 
   var notesHtml = recent.length
     ? recent.map(function(n) {
-        var isIncoming = n.toUser === currentUser && n.fromUser !== currentUser;
+        var isIncoming = (n.toUser||'').toLowerCase() === (currentUser||'').toLowerCase() && (n.fromUser||'').toLowerCase() !== (currentUser||'').toLowerCase();
         var label = isIncoming ? '📩 From ' + escHtml(n.fromUser) : '📤 To ' + escHtml(n.toUser);
         var dt = n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
         return '<div style="background:rgba(245,197,24,0.07);border:1px solid rgba(245,197,24,0.2);border-radius:5px;padding:8px 10px;margin-bottom:6px;position:relative;">' +
@@ -8749,7 +8749,7 @@ function _stickyOpenCompose() {
   try {
     var accounts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
     userOpts = accounts
-      .filter(function(a) { return a.username && a.username !== currentUser; })
+      .filter(function(a) { return a.username && (a.username||'').toLowerCase() !== (currentUser||'').toLowerCase(); })
       .map(function(a) { return '<option value="' + escHtml(a.username) + '">' + escHtml(a.displayName || a.username) + '</option>'; })
       .join('');
   } catch(e) {}
@@ -24407,9 +24407,9 @@ function _aiaRenderWorkflowBar() {
   if (!el || !_aiaState) return;
   var s = _aiaState;
   var currentUser = localStorage.getItem('dmc_u') || '';
-  var canSign = (currentUser === 'dj' || currentUser === 'donmartin');
-  var canNotarize = (currentUser === 'danasouza');
-  var canReview = (currentUser === 'dj' || currentUser === 'donmartin');
+  var canSign = ((currentUser||'').toLowerCase() === 'dj' || (currentUser||'').toLowerCase() === 'donmartin');
+  var canNotarize = ((currentUser||'').toLowerCase() === 'danasouza');
+  var canReview = ((currentUser||'').toLowerCase() === 'dj' || (currentUser||'').toLowerCase() === 'donmartin');
   var hasReviewed = (s.reviewedBy||[]).includes(currentUser);
 
   var html = '';
@@ -24489,7 +24489,7 @@ function _aiaSignReq() {
   // Check for stored sig
   try {
     var accounts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
-    var acct = accounts.find(function(a){ return a.username === user; });
+    var acct = accounts.find(function(a){ return (a.username||'').toLowerCase() === (user||'').toLowerCase(); });
     if (acct && acct.sigImage) {
       _aiaState.sigImage = acct.sigImage;
       _aiaState.signedAt = Date.now();
@@ -24503,7 +24503,7 @@ function _aiaSignReq() {
       _aiaPromptSigUpload(user, function(dataUrl) {
         // Save to account
         var accts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
-        var ai = accts.findIndex(function(a){ return a.username === user; });
+        var ai = accts.findIndex(function(a){ return (a.username||'').toLowerCase() === (user||'').toLowerCase(); });
         if (ai >= 0) { accts[ai].sigImage = dataUrl; localStorage.setItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts', JSON.stringify(accts)); }
         _checkLocalStorageSize();
         _aiaState.sigImage = dataUrl;
@@ -24522,7 +24522,7 @@ function _aiaNotarizeReq() {
   var user = localStorage.getItem('dmc_u') || '';
   try {
     var accounts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
-    var acct = accounts.find(function(a){ return a.username === user; });
+    var acct = accounts.find(function(a){ return (a.username||'').toLowerCase() === (user||'').toLowerCase(); });
     if (acct && acct.notarySeal) {
       _aiaState.notarySeal = acct.notarySeal;
       _aiaState.notarizedAt = Date.now();
@@ -24534,7 +24534,7 @@ function _aiaNotarizeReq() {
     } else {
       _aiaPromptSealUpload(user, function(dataUrl) {
         var accts = JSON.parse(localStorage.getItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts') || '[]');
-        var ai = accts.findIndex(function(a){ return a.username === user; });
+        var ai = accts.findIndex(function(a){ return (a.username||'').toLowerCase() === (user||'').toLowerCase(); });
         if (ai >= 0) { accts[ai].notarySeal = dataUrl; localStorage.setItem(typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts', JSON.stringify(accts)); }
         _checkLocalStorageSize();
         _aiaState.notarySeal = dataUrl;
@@ -25567,7 +25567,7 @@ function chatNewConv() {
     try { return JSON.parse(localStorage.getItem('pavescope_accounts') || '[]'); } catch(e) { return []; }
   })();
   const me = chatMe();
-  const others = accounts.filter(a => a.username && a.username !== me);
+  const others = accounts.filter(a => a.username && (a.username||'').toLowerCase() !== (me||'').toLowerCase());
 
   if (!others.length) {
     alert('No other users found. Add users in Settings first.');
@@ -26471,6 +26471,34 @@ function isAdmin() {
 }
 
 async function initApp(username) {
+  // Normalize dmc_u to lowercase for consistent case-insensitive comparisons
+  var _rawU = localStorage.getItem('dmc_u');
+  if (_rawU && _rawU !== _rawU.toLowerCase()) {
+    localStorage.setItem('dmc_u', _rawU.toLowerCase());
+    _checkLocalStorageSize();
+    username = _rawU.toLowerCase();
+  }
+  // One-time migration: correct 'marrudia' → 'marruda' in stored accounts
+  (function() {
+    try {
+      var _acctKey = typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts';
+      var _accts = JSON.parse(localStorage.getItem(_acctKey) || '[]');
+      var _mIdx = _accts.findIndex(function(a) { return (a.username || '').toLowerCase() === 'marrudia'; });
+      if (_mIdx >= 0) {
+        _accts[_mIdx].username = 'marruda';
+        localStorage.setItem(_acctKey, JSON.stringify(_accts));
+        _checkLocalStorageSize();
+        if (typeof fbSet === 'function') fbSet('accounts', _accts);
+      }
+      // Also fix dmc_u if the logged-in user has the old typo
+      var _cu = localStorage.getItem('dmc_u') || '';
+      if (_cu.toLowerCase() === 'marrudia') {
+        localStorage.setItem('dmc_u', 'marruda');
+        _checkLocalStorageSize();
+        username = 'marruda';
+      }
+    } catch(e) {}
+  })();
   // Hard-coded OneStepGPS key — always available
   localStorage.setItem('HEIMDALL_API_KEY', 'mxyIjusLY5jqv9h8DFGQGwj5Sn4ehVfTgy21PgN1F2I');
   _checkLocalStorageSize();
@@ -26625,14 +26653,14 @@ async function initApp(username) {
                   const accounts = JSON.parse(doc.data().data);
                   const acct = accounts.find(a => a.email && a.email.toLowerCase() === (user.email || '').toLowerCase());
                   const username = acct ? acct.username : (user.email || user.uid);
-                  localStorage.setItem('dmc_u', username);
+                  localStorage.setItem('dmc_u', (username || '').toLowerCase());
                   _checkLocalStorageSize();
                 } else {
-                  localStorage.setItem('dmc_u', user.email || user.uid);
+                  localStorage.setItem('dmc_u', (user.email || user.uid || '').toLowerCase());
                   _checkLocalStorageSize();
                 }
               } catch(e) {
-                localStorage.setItem('dmc_u', user.email || user.uid);
+                localStorage.setItem('dmc_u', (user.email || user.uid || '').toLowerCase());
                 _checkLocalStorageSize();
               }
               // If app is not initialised yet, call initApp
@@ -27557,9 +27585,9 @@ function doLogin() {
               if (builtInFromEmail?.username) appUser = builtInFromEmail.username;
             }
           }
-          localStorage.setItem('dmc_u', appUser);
+          localStorage.setItem('dmc_u', (appUser || '').toLowerCase());
           _checkLocalStorageSize();
-          initApp(appUser);
+          initApp((appUser || '').toLowerCase());
           firebaseAuthOk = true;
         } catch(fbErr) {
           const code = fbErr?.code || '';
@@ -27588,7 +27616,7 @@ function doLogin() {
 
       if (acctMatch) {
         console.warn('Logged in via accounts fallback. Firebase Auth record may need migration.');
-        localStorage.setItem('dmc_u', acctMatch.username);
+        localStorage.setItem('dmc_u', (acctMatch.username || '').toLowerCase());
         _checkLocalStorageSize();
         // Auto-create Firebase Auth account so Firestore rules work on next login
         if (typeof firebase !== 'undefined' && firebase.auth && acctMatch.email) {
@@ -27601,7 +27629,7 @@ function doLogin() {
             });
           } catch(e) { /* ignore */ }
         }
-        initApp(acctMatch.username);
+        initApp((acctMatch.username || '').toLowerCase());
         return;
       }
 
@@ -27609,14 +27637,14 @@ function doLogin() {
       const hardcodedUser = Object.keys(USERS).find(k => k.toLowerCase() === input);
       if (hardcodedUser && USERS[hardcodedUser] === p) {
         console.warn('Logged in via hardcoded USERS fallback.');
-        localStorage.setItem('dmc_u', hardcodedUser);
+        localStorage.setItem('dmc_u', hardcodedUser.toLowerCase());
         _checkLocalStorageSize();
         // Auto-create Firebase Auth account
         const _hwAcct = DEFAULT_TEAM_ACCOUNTS.find(a => a.username.toLowerCase() === hardcodedUser.toLowerCase());
         if (typeof firebase !== 'undefined' && firebase.auth && _hwAcct?.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(_hwAcct.email, p).catch(() => {}); } catch(e) {}
         }
-        initApp(hardcodedUser);
+        initApp(hardcodedUser.toLowerCase());
         return;
       }
 
@@ -27624,13 +27652,13 @@ function doLogin() {
       const hardcodedByEmail = DEFAULT_TEAM_ACCOUNTS.find(a => (a.email || '').toLowerCase() === input);
       if (hardcodedByEmail && USERS[hardcodedByEmail.username] === p) {
         console.warn('Logged in via hardcoded email fallback.');
-        localStorage.setItem('dmc_u', hardcodedByEmail.username);
+        localStorage.setItem('dmc_u', (hardcodedByEmail.username || '').toLowerCase());
         _checkLocalStorageSize();
         // Auto-create Firebase Auth account
         if (typeof firebase !== 'undefined' && firebase.auth && hardcodedByEmail.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(hardcodedByEmail.email, p).catch(() => {}); } catch(e) {}
         }
-        initApp(hardcodedByEmail.username);
+        initApp((hardcodedByEmail.username || '').toLowerCase());
         return;
       }
 
@@ -27646,14 +27674,14 @@ function doLogin() {
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.username) {
           console.warn('Logged in via server fallback.');
-          localStorage.setItem('dmc_u', data.username);
+          localStorage.setItem('dmc_u', (data.username || '').toLowerCase());
           _checkLocalStorageSize();
           if (Array.isArray(accounts) && data.email) {
             const hit = accounts.find(a => (a.email || '').toLowerCase() === String(data.email).toLowerCase());
-            if (hit?.username) localStorage.setItem('dmc_u', hit.username);
+            if (hit?.username) localStorage.setItem('dmc_u', (hit.username || '').toLowerCase());
             _checkLocalStorageSize();
           }
-          initApp(localStorage.getItem('dmc_u') || data.username);
+          initApp(localStorage.getItem('dmc_u') || (data.username || '').toLowerCase());
           return;
         }
       } catch (e) {
@@ -27703,9 +27731,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check if savedUser is valid — either in hardcoded USERS or in localStorage accounts
     const storedAccounts = (() => { try { const s = localStorage.getItem(ACCOUNTS_KEY); return s ? JSON.parse(s) : null; } catch(e){ return null; } })();
     const knownUser = (storedAccounts && (
-      storedAccounts.find(a => a.username === savedUser) ||
+      storedAccounts.find(a => (a.username||'').toLowerCase() === savedUser.toLowerCase()) ||
       storedAccounts.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase())
-    )) || USERS[savedUser] || DEFAULT_TEAM_ACCOUNTS.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase());
+    )) || USERS[savedUser] || USERS[Object.keys(USERS).find(k => k.toLowerCase() === savedUser.toLowerCase()) || ''] || DEFAULT_TEAM_ACCOUNTS.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase());
     if (knownUser) {
       initApp(savedUser);
     } else {
@@ -27720,7 +27748,7 @@ document.addEventListener('DOMContentLoaded', function() {
               const fbAccounts = JSON.parse(doc.data().data);
               localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(fbAccounts));
               _checkLocalStorageSize();
-              if (fbAccounts.find(a => a.username === savedUser)) {
+              if (fbAccounts.find(a => (a.username||'').toLowerCase() === savedUser.toLowerCase())) {
                 saveAccounts(fbAccounts);
                 initApp(savedUser);
                 return;
@@ -29680,7 +29708,7 @@ function renderUserAccountsList() {
         <div style="flex:1;">
         <div style="font-weight:600;font-size:13px;color:var(--white);">
             ${a.displayName || a.username}
-            ${a.username === currentUser ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--green);margin-left:6px;background:rgba(61,158,106,0.15);border:1px solid var(--green);border-radius:3px;padding:1px 5px;">YOU</span>` : ''}
+            ${(a.username||'').toLowerCase() === (currentUser||'').toLowerCase() ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--green);margin-left:6px;background:rgba(61,158,106,0.15);border:1px solid var(--green);border-radius:3px;padding:1px 5px;">YOU</span>` : ''}
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);margin-top:1px;">@${a.username}</div>
           <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);margin-top:1px;">${a.email || 'no-email'}</div>
@@ -29694,7 +29722,7 @@ function renderUserAccountsList() {
       </div>
       <div style="display:flex;gap:4px;">
         ${canManage ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:4px 8px;" onclick="openEditUserForm('${a.username}')">✎ Edit</button>` : ''}
-        ${(canManage && a.username !== currentUser) ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:4px 8px;border-color:var(--red);color:var(--red);" onclick="deleteUserAccount('${a.username}')">✕</button>` : ''}
+        ${(canManage && (a.username||'').toLowerCase() !== (currentUser||'').toLowerCase()) ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:4px 8px;border-color:var(--red);color:var(--red);" onclick="deleteUserAccount('${a.username}')">✕</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -29734,7 +29762,7 @@ function openAddUserForm() {
 function openEditUserForm(username) {
   if (!isAdmin()) { alert('Only admins can manage users.'); return; }
   const accounts = getAccounts();
-  const acct = accounts.find(a => a.username === username);
+  const acct = accounts.find(a => (a.username||'').toLowerCase() === username.toLowerCase());
   if (!acct) return;
   editingUsername = username;
   document.getElementById('userEditFormTitle').textContent = `Edit — ${username}`;
@@ -29952,7 +29980,7 @@ async function saveUserAccount() {
     // If the logged-in user edited themselves, update session + badge
     const loggedIn = localStorage.getItem('dmc_u') || '';
     if (loggedIn.toLowerCase() === oldUsername.toLowerCase()) {
-      localStorage.setItem('dmc_u', newUsername);
+      localStorage.setItem('dmc_u', (newUsername || '').toLowerCase());
       _checkLocalStorageSize();
       document.getElementById('userBadge').textContent = '👤 ' + (displayName || newUsername);
     }
@@ -30111,14 +30139,14 @@ async function changeMyPassword() {
 function deleteUserAccount(username) {
   if (!isAdmin()) { alert('Only admins can manage users.'); return; }
   const currentUser = localStorage.getItem('dmc_u') || '';
-  if (username === currentUser) { alert('You cannot delete your own account.'); return; }
+  if ((username||'').toLowerCase() === (currentUser||'').toLowerCase()) { alert('You cannot delete your own account.'); return; }
   if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
 
   // Strict global delete: Firebase Auth + Firestore must succeed before local removal.
   (async () => {
     try {
       const accountsAll = getAccounts();
-      const acct = accountsAll.find(a => a.username === username);
+      const acct = accountsAll.find(a => (a.username||'').toLowerCase() === (username||'').toLowerCase());
       const email = acct?.email || (username.includes('@') ? username : '');
       const syncRes = await syncAuthAccountChange({ action: 'delete', username, email, authUid: acct?.authUid || null });
       if (!syncRes.ok) { alert('Delete blocked: could not delete Firebase Auth user. ' + syncRes.error); return; }
