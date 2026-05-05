@@ -5761,8 +5761,10 @@ Be specific, practical, and flag any uncertainties clearly.`;
         const grp = lowbedGroups.find(g => g.deviceId === pickerDeviceId);
         const existingIds = (grp ? grp.items : []).map(i => i.id);
         const searchLower = pickerSearch.toLowerCase();
+        const ALLOWED_PICKER_TYPES = ['paver','roller','skid_steer','excavator','mtv'];
         const visible = fleetItems.filter(eq =>
           !existingIds.includes(eq.id) &&
+          ALLOWED_PICKER_TYPES.includes(eq.type||'') &&
           (!searchLower || eq.name.toLowerCase().includes(searchLower) || (eq.type||'').toLowerCase().includes(searchLower) || (eq.category||'').toLowerCase().includes(searchLower))
         );
         return (

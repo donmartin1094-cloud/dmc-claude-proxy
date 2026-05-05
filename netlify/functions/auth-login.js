@@ -30,6 +30,8 @@ exports.handler = async (event) => {
       'ATow':        'DMCTow2025',
       'Christian':   'DMCWelcome2026!',
       'DSouza':      'Pestario86!!',
+      'fjoaquim':    'DMC2024!',
+      'marruda':     'DMC2024!',
     };
 
     const uLower = login.toLowerCase();

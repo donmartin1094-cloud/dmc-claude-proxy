@@ -6340,6 +6340,11 @@ function _homeFleetRerender() {
     '</div>';
   }
   _refreshFleetWidgets();
+  var _fCard = document.getElementById('foremanTodayCard');
+  if (_fCard) {
+    try { _fCard.innerHTML = _foremanTodayCardHtml(); }
+    catch(e) { _fCard.innerHTML = '<div style="color:#e85555;padding:12px;font-family:\'DM Mono\',monospace;font-size:11px;">Card error: ' + (e && e.message ? e.message : String(e)) + '</div>'; }
+  }
 }
 
 // ── DJ admin home: hours widget (daily Sun–Sat grid) ──────────────────────────
@@ -7390,6 +7395,185 @@ async function _homeInitGps() {
   if (bounds.length > 0) lmap.fitBounds(bounds, { padding:[28,28], maxZoom:13 });
 }
 
+// ── Foreman home: scan slip helper (no args — re-derives context from schedule) ─
+function _foremanScanSlipDirect() {
+  var _ctx = { jobId: '', jobNum: '', jobName: '' };
+  try {
+    var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+    var _dn = _u;
+    try {
+      var _ak = typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts';
+      var _aa = JSON.parse(localStorage.getItem(_ak) || '[]');
+      var _ac = _aa.find(function(a) { return (a.username||'').toLowerCase()===_u||(a.email||'').toLowerCase()===_u; });
+      if (_ac && _ac.displayName) _dn = _ac.displayName;
+      if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+        var _hc = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase()===_u||(a.email||'').toLowerCase()===_u; });
+        if (_hc && _hc.displayName) _dn = _hc.displayName;
+      }
+    } catch(e2) {}
+    var _td = new Date();
+    var _tk = _td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');
+    var _sd = (typeof schedData!=='undefined') ? (schedData[_tk]||{}) : {};
+    var _fm = function(rn) {
+      if (!rn) return false;
+      rn = rn.toLowerCase().trim(); var dn = _dn.toLowerCase().trim();
+      return rn===dn || rn.split(' ')[0]===dn.split(' ')[0] || rn.indexOf(dn)!==-1 || dn.indexOf(rn)!==-1;
+    };
+    var _blk = null;
+    var _tf = (typeof foremanRoster!=='undefined'&&foremanRoster[0])?foremanRoster[0]:'';
+    var _bf = (typeof foremanRoster!=='undefined'&&foremanRoster[1])?foremanRoster[1]:'';
+    if (_fm(_tf)&&_sd.top&&_sd.top.type!=='blank') _blk=_sd.top;
+    else if (_fm(_bf)&&_sd.bottom&&_sd.bottom.type!=='blank') _blk=_sd.bottom;
+    else { (_sd.extras||[]).forEach(function(ex){ if(!_blk&&_fm(ex.foreman)&&ex.data&&ex.data.type!=='blank') _blk=ex.data; }); }
+    if (_blk && _blk.fields) {
+      var _ff = _blk.fields;
+      _ctx.jobNum = _ff.jobNum || '';
+      _ctx.jobName = _ff.jobName || '';
+      var _bl = typeof backlogJobs!=='undefined' ? backlogJobs : [];
+      var _jm = _bl.find(function(j) {
+        var jn=(j.jobNum||j.number||j.num||'').toString().trim().toLowerCase();
+        var fn=(_ctx.jobNum||'').toString().trim().toLowerCase();
+        return (fn&&jn&&fn===jn)||(_ctx.jobName&&j.name&&_ctx.jobName.trim().toLowerCase()===j.name.trim().toLowerCase());
+      });
+      if (_jm) _ctx.jobId = _jm.id || '';
+    }
+  } catch(e) {}
+  if (typeof _openMixSlipScanner === 'function') _openMixSlipScanner(_ctx);
+}
+
+// ── Foreman home: today's assignment card inner HTML ─────────────────────────
+function _foremanTodayCardHtml() {
+  var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+  var _dn = _u;
+  try {
+    var _ak = typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts';
+    var _aa = JSON.parse(localStorage.getItem(_ak) || '[]');
+    var _ac = _aa.find(function(a) { return (a.username||'').toLowerCase()===_u||(a.email||'').toLowerCase()===_u; });
+    if (_ac && _ac.displayName) _dn = _ac.displayName;
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      var _hc = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase()===_u||(a.email||'').toLowerCase()===_u; });
+      if (_hc && _hc.displayName) _dn = _hc.displayName;
+    }
+  } catch(e) {}
+
+  var _today = new Date();
+  var _todayKey = _today.getFullYear()+'-'+String(_today.getMonth()+1).padStart(2,'0')+'-'+String(_today.getDate()).padStart(2,'0');
+  var _sd = (typeof schedData !== 'undefined') ? (schedData[_todayKey] || {}) : {};
+
+  var _matchName = function(rn) {
+    if (!rn) return false;
+    rn = rn.toLowerCase().trim(); var dn = _dn.toLowerCase().trim();
+    return rn===dn || rn.split(' ')[0]===dn.split(' ')[0] || rn.indexOf(dn)!==-1 || dn.indexOf(rn)!==-1;
+  };
+
+  var _blk = null;
+  var _topF = (typeof foremanRoster!=='undefined'&&foremanRoster[0]) ? foremanRoster[0] : 'Filipe Joaquim';
+  var _botF = (typeof foremanRoster!=='undefined'&&foremanRoster[1]) ? foremanRoster[1] : 'Louie Medeiros';
+  if (_matchName(_topF) && _sd.top && _sd.top.type !== 'blank') { _blk = _sd.top; }
+  else if (_matchName(_botF) && _sd.bottom && _sd.bottom.type !== 'blank') { _blk = _sd.bottom; }
+  else {
+    (_sd.extras || []).forEach(function(ex) {
+      if (!_blk && _matchName(ex.foreman) && ex.data && ex.data.type !== 'blank') _blk = ex.data;
+    });
+  }
+  // Fallback: check fields.foreman on top/bottom slots directly (covers custom block types)
+  if (!_blk && _sd.top && _sd.top.fields && _sd.top.type !== 'blank') {
+    var _tf2 = (_sd.top.fields.foreman || '').toLowerCase();
+    if (_tf2 && _matchName(_tf2)) _blk = _sd.top;
+  }
+  if (!_blk && _sd.bottom && _sd.bottom.fields && _sd.bottom.type !== 'blank') {
+    var _bf2 = (_sd.bottom.fields.foreman || '').toLowerCase();
+    if (_bf2 && _matchName(_bf2)) _blk = _sd.bottom;
+  }
+
+  var _noJobHtml =
+    '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;' +
+    'padding:18px 14px;font-family:\'DM Mono\',monospace;font-size:11px;color:rgba(155,148,136,0.45);' +
+    'text-align:center;font-style:italic;">No job scheduled for today</div>';
+
+  if (!_blk) return _noJobHtml;
+
+  var _f = (_blk.fields) || {};
+  var _bt = (typeof getBlockType === 'function') ? getBlockType(_blk.type || 'blank') : null;
+  var _col = (_bt && _bt.color) ? _bt.color : '#3a3a3a';
+  var _fc  = (_bt && _bt.fontColor) ? _bt.fontColor : '#fff';
+  var _EQI = { paver:'🟡', roller:'🔵', excavator:'🟠', dozer:'🟤', grader:'🟣', milling_machine:'⬛', loader:'🟢' };
+
+  var _gcName = _f.gc || (_f.jobName&&_f.jobName.indexOf('—')>=0 ? _f.jobName.split(' — ')[0] : '') || '';
+  var _jdName = _f.jobName
+    ? (_f.jobName.indexOf(' — ')>=0 ? _f.jobName.split(' — ').slice(1).join(' — ') : _f.jobName)
+    : '';
+
+  var _eqArr = []; try { _eqArr = JSON.parse(_f.equipment || '[]'); } catch(e) {}
+  var _eqChips = _eqArr.map(function(e) {
+    var n = typeof e==='string' ? e : (e.name||String(e));
+    var t = typeof e==='object' ? (e.type||'') : '';
+    return '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:var(--concrete-dim);' +
+      'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:2px 6px;white-space:nowrap;">' +
+      (_EQI[t]||'🔧')+' '+escHtml(n)+'</span>';
+  }).join('');
+
+  var _opList = (_f.operators||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var _opChips = _opList.map(function(op) {
+    return '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:#5ab4f5;' +
+      'background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.3);border-radius:4px;padding:2px 6px;white-space:nowrap;">👤 '+escHtml(op)+'</span>';
+  }).join('');
+
+  var _td2 = {}; try { _td2 = JSON.parse(_f.trucking||'{}'); } catch(e) {}
+  var _trucks   = _td2.trucks   || '';
+  var _loadTime = _td2.loadTime || _f.loadTime || '';
+
+  // Today's slips for this job
+  if (typeof pavingSlips !== 'undefined' && pavingSlips.length === 0) { try { _slipsLoad(); } catch(e) {} }
+  var _slipTons = 0, _slipCount = 0, _slipMixes = {};
+  (typeof pavingSlips !== 'undefined' ? pavingSlips : []).forEach(function(s) {
+    if ((s.date||'').trim() !== _todayKey) return;
+    var sNum = (s.jobNum||'').toString().trim().toLowerCase();
+    var fNum = (_f.jobNum||'').toString().trim().toLowerCase();
+    var sNm  = (s.jobName||'').trim().toLowerCase();
+    var fNm  = (_f.jobName||'').trim().toLowerCase();
+    if (!((sNum&&fNum&&sNum===fNum)||(sNm&&fNm&&sNm===fNm))) return;
+    var mt = (typeof _mssNormalizeMixKey==='function') ? _mssNormalizeMixKey(s.mixType||'Unknown') : (s.mixType||'Unknown');
+    _slipTons += (parseFloat(s.tons)||0);
+    _slipCount++;
+    _slipMixes[mt] = (_slipMixes[mt]||0)+1;
+  });
+  var _slipSection = '';
+  if (_slipCount > 0) {
+    var _mixRows = Object.keys(_slipMixes).map(function(mt) {
+      return '<div style="font-family:\'DM Mono\',monospace;font-size:8.1px;color:var(--concrete-dim);">'+escHtml(mt)+': '+_slipMixes[mt]+' loads</div>';
+    }).join('');
+    _slipSection =
+      '<div style="margin-top:4px;padding:6px 8px;background:rgba(167,139,250,0.08);border-radius:6px;border:1px solid rgba(167,139,250,0.2);">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(167,139,250,0.7);margin-bottom:4px;">Slips Scanned Today</div>' +
+        _mixRows +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:8.8px;font-weight:800;color:#a78bfa;margin-top:3px;">'+_slipCount+' loads · '+_slipTons.toFixed(1)+' T</div>' +
+      '</div>';
+  }
+
+  return '<div style="background:'+_col+'14;border:1px solid '+_col+'44;border-left:4px solid '+_col+';border-radius:8px;overflow:hidden;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:'+_col+'22;border-bottom:1px solid '+_col+'33;">' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:800;color:#fff;">Today\'s Assignment</div>' +
+      (_f.jobNum ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:800;color:var(--stripe);background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:4px;padding:2px 7px;">#'+escHtml(_f.jobNum)+'</span>' : '') +
+    '</div>' +
+    '<div style="padding:10px 12px;display:flex;flex-direction:column;gap:5px;">' +
+      (_jdName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:800;color:var(--white);">'+escHtml(_jdName)+'</div>' : '') +
+      (_gcName ? '<div style="font-family:\'DM Mono\',monospace;font-size:8.8px;color:var(--concrete-dim);">'+escHtml(_gcName)+'</div>' : '') +
+      ((_trucks||_loadTime) ? '<div style="display:flex;flex-wrap:wrap;gap:3px;">' +
+        (_trucks   ? '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:var(--concrete-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:2px 5px;">🚛 '+escHtml(_trucks)+'</span>' : '') +
+        (_loadTime ? '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:var(--concrete-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:2px 5px;">⏱ '+escHtml(_loadTime)+'</span>' : '') +
+      '</div>' : '') +
+      (_opChips ? '<div style="display:flex;flex-wrap:wrap;gap:3px;">'+_opChips+'</div>' : '') +
+      (_eqChips ? '<div style="display:flex;flex-wrap:wrap;gap:3px;">'+_eqChips+'</div>' : '') +
+      _slipSection +
+      '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button onclick="_foremanScanSlipDirect()" style="flex:1;padding:10px 8px;background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.4);border-radius:6px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">📷 Scan Slip</button>' +
+        '<button onclick="openForemanReport()" style="flex:1;padding:10px 8px;background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.35);border-radius:6px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">🏁 Shift Finished</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
 let _jpCloudLoaded = false;
 function renderHomeView(el) {
   if (!el) return;
@@ -7495,6 +7679,13 @@ function renderHomeView(el) {
       widgetsHtml = activeWidgets.map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
     }
 
+    // Pre-compute foreman card safely — a throw here must not kill the entire renderHomeView
+    var _foremanCardSafe = '';
+    if (_isForeman) {
+      try { _foremanCardSafe = _foremanTodayCardHtml(); }
+      catch(e) { _foremanCardSafe = '<div style="color:#e85555;padding:12px;font-family:\'DM Mono\',monospace;font-size:11px;">Error loading today\'s card: ' + (e && e.message ? e.message : String(e)) + '</div>'; }
+    }
+
     // Escape firstName safely
     const safeName = firstName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const _showGpsPanel = _homeIsAdmin();
@@ -7552,6 +7743,7 @@ function renderHomeView(el) {
         </div>
         ${adminPanelHtml}
         ${adminWidgetBarHtml}
+        ${_isForeman ? '<div id="foremanTodayCard" style="width:100%;max-width:600px;margin:0 auto;box-sizing:border-box;padding:12px 16px 4px;">' + _foremanCardSafe + '</div>' : ''}
         <div class="home-widgets-grid">${widgetsHtml}</div>
       </div>`;
     if (_showGpsPanel) { var _gpsGen = ++_homeGps.gen; setTimeout(function(){ if (_homeGps.gen === _gpsGen) _homeInitGps(); }, 150); }
@@ -19893,13 +20085,11 @@ function _lbAIGenerate() {
 function _lbEquipSetupPrompt(unequippedJobs, callback) {
   var _espFleet = typeof equipmentFleet !== 'undefined' ? equipmentFleet : [];
   var PICKER_TYPES = [
-    { key:'paver',       label:'Pavers' },
-    { key:'roller',      label:'Rollers' },
-    { key:'skid_steer',  label:'Skid Steers' },
-    { key:'excavator',   label:'Excavators' },
-    { key:'mtv',         label:'MTVs' },
-    { key:'compactor',   label:'Compactors' },
-    { key:'water_truck', label:'Water Trucks' }
+    { key:'paver',      label:'Pavers' },
+    { key:'roller',     label:'Rollers' },
+    { key:'skid_steer', label:'Skid Steers' },
+    { key:'excavator',  label:'Excavators' },
+    { key:'mtv',        label:'MTVs' }
   ];
   var jobStates = unequippedJobs.map(function() { return { skipped:false, pickerVisible:false, catExpanded:{}, selected:{} }; });
 
@@ -20397,11 +20587,14 @@ function _lbManualMoveOpen(mode) {
   try { groups = JSON.parse(localStorage.getItem('dmc_lowbed_groups') || '[]'); } catch(e2) {}
 
   var byType = {}, typeOrder = [];
+  var _LB_PICKER_TYPES = ['paver','roller','skid_steer','excavator','mtv'];
   fleetAll.forEach(function(eq) {
     var t = eq.type || 'other';
-    if (!byType[t]) { byType[t] = []; typeOrder.push(t); }
+    if (_LB_PICKER_TYPES.indexOf(t) === -1) return;
+    if (!byType[t]) byType[t] = [];
     byType[t].push(eq);
   });
+  typeOrder = _LB_PICKER_TYPES.filter(function(t) { return byType[t]; });
 
   var eqAccordion = typeOrder.map(function(type) {
     var items = byType[type];
@@ -26419,6 +26612,7 @@ async function fbLoadAll() {
       schedData = Object.assign({}, localSched, mergedSched);
       localStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedData));
       _checkLocalStorageSize();
+      if (typeof _homeFleetRerender === 'function') _homeFleetRerender();
     }
   } catch(e) { _logFbError('fbLoadAll', e); setSyncBadge('error', e); }
 }

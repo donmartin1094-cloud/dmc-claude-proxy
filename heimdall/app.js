@@ -1,8 +1,7 @@
 var HeimdallApp = (() => {
-  // src/app.jsx
-  var { useState, useRef, useEffect } = React;
-  var _HD_FB_KEY = "AIzaSyA-km_fS86PCEXDpliAObRVJU34svg45Ds";
-  var _HD_FS_BASE = "https://firestore.googleapis.com/v1/projects/dmc-estimate-assistant-bffd6/databases/(default)/documents/app_data";
+  const { useState, useRef, useEffect } = React;
+  const _HD_FB_KEY = "AIzaSyA-km_fS86PCEXDpliAObRVJU34svg45Ds";
+  const _HD_FS_BASE = "https://firestore.googleapis.com/v1/projects/dmc-estimate-assistant-bffd6/databases/(default)/documents/app_data";
   async function hdFsGet(docName) {
     try {
       const res = await fetch(`${_HD_FS_BASE}/${docName}?key=${_HD_FB_KEY}`);
@@ -30,8 +29,8 @@ var HeimdallApp = (() => {
       console.warn("hdFsSet failed:", e.message);
     }
   }
-  var TABS = ["Dashboard", "Master Schedule", "Equipment", "Dispatch Sheets", "Daily Schedule", "Field Intel", "Conflicts", "Export"];
-  var RAILWAY_BASE = (() => {
+  const TABS = ["Dashboard", "Master Schedule", "Equipment", "Dispatch Sheets", "Daily Schedule", "Field Intel", "Conflicts", "Export"];
+  const RAILWAY_BASE = (() => {
     const stored = localStorage.getItem("dmc_claude_proxy_url") || "";
     return stored ? stored.replace(/\/claude$/, "") : "https://dmc-claude-proxy-production.up.railway.app";
   })();
@@ -188,34 +187,34 @@ var HeimdallApp = (() => {
     const distanceMiles = haversineMiles(photoGps.lat, photoGps.lon, jobGps.lat, jobGps.lon);
     return { noGps: false, distanceMiles, onSite: distanceMiles <= 0.5, photoGps, jobGps };
   }
-  var mockJobs = [
+  const mockJobs = [
     { id: "JOB-2244", name: "I-485 Loop Grading", startDate: "2026-03-27", site: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", equipmentNeeded: ["EQ-101", "EQ-103"], status: "Needs Move" },
     { id: "JOB-2245", name: "Union County Rd Widening", startDate: "2026-03-28", site: "Monroe, NC", address: "Hwy 74 & Rocky River Rd, Monroe, NC", equipmentNeeded: ["EQ-105"], status: "Needs Move" },
     { id: "JOB-2241", name: "Hwy 74 Widening", startDate: "2026-03-10", site: "Gastonia, NC", address: "Hwy 74 W, Gastonia, NC", equipmentNeeded: ["EQ-102"], status: "Active" },
     { id: "JOB-2246", name: "Cabarrus Grading Pkg", startDate: "2026-03-30", site: "Concord, NC", address: "George W Liles Pkwy, Concord, NC", equipmentNeeded: ["EQ-104"], status: "Conflict" }
   ];
-  var mockDrivers = [
+  const mockDrivers = [
     { id: "DRV-01", name: "Mike Harrell", truck: "Peterbilt 389 - TR-11", available: true, phone: "704-555-0181" },
     { id: "DRV-02", name: "Tony Vasquez", truck: "Kenworth W900 - TR-14", available: true, phone: "704-555-0194" },
     { id: "DRV-03", name: "Josh Bennett", truck: "Freightliner Cascadia - TR-07", available: false, phone: "704-555-0162" },
     { id: "DRV-04", name: "Dale Pruitt", truck: "Peterbilt 567 - TR-19", available: true, phone: "704-555-0177" }
   ];
-  var mockMoveHistory = [
+  const mockMoveHistory = [
     { date: "2026-03-22", eq: "EQ-102", driver: "Mike Harrell", from: "Main Yard", to: "Job #2241", miles: 28, duration: "1h 05m" },
     { date: "2026-03-18", eq: "EQ-103", driver: "Tony Vasquez", from: "Job #2237", to: "Main Yard", miles: 34, duration: "1h 20m" },
     { date: "2026-03-15", eq: "EQ-104", driver: "Dale Pruitt", from: "Main Yard", to: "Job #2238", miles: 12, duration: "0h 40m" },
     { date: "2026-03-10", eq: "EQ-101", driver: "Josh Bennett", from: "Job #2236", to: "Main Yard", miles: 19, duration: "0h 55m" }
   ];
-  var autoDispatches = [
+  const autoDispatches = [
     { id: "DISP-001", jobId: "JOB-2244", jobName: "I-485 Loop Grading", eqId: "EQ-101", eqName: "CAT 349 Excavator", driverId: "DRV-01", driverName: "Mike Harrell", truck: "TR-11", from: "Main Yard", to: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", date: "2026-03-26", time: "06:00", miles: 22, permit: "Required", status: "Pending" },
     { id: "DISP-002", jobId: "JOB-2244", jobName: "I-485 Loop Grading", eqId: "EQ-103", eqName: "CAT 140 Grader", driverId: "DRV-02", driverName: "Tony Vasquez", truck: "TR-14", from: "Main Yard", to: "Charlotte, NC", address: "I-485 & Lawyers Rd, Charlotte, NC", date: "2026-03-26", time: "07:30", miles: 22, permit: "Required", status: "Pending" },
     { id: "DISP-003", jobId: "JOB-2245", jobName: "Union County Rd Widening", eqId: "EQ-105", eqName: "CAT 745 Art. Truck", driverId: "DRV-04", driverName: "Dale Pruitt", truck: "TR-19", from: "Main Yard", to: "Monroe, NC", address: "Hwy 74 & Rocky River Rd, Monroe, NC", date: "2026-03-27", time: "06:00", miles: 31, permit: "Not Required", status: "Pending" }
   ];
-  var conflicts = [
+  const conflicts = [
     { id: "CON-001", severity: "High", type: "Equipment Not Returned", desc: "EQ-104 (Volvo EC300) needed at Job #2246 by 3/30 but currently committed to Job #2238 with no scheduled return.", affectedJob: "JOB-2246", resolution: "Coordinate early release from Job #2238 or source alternate excavator." },
     { id: "CON-002", severity: "Medium", type: "Driver Unavailable", desc: "Josh Bennett (TR-07) is unavailable 3/26-3/27 \u2014 no coverage for backup hauls during peak move window.", affectedJob: "General", resolution: "Assign Dale Pruitt as backup after DISP-003 completes." }
   ];
-  var statusColor = (s) => {
+  const statusColor = (s) => {
     if (s === "Active") return "bg-green-100 text-green-800";
     if (s === "Needs Move") return "bg-yellow-100 text-yellow-800";
     if (s === "Conflict") return "bg-red-100 text-red-800";
@@ -223,7 +222,7 @@ var HeimdallApp = (() => {
     if (s === "Approved") return "bg-green-100 text-green-800";
     return "bg-gray-100 text-gray-700";
   };
-  var severityColor = (s) => s === "High" ? "bg-red-100 text-red-800 border-red-200" : "bg-yellow-100 text-yellow-800 border-yellow-200";
+  const severityColor = (s) => s === "High" ? "bg-red-100 text-red-800 border-red-200" : "bg-yellow-100 text-yellow-800 border-yellow-200";
   function AnalysisCard({ result, headerColor = "bg-gray-800", onPushToPricing, onDelete }) {
     const [expanded, setExpanded] = useState(true);
     return /* @__PURE__ */ React.createElement("div", { className: "bg-white rounded-lg border shadow-sm overflow-hidden" }, /* @__PURE__ */ React.createElement("div", { className: `${headerColor} text-white px-3 py-2 flex justify-between items-center` }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "font-bold text-sm" }, result.jobId || "General", " \xB7 ", result.fileName || result.photoCount + " photos"), /* @__PURE__ */ React.createElement("div", { className: "text-xs opacity-70" }, result.date, result.planRef ? ` \xB7 Plan: ${result.planRef}` : "")), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2 items-center" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setExpanded((e) => !e), className: "text-xs opacity-60 hover:opacity-100" }, expanded ? "\u25B2" : "\u25BC"), /* @__PURE__ */ React.createElement("button", { onClick: onDelete, className: "text-xs opacity-40 hover:opacity-100", title: "Remove" }, "\u2715"))), expanded && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "p-3 analysis-output text-gray-700" }, result.analysis), onPushToPricing && /* @__PURE__ */ React.createElement("div", { className: "px-3 pb-3 border-t pt-2 flex gap-2" }, /* @__PURE__ */ React.createElement(
@@ -4601,8 +4600,9 @@ Be specific, practical, and flag any uncertainties clearly.`;
       const grp = lowbedGroups.find((g) => g.deviceId === pickerDeviceId);
       const existingIds = (grp ? grp.items : []).map((i) => i.id);
       const searchLower = pickerSearch.toLowerCase();
+      const ALLOWED_PICKER_TYPES = ["paver", "roller", "skid_steer", "excavator", "mtv"];
       const visible = fleetItems.filter(
-        (eq) => !existingIds.includes(eq.id) && (!searchLower || eq.name.toLowerCase().includes(searchLower) || (eq.type || "").toLowerCase().includes(searchLower) || (eq.category || "").toLowerCase().includes(searchLower))
+        (eq) => !existingIds.includes(eq.id) && ALLOWED_PICKER_TYPES.includes(eq.type || "") && (!searchLower || eq.name.toLowerCase().includes(searchLower) || (eq.type || "").toLowerCase().includes(searchLower) || (eq.category || "").toLowerCase().includes(searchLower))
       );
       return /* @__PURE__ */ React.createElement(
         "div",
@@ -5110,6 +5110,6 @@ Be specific, practical, and flag any uncertainties clearly.`;
       );
     })());
   }
-  var root = ReactDOM.createRoot(document.getElementById("root"));
+  const root = ReactDOM.createRoot(document.getElementById("root"));
   root.render(/* @__PURE__ */ React.createElement(App, null));
 })();
