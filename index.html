@@ -7574,6 +7574,87 @@ function _foremanTodayCardHtml() {
   '</div>';
 }
 
+// ── Foreman schedule: next 14 days filtered to logged-in foreman ─────────────
+function _foremanSched2Weeks() {
+  var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+  var _dn = _u;
+  try {
+    var _ak = typeof ACCOUNTS_KEY !== 'undefined' ? ACCOUNTS_KEY : 'pavescope_accounts';
+    var _aa = JSON.parse(localStorage.getItem(_ak) || '[]');
+    var _ac = _aa.find(function(a) { return (a.username||'').toLowerCase()===_u||(a.email||'').toLowerCase()===_u; });
+    if (_ac && _ac.displayName) _dn = _ac.displayName;
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      var _hc = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase()===_u||(a.email||'').toLowerCase()===_u; });
+      if (_hc && _hc.displayName) _dn = _hc.displayName;
+    }
+  } catch(e) {}
+
+  var _matchF = function(rn) {
+    if (!rn || !_dn) return false;
+    rn = rn.toLowerCase().trim(); var dn = _dn.toLowerCase().trim();
+    return rn===dn || rn.split(' ')[0]===dn.split(' ')[0] || rn.indexOf(dn)!==-1 || dn.indexOf(rn)!==-1;
+  };
+
+  var _topF = (typeof foremanRoster!=='undefined'&&foremanRoster[0]) ? foremanRoster[0] : 'Filipe Joaquim';
+  var _botF = (typeof foremanRoster!=='undefined'&&foremanRoster[1]) ? foremanRoster[1] : 'Louie Medeiros';
+
+  var today = new Date(); today.setHours(0,0,0,0);
+  var DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  var rows = [];
+  for (var d = 0; d < 14; d++) {
+    var day = new Date(today); day.setDate(today.getDate() + d);
+    var dateKey = day.getFullYear()+'-'+String(day.getMonth()+1).padStart(2,'0')+'-'+String(day.getDate()).padStart(2,'0');
+    var sd = (typeof schedData!=='undefined') ? (schedData[dateKey]||{}) : {};
+
+    var blk = null;
+    if (_matchF(_topF) && sd.top && sd.top.type !== 'blank') { blk = sd.top; }
+    else if (_matchF(_botF) && sd.bottom && sd.bottom.type !== 'blank') { blk = sd.bottom; }
+    else {
+      (sd.extras||[]).forEach(function(ex) {
+        if (!blk && _matchF(ex.foreman) && ex.data && ex.data.type!=='blank') blk = ex.data;
+      });
+    }
+    if (!blk && sd.top && sd.top.fields && sd.top.type!=='blank') {
+      var _tf = (sd.top.fields.foreman||'').toLowerCase();
+      if (_tf && _matchF(_tf)) blk = sd.top;
+    }
+    if (!blk && sd.bottom && sd.bottom.fields && sd.bottom.type!=='blank') {
+      var _bf = (sd.bottom.fields.foreman||'').toLowerCase();
+      if (_bf && _matchF(_bf)) blk = sd.bottom;
+    }
+    if (!blk) continue;
+
+    var f = blk.fields || {};
+    var bt = (typeof getBlockType==='function') ? getBlockType(blk.type) : { color:'#888', label: blk.type };
+    var isToday = d === 0;
+    var dateLabel = DAY_NAMES[day.getDay()] + ' ' + String(day.getMonth()+1).padStart(2,'0') + '/' + String(day.getDate()).padStart(2,'0');
+    var jobName = f.jobName || f.jobNum || bt.label || 'Shift';
+    var location = f.location || '';
+
+    rows.push(
+      '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:8.5px;color:' + (isToday?'var(--stripe)':'var(--concrete-dim)') + ';min-width:56px;flex-shrink:0;">' + escHtml(dateLabel) + '</div>' +
+        '<div style="width:8px;height:8px;border-radius:50%;background:' + (bt.color||'#888') + ';flex-shrink:0;"></div>' +
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:var(--white);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1;">' + escHtml(jobName) + '</div>' +
+        (location ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:80px;">'+escHtml(location)+'</div>' : '') +
+      '</div>'
+    );
+  }
+
+  var bodyHtml = rows.length
+    ? rows.join('')
+    : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No shifts scheduled in the next 2 weeks.</div>';
+
+  return '<div class="home-widget">' +
+    '<div class="home-widget-header">' +
+      '<div class="home-widget-title">📅 Next 2 Weeks</div>' +
+      '<button class="home-widget-action" onclick="switchTab(\'schedule\')">Open →</button>' +
+    '</div>' +
+    '<div class="home-widget-body">' + bodyHtml + '</div>' +
+  '</div>';
+}
+
 let _jpCloudLoaded = false;
 function renderHomeView(el) {
   if (!el) return;
@@ -7675,6 +7756,8 @@ function renderHomeView(el) {
       widgetsHtml = activeWidgets.map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
     } else if (_isRestrictedRole) {
       widgetsHtml = widget7DaySched();
+    } else if (_isForeman) {
+      widgetsHtml = activeWidgets.filter(w => w.id !== 'today' && w.id !== 'myhours').map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
     } else {
       widgetsHtml = activeWidgets.map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
     }
@@ -7688,6 +7771,29 @@ function renderHomeView(el) {
 
     // Escape firstName safely
     const safeName = firstName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    // Pre-compute foreman top-row panels
+    var _foremanMyHoursHtml = '';
+    var _foremanNext2WeeksHtml = '';
+    var _topSectionHtml = '';
+    if (_isForeman) {
+      try { _foremanMyHoursHtml = widgetMyHours(); } catch(e) { _foremanMyHoursHtml = ''; }
+      try { _foremanNext2WeeksHtml = _foremanSched2Weeks(); } catch(e) { _foremanNext2WeeksHtml = ''; }
+      _topSectionHtml =
+        '<div style="display:flex;gap:16px;align-items:flex-start;width:100%;flex-wrap:wrap;padding:0 0 8px;">' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' +
+            '<div class="home-greeting-text">' +
+              '<div class="home-greeting-sub">' + greeting + ',</div>' +
+              '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+              '<div class="home-greeting-date">' + dateStr + '</div>' +
+            '</div>' +
+            '<button onclick="openForemanReport()" style="width:100%;padding:10px 14px;background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.4);border-radius:6px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;margin-top:8px;">📋 Submit Today\'s Report</button>' +
+          '</div>' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _foremanMyHoursHtml + '</div>' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _foremanNext2WeeksHtml + '</div>' +
+        '</div>';
+    }
+
     const _showGpsPanel = _homeIsAdmin();
     const _isMobAdmin   = _showGpsPanel && window.innerWidth <= 600;
     const adminWidgetBarHtml = (_showGpsPanel && !_isMobAdmin)
@@ -7716,31 +7822,30 @@ function renderHomeView(el) {
       : '';
     el.innerHTML = `
       <div class="home-wrap${_isMobAdmin ? ' home-wrap-mob-admin' : ''}">
-        <div class="home-greeting">
-          ${_homeIsAdmin() && !_isMobAdmin
-            ? '<div style="min-width:0;">' + _homeWeekScheduleWidget() + '</div>' +
-              '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0;">' +
-                '<div class="home-greeting-text" style="text-align:center;">' +
-                  '<div class="home-greeting-sub">' + greeting + ',</div>' +
-                  '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
-                  '<div class="home-greeting-date">' + dateStr + '</div>' +
-                '</div>' +
-                '<div id="homeDJHoursPanel" style="width:100%;">' + _homeDJHoursWidget() + '</div>' +
-              '</div>' +
-              '<div style="min-width:0;">' + _homeNotifInlineHtml() + '</div>'
-            : '<div class="home-greeting-text">' +
-                '<div class="home-greeting-sub">' + greeting + ',</div>' +
-                '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
-                '<div class="home-greeting-date">' + dateStr + '</div>' +
-              '</div>'
-          }
-          ${_isMobAdmin ? '<button class="home-admin-mob-reorder-btn" onclick="_adminMobReorder()">↕ Reorder</button>' : ''}
-          ${(!_isDriver && !_isForeman && !_isCrewRole && !_homeIsAdmin()) ? `<div style="display:flex;flex-direction:column;gap:8px;width:100%;">
-            <button class="home-customize-btn" onclick="openHomeCustomize()">⚙️ Customize Dashboard</button>
-            <button class="hw-mobile-edit-btn" id="_hwMobileEditBtn" onclick="hwToggleMobileEdit()">✏️ Edit Order</button>
-          </div>` : ''}
-          ${_isForeman ? `<button onclick="openForemanReport()" style="width:100%;padding:10px 14px;background:rgba(245,197,24,0.12);border:1px solid rgba(245,197,24,0.4);border-radius:6px;color:var(--stripe);font-family:'DM Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;">📋 Submit Today's Report</button>` : ''}
-        </div>
+        ${_isForeman
+          ? _topSectionHtml
+          : '<div class="home-greeting">' +
+              (_homeIsAdmin() && !_isMobAdmin
+                ? '<div style="min-width:0;">' + _homeWeekScheduleWidget() + '</div>' +
+                  '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0;">' +
+                    '<div class="home-greeting-text" style="text-align:center;">' +
+                      '<div class="home-greeting-sub">' + greeting + ',</div>' +
+                      '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+                      '<div class="home-greeting-date">' + dateStr + '</div>' +
+                    '</div>' +
+                    '<div id="homeDJHoursPanel" style="width:100%;">' + _homeDJHoursWidget() + '</div>' +
+                  '</div>' +
+                  '<div style="min-width:0;">' + _homeNotifInlineHtml() + '</div>'
+                : '<div class="home-greeting-text">' +
+                    '<div class="home-greeting-sub">' + greeting + ',</div>' +
+                    '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+                    '<div class="home-greeting-date">' + dateStr + '</div>' +
+                  '</div>'
+              ) +
+              (_isMobAdmin ? '<button class="home-admin-mob-reorder-btn" onclick="_adminMobReorder()">↕ Reorder</button>' : '') +
+              ((!_isDriver && !_isForeman && !_isCrewRole && !_homeIsAdmin()) ? '<div style="display:flex;flex-direction:column;gap:8px;width:100%;"><button class="home-customize-btn" onclick="openHomeCustomize()">⚙️ Customize Dashboard</button><button class="hw-mobile-edit-btn" id="_hwMobileEditBtn" onclick="hwToggleMobileEdit()">✏️ Edit Order</button></div>' : '') +
+            '</div>'
+        }
         ${adminPanelHtml}
         ${adminWidgetBarHtml}
         ${_isForeman ? '<div id="foremanTodayCard" style="width:100%;max-width:600px;margin:0 auto;box-sizing:border-box;padding:12px 16px 4px;">' + _foremanCardSafe + '</div>' : ''}
