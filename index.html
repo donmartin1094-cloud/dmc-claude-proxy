@@ -3633,7 +3633,7 @@ function closeSecPopup() {
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',
     reportsDailyOrders:'reports', reportsTwoWeek:'reports', reportsForemens:'reports',
-    reportsQC:'reports', reportsJobMix:'reports', reportsCertif:'reports', reports:'reports',
+    reportsQC:'reports', reportsJobMix:'reports', reportsCertif:'reports', reportsTimeReports:'reports', reports:'reports',
     employees:'employees', equipment:'equipment', heimdall:'heimdall', mail:'mail',
     'settings-theme':'settings','settings-schedule':'settings','settings-rosters':'settings',
     'settings-plants':'settings','settings-trucking':'settings','settings-users':'settings' };
@@ -5069,7 +5069,7 @@ function switchTab(tab) {
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',
     reportsDailyOrders:'reports', reportsTwoWeek:'reports', reportsForemens:'reports',
-    reportsQC:'reports', reportsJobMix:'reports', reportsCertif:'reports', reports:'reports',
+    reportsQC:'reports', reportsJobMix:'reports', reportsCertif:'reports', reportsTimeReports:'reports', reports:'reports',
     employees:'employees', equipment:'equipment', heimdall:'heimdall', mail:'mail',
     'settings-theme':'settings','settings-schedule':'settings','settings-rosters':'settings',
     'settings-plants':'settings','settings-trucking':'settings','settings-users':'settings' };
@@ -5110,7 +5110,7 @@ function switchTab(tab) {
   setBtn('tabBacklog',  tab === 'backlog',   '245,197,24');
   setBtn('tabBids',     isBidsView,          '245,197,24');
   setBtn('tabSchedule', tab === 'schedule',  '245,197,24');
-  setBtn('tabReports',  tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix' || tab === 'reportsCertif', '245,197,24');
+  setBtn('tabReports',  tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix' || tab === 'reportsCertif' || tab === 'reportsTimeReports', '245,197,24');
   setBtn('tabChat',     tab === 'chat',      '245,197,24');
   const _chatSub = document.getElementById('chatSubTabs');
   if (_chatSub) _chatSub.style.display = (tab === 'chat') ? 'flex' : 'none';
@@ -5184,7 +5184,7 @@ function switchTab(tab) {
   var _rBack = document.getElementById('reportsMobileBack');
   if (_rBack) {
     var _isReportsSub = ['reportsDailyOrders','reportsTwoWeek','reportsForemens',
-                         'reportsQC','reportsJobMix','reportsCertif'].indexOf(tab) >= 0;
+                         'reportsQC','reportsJobMix','reportsCertif','reportsTimeReports'].indexOf(tab) >= 0;
     _rBack.style.display = (_isReportsSub && window.innerWidth <= 768) ? 'flex' : 'none';
   }
   var _qcBack = document.getElementById('qcMobileBack');
@@ -5250,7 +5250,7 @@ function switchTab(tab) {
         }
       }).catch(function() {});
     }
-  } else if (tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix' || tab === 'reportsCertif') {
+  } else if (tab === 'reports' || tab === 'reportsDocs' || tab === 'reportsQC' || tab === 'reportsDailyOrders' || tab === 'reportsTwoWeek' || tab === 'reportsForemens' || tab === 'reportsJobMix' || tab === 'reportsCertif' || tab === 'reportsTimeReports') {
     // Show/update DJ approval button
     const _djBtn = document.getElementById('djApprovalBtnWrap');
     if (_djBtn) {
