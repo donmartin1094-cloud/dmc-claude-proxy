@@ -7574,8 +7574,8 @@ function _foremanTodayCardHtml() {
   '</div>';
 }
 
-// ── Foreman schedule: next 14 days filtered to logged-in foreman ─────────────
-function _foremanSched2Weeks() {
+// ── Foreman schedule: next 14 days, same grid structure as widgetToday() ──────
+function _foremanNextTwoWeeksHtml() {
   var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
   var _dn = _u;
   try {
@@ -7599,84 +7599,123 @@ function _foremanSched2Weeks() {
   var _botF = (typeof foremanRoster!=='undefined'&&foremanRoster[1]) ? foremanRoster[1] : 'Louie Medeiros';
 
   var today = new Date(); today.setHours(0,0,0,0);
-  var DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var todayKey = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
 
-  var shifts = [];
-  for (var d = 0; d < 14; d++) {
-    var day = new Date(today); day.setDate(today.getDate() + d);
-    var dateKey = day.getFullYear()+'-'+String(day.getMonth()+1).padStart(2,'0')+'-'+String(day.getDate()).padStart(2,'0');
-    var sd = (typeof schedData!=='undefined') ? (schedData[dateKey]||{}) : {};
-
-    var blk = null;
-    if (_matchF(_topF) && sd.top && sd.top.type !== 'blank') { blk = sd.top; }
-    else if (_matchF(_botF) && sd.bottom && sd.bottom.type !== 'blank') { blk = sd.bottom; }
-    else {
-      (sd.extras||[]).forEach(function(ex) {
-        if (!blk && _matchF(ex.foreman) && ex.data && ex.data.type!=='blank') blk = ex.data;
-      });
+  // Exact copy of blockCell from widgetToday() — unchanged
+  function blockCell(bd, dayKey, rowLabel) {
+    if (!bd || !bd.type || bd.type === 'blank') {
+      return '<div style="min-height:34px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
     }
-    if (!blk && sd.top && sd.top.fields && sd.top.type!=='blank') {
-      var _tf = (sd.top.fields.foreman||'').toLowerCase();
-      if (_tf && _matchF(_tf)) blk = sd.top;
-    }
-    if (!blk && sd.bottom && sd.bottom.fields && sd.bottom.type!=='blank') {
-      var _bf = (sd.bottom.fields.foreman||'').toLowerCase();
-      if (_bf && _matchF(_bf)) blk = sd.bottom;
-    }
-    if (!blk) continue;
-
-    shifts.push({ blk: blk, day: day, d: d });
+    var bt = (typeof getBlockType === 'function') ? getBlockType(bd.type) : { color:'#888', label: bd.type };
+    var f  = bd.fields || {};
+    var jobLabel = (f.jobNum || f.jobName || bt.label || '').substring(0, 7);
+    var tip = {
+      type: bt.label || bd.type,
+      color: bt.color || '#888',
+      jobName: f.jobName || '',
+      jobNum:  f.jobNum  || '',
+      crew:    rowLabel,
+      loc:     f.location || (function(){ try { var _jn=f.jobName||'',_jk=f.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); return (_mj&&_mj.location)||''; } catch(e){ return ''; } })(),
+      equip:   f.equipment || '',
+      notes:   f.notes || '',
+      day:     dayKey
+    };
+    var tipStr = encodeURIComponent(JSON.stringify(tip));
+    return '<div class="hw-sched-block" style="background:' + bt.color + '22;border:1.5px solid ' + bt.color + '66;" ' +
+      'data-stt="' + tipStr + '" ' +
+      'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" ' +
+      'onclick="hwSchedBlockClick(event,this)">' +
+      '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + bt.color + ';font-weight:700;text-align:center;padding:2px 3px;line-height:1.1;word-break:break-all;max-width:100%;overflow:hidden;">' +
+        escHtml(jobLabel) +
+      '</span>' +
+    '</div>';
   }
 
-  var CARD_ACCENT = '#a78bfa';
-  var total = shifts.length;
-  var shown = shifts.slice(0, 10);
+  // Mon-first day name array — same as widgetToday()
+  var DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-  var cards = shown.map(function(s) {
-    var blk = s.blk;
-    var f = blk.fields || {};
-    var isToday = s.d === 0;
-    var dateLabel = DAY_NAMES[s.day.getDay()] + ' ' + String(s.day.getMonth()+1).padStart(2,'0') + '/' + String(s.day.getDate()).padStart(2,'0');
+  // Build one week section (startOffset = 0 or 7, sectionLabel = 'This Week'/'Next Week')
+  // Returns empty string if the foreman has no shifts in that 7-day window
+  function buildWeekSection(startOffset, sectionLabel) {
+    var allDays = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(today); d.setDate(today.getDate() + startOffset + i);
+      var k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      var dow = d.getDay(); // 0=Sun
+      allDays.push({ key: k, name: DAY_NAMES[dow === 0 ? 6 : dow - 1], date: d.getDate(), isToday: k === todayKey });
+    }
 
-    var _jn = f.jobName || '';
-    var gcName = f.gc || (_jn.indexOf(' — ') >= 0 ? _jn.split(' — ')[0].trim() : '');
-    var jobDisplayName = _jn.indexOf(' — ') >= 0 ? _jn.split(' — ').slice(1).join(' — ').trim() : _jn;
-    if (!jobDisplayName) jobDisplayName = f.jobNum || '';
+    // Resolve foreman block for each day; keep only days that have a shift
+    var shiftDays = [];
+    allDays.forEach(function(day) {
+      var sd = (typeof schedData!=='undefined') ? (schedData[day.key]||{}) : {};
+      var blk = null;
+      if (_matchF(_topF) && sd.top && sd.top.type !== 'blank') { blk = sd.top; }
+      else if (_matchF(_botF) && sd.bottom && sd.bottom.type !== 'blank') { blk = sd.bottom; }
+      else {
+        (sd.extras||[]).forEach(function(ex) {
+          if (!blk && _matchF(ex.foreman) && ex.data && ex.data.type!=='blank') blk = ex.data;
+        });
+      }
+      if (!blk && sd.top && sd.top.fields && sd.top.type!=='blank') {
+        var _tf2 = (sd.top.fields.foreman||'').toLowerCase();
+        if (_tf2 && _matchF(_tf2)) blk = sd.top;
+      }
+      if (!blk && sd.bottom && sd.bottom.fields && sd.bottom.type!=='blank') {
+        var _bf2 = (sd.bottom.fields.foreman||'').toLowerCase();
+        if (_bf2 && _matchF(_bf2)) blk = sd.bottom;
+      }
+      if (blk) shiftDays.push({ key: day.key, name: day.name, date: day.date, isToday: day.isToday, blk: blk });
+    });
 
-    var location = f.location || '';
-    var isNight = blk.type === 'night' || (blk.type||'').toLowerCase().indexOf('night') !== -1;
-    var shiftPill = isNight
-      ? '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;font-weight:700;color:#5ab4f5;background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.35);border-radius:10px;padding:2px 6px;">Night</span>'
-      : '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;font-weight:700;color:#7ecb8f;background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.35);border-radius:10px;padding:2px 6px;">Day</span>';
+    if (!shiftDays.length) return '';
 
-    return '<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:3px solid ' + (isToday ? 'var(--stripe)' : CARD_ACCENT) + ';">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;color:' + (isToday ? 'var(--stripe)' : CARD_ACCENT) + ';display:flex;align-items:center;gap:5px;">' +
-          escHtml(dateLabel) +
-          (isToday ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--stripe);background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:8px;padding:1px 5px;">Today</span>' : '') +
-        '</div>' +
-        shiftPill +
+    var N = shiftDays.length;
+    var cells = [];
+
+    // Header row — identical structure to widgetToday()
+    cells.push('<div></div>');
+    shiftDays.forEach(function(d) {
+      var isT = d.isToday;
+      cells.push(
+        '<div style="text-align:center;padding-bottom:3px;border-bottom:' + (isT ? '2px solid var(--stripe)' : '1px solid rgba(255,255,255,0.08)') + ';">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + (isT ? 'var(--stripe)' : 'var(--concrete-dim)') + ';letter-spacing:.5px;">' + d.name + '</div>' +
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:' + (isT ? 'var(--stripe)' : 'var(--white)') + ';line-height:1.1;">' + d.date + '</div>' +
+        '</div>'
+      );
+    });
+
+    // Single data row — foreman's first name label + blocks — identical cell structure to widgetToday()
+    var shortLabel = _dn.split(' ')[0] || _dn;
+    cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="' + escHtml(_dn) + '">' + escHtml(shortLabel) + '</div>');
+    shiftDays.forEach(function(d) {
+      cells.push('<div style="padding:1px;">' + blockCell(d.blk, d.key, _dn) + '</div>');
+    });
+
+    return '<div style="margin-bottom:10px;">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);letter-spacing:.5px;text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:6px;">' + escHtml(sectionLabel) + '</div>' +
+      '<div style="display:grid;grid-template-columns:38px repeat(' + N + ',1fr);gap:4px;min-width:0;">' +
+        cells.join('') +
       '</div>' +
-      (jobDisplayName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);margin-bottom:2px;">' + escHtml(jobDisplayName) + '</div>' : '') +
-      (gcName ? '<div style="font-family:\'DM Mono\',monospace;font-size:8.5px;color:var(--concrete-dim);margin-bottom:1px;">' + escHtml(gcName) + '</div>' : '') +
-      (location ? '<div style="font-family:\'DM Mono\',monospace;font-size:8.5px;color:var(--concrete-dim);">📍 ' + escHtml(location) + '</div>' : '') +
     '</div>';
-  });
+  }
 
-  var moreHtml = (total > 10)
-    ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">+ ' + (total - 10) + ' more shifts</div>'
-    : '';
+  var week1 = buildWeekSection(0, 'This Week');
+  var week2 = buildWeekSection(7, 'Next Week');
+  var bodyContent = week1 + week2;
 
-  var bodyHtml = cards.length
-    ? cards.join('') + moreHtml
-    : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No shifts scheduled in the next 2 weeks.</div>';
+  if (!bodyContent) {
+    bodyContent = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No shifts scheduled in the next 2 weeks.</div>';
+  }
 
   return '<div class="home-widget">' +
     '<div class="home-widget-header">' +
       '<div class="home-widget-title">📅 Next 2 Weeks</div>' +
       '<button class="home-widget-action" onclick="switchTab(\'schedule\')">Open →</button>' +
     '</div>' +
-    '<div class="home-widget-body">' + bodyHtml + '</div>' +
+    '<div class="home-widget-body" style="padding:10px 12px;overflow-x:auto;">' +
+      bodyContent +
+    '</div>' +
   '</div>';
 }
 
@@ -7803,7 +7842,7 @@ function renderHomeView(el) {
     var _topSectionHtml = '';
     if (_isForeman) {
       try { _foremanMyHoursHtml = widgetMyHours(); } catch(e) { _foremanMyHoursHtml = ''; }
-      try { _foremanNext2WeeksHtml = _foremanSched2Weeks(); } catch(e) { _foremanNext2WeeksHtml = ''; }
+      try { _foremanNext2WeeksHtml = _foremanNextTwoWeeksHtml(); } catch(e) { _foremanNext2WeeksHtml = ''; }
       _topSectionHtml =
         '<div style="display:flex;gap:16px;align-items:flex-start;width:100%;flex-wrap:wrap;padding:0 0 8px;">' +
           '<div style="flex:1;min-width:180px;box-sizing:border-box;">' +
