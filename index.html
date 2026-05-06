@@ -7574,7 +7574,7 @@ function _foremanTodayCardHtml() {
   '</div>';
 }
 
-// ── Foreman schedule: Sun–Sat grid for this week + next week ─────────────────
+// ── Foreman schedule: Mon–Fri grid (+ weekend if job exists), two weeks ──────
 function _foremanNextTwoWeeksHtml() {
   var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
   var _dn = _u;
@@ -7598,18 +7598,20 @@ function _foremanNextTwoWeeksHtml() {
   var _topF = (typeof foremanRoster!=='undefined'&&foremanRoster[0]) ? foremanRoster[0] : 'Filipe Joaquim';
   var _botF = (typeof foremanRoster!=='undefined'&&foremanRoster[1]) ? foremanRoster[1] : 'Louie Medeiros';
 
-  var today = new Date(); today.setHours(0,0,0,0);
-  var todayKey = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var today   = new Date();
+  var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
 
-  // Week 1: Sunday on or before today; Week 2: the Sunday after
-  var week1Start = new Date(today);
-  week1Start.setDate(today.getDate() - today.getDay()); // getDay() 0=Sun → subtracts 0 if already Sunday
-  var week2Start = new Date(week1Start);
-  week2Start.setDate(week1Start.getDate() + 7);
+  // Monday of current week — identical calc to widgetToday()
+  var dow = today.getDay(); // 0=Sun
+  var thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  var nextMonday = new Date(thisMonday);
+  nextMonday.setDate(thisMonday.getDate() + 7);
 
-  var DAY_ABBREVS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  // Same day-name array as widgetToday()
+  var DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-  // Find the foreman's block for a given dateKey using same logic as _foremanTodayCardHtml
+  // Find foreman's block for a dateKey — same logic as _foremanTodayCardHtml
   function findBlock(dateKey) {
     var sd = (typeof schedData!=='undefined') ? (schedData[dateKey]||{}) : {};
     var blk = null;
@@ -7631,58 +7633,70 @@ function _foremanNextTwoWeeksHtml() {
     return blk;
   }
 
-  // Build one day cell — job block or blank placeholder, date label always at top
-  function makeCell(dateKey, dayAbbrev, mon, dateNum, isToday) {
-    var dateLabel = dayAbbrev + ' ' + String(mon).padStart(2,'0') + '/' + String(dateNum).padStart(2,'0');
-    var blk = findBlock(dateKey);
-
-    if (blk && blk.type && blk.type !== 'blank') {
-      var bt = (typeof getBlockType === 'function') ? getBlockType(blk.type) : { color:'#888', label: blk.type };
-      var f  = blk.fields || {};
-      var jobLabel = (f.jobNum || f.jobName || bt.label || '').substring(0, 7);
-      var tip = {
-        type: bt.label || blk.type,
-        color: bt.color || '#888',
-        jobName: f.jobName || '',
-        jobNum:  f.jobNum  || '',
-        crew:    _dn,
-        loc:     f.location || (function(){ try { var _jn=f.jobName||'',_jk=f.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); return (_mj&&_mj.location)||''; } catch(e){ return ''; } })(),
-        equip:   f.equipment || '',
-        notes:   f.notes || '',
-        day:     dateKey
-      };
-      var tipStr = encodeURIComponent(JSON.stringify(tip));
-      var accentColor = isToday ? 'var(--stripe)' : '#a78bfa';
-      return '<div style="border-radius:4px;padding:4px 5px;background:rgba(255,255,255,0.05);border-left:3px solid ' + accentColor + ';">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:' + accentColor + ';margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(dateLabel) + '</div>' +
-        '<div class="hw-sched-block" style="background:' + bt.color + '22;border:1.5px solid ' + bt.color + '66;" ' +
-          'data-stt="' + tipStr + '" ' +
-          'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" ' +
-          'onclick="hwSchedBlockClick(event,this)">' +
-          '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + bt.color + ';font-weight:700;text-align:center;padding:2px 3px;line-height:1.1;word-break:break-all;max-width:100%;overflow:hidden;">' +
-            escHtml(jobLabel) +
-          '</span>' +
-        '</div>' +
-      '</div>';
-    } else {
-      return '<div style="border-radius:4px;padding:4px 5px;background:rgba(255,255,255,0.02);border-left:3px solid rgba(167,139,250,0.2);">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--concrete-dim);margin-bottom:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(dateLabel) + '</div>' +
-        '<div style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;padding:8px 0;">—</div>' +
-      '</div>';
+  // Exact copy of blockCell from widgetToday() — unchanged
+  function blockCell(bd, dayKey, rowLabel) {
+    if (!bd || !bd.type || bd.type === 'blank') {
+      return '<div style="min-height:34px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
     }
+    var bt = (typeof getBlockType === 'function') ? getBlockType(bd.type) : { color:'#888', label: bd.type };
+    var f  = bd.fields || {};
+    var jobLabel = (f.jobNum || f.jobName || bt.label || '').substring(0, 7);
+    var tip = {
+      type: bt.label || bd.type,
+      color: bt.color || '#888',
+      jobName: f.jobName || '',
+      jobNum:  f.jobNum  || '',
+      crew:    rowLabel,
+      loc:     f.location || (function(){ try { var _jn=f.jobName||'',_jk=f.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); return (_mj&&_mj.location)||''; } catch(e){ return ''; } })(),
+      equip:   f.equipment || '',
+      notes:   f.notes || '',
+      day:     dayKey
+    };
+    var tipStr = encodeURIComponent(JSON.stringify(tip));
+    return '<div class="hw-sched-block" style="background:' + bt.color + '22;border:1.5px solid ' + bt.color + '66;" ' +
+      'data-stt="' + tipStr + '" ' +
+      'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" ' +
+      'onclick="hwSchedBlockClick(event,this)">' +
+      '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + bt.color + ';font-weight:700;text-align:center;padding:2px 3px;line-height:1.1;word-break:break-all;max-width:100%;overflow:hidden;">' +
+        escHtml(jobLabel) +
+      '</span>' +
+    '</div>';
   }
 
-  // Build a full Sun–Sat week section
-  function buildWeekSection(weekStart, sectionLabel) {
-    var cells = [];
+  // Build Mon–Fri always; add Sat (i=5) and Sun (i=6) only when foreman has a job
+  function buildWeekSection(monday, sectionLabel) {
+    var days = [];
     for (var i = 0; i < 7; i++) {
-      var d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
-      var k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      cells.push(makeCell(k, DAY_ABBREVS[d.getDay()], d.getMonth()+1, d.getDate(), k === todayKey));
+      var d = new Date(monday); d.setDate(monday.getDate() + i);
+      var k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      var blk = findBlock(k);
+      if (i >= 5 && !blk) continue; // skip Sat/Sun when no job
+      days.push({ key: k, name: DAY_NAMES[i], date: d.getDate(), isToday: k === todayKey, blk: blk });
     }
+
+    var N = days.length;
+    var cells = [];
+
+    // Header row — identical to widgetToday()
+    cells.push('<div></div>');
+    days.forEach(function(d) {
+      var isT = d.isToday;
+      cells.push('<div style="text-align:center;padding-bottom:3px;border-bottom:' + (isT ? '2px solid var(--stripe)' : '1px solid rgba(255,255,255,0.08)') + ';">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + (isT ? 'var(--stripe)' : 'var(--concrete-dim)') + ';letter-spacing:.5px;">' + d.name + '</div>' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:' + (isT ? 'var(--stripe)' : 'var(--white)') + ';line-height:1.1;">' + d.date + '</div>' +
+      '</div>');
+    });
+
+    // Single data row — foreman label + blocks — identical cell structure to widgetToday()
+    var shortLabel = _dn.split(' ')[0] || _dn;
+    cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="' + escHtml(_dn) + '">' + escHtml(shortLabel) + '</div>');
+    days.forEach(function(day) {
+      cells.push('<div style="padding:1px;">' + blockCell(day.blk, day.key, _dn) + '</div>');
+    });
+
     return '<div style="margin-bottom:10px;">' +
       '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);letter-spacing:.5px;text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:6px;">' + escHtml(sectionLabel) + '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;min-width:0;">' +
+      '<div style="display:grid;grid-template-columns:38px repeat(' + N + ',1fr);gap:4px;min-width:0;">' +
         cells.join('') +
       '</div>' +
     '</div>';
@@ -7694,8 +7708,8 @@ function _foremanNextTwoWeeksHtml() {
       '<button class="home-widget-action" onclick="switchTab(\'schedule\')">Open →</button>' +
     '</div>' +
     '<div class="home-widget-body" style="padding:10px 12px;overflow-x:auto;">' +
-      buildWeekSection(week1Start, 'This Week') +
-      buildWeekSection(week2Start, 'Next Week') +
+      buildWeekSection(thisMonday, 'This Week') +
+      buildWeekSection(nextMonday, 'Next Week') +
     '</div>' +
   '</div>';
 }
