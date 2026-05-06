@@ -726,7 +726,7 @@ function renderReports() {
           { icon:'📋', label:'Order Templates',    sub:'Blank DMC & Amrize forms',  count:2,       tab:'reportsBlankForms',  color:'#ff8c42',       prev:'dmc-order'  },
           { icon:'📋', label:'Certifieds',         sub:'MassDOT certified payroll', count:certifiedReports.length, tab:'reportsCertif', color:'#f5c518', prev:'certified' },
           ...(typeof isAdmin === 'function' && isAdmin() ? [
-            { icon:'⏱', label:'Time Reports', sub:'Employee hours by date range', count:(function(){var _r=[];try{_r=JSON.parse(localStorage.getItem('pavescope_foreman_reports')||'[]');}catch(e){}return _r.length;})(), tab:'reportsTimeReports', color:'#c084f5', prev:null },
+            { icon:'⏱', label:'Time Reports', sub:'Employee hours by date range', count:(function(){var _r=[];try{_r=JSON.parse(localStorage.getItem('dmc_foreman_reports')||'[]');}catch(e){}return _r.length;})(), tab:'reportsTimeReports', color:'#c084f5', prev:null },
           ] : []),
         ].map(cat => `
           <div class="_rpGallCard" style="width:148px;display:flex;flex-direction:column;gap:0;position:relative;">
@@ -5490,20 +5490,43 @@ function _trDayName(dateStr) {
 
 function _trLoadEntries() {
   var entries = [];
-  var reports = [];
-  try { reports = JSON.parse(localStorage.getItem('pavescope_foreman_reports') || '[]'); } catch(e) {}
-  reports.forEach(function(r) {
-    var names = r.presentDisplay || [];
-    names.forEach(function(name) {
-      entries.push({ empName: name, date: r.date || '', hours: r.hours || 0, jobLocation: r.notes || '—', jobNo: '—' });
+
+  // DJ self-reported hours
+  var _djHours = {};
+  try { _djHours = JSON.parse(localStorage.getItem('dmc_dj_daily_hours') || '{}'); } catch(e) {}
+  Object.keys(_djHours).forEach(function(date) {
+    var h = parseFloat(_djHours[date]) || 0;
+    if (h > 0) {
+      entries.push({
+        employeeName: 'Don Martin', username: 'dj',
+        date: date, hours: h,
+        jobLocation: '—', jobNum: '—', gcName: '—',
+        source: 'self', foremanName: '—'
+      });
+    }
+  });
+
+  // Foreman report crew hours
+  var _fReports = [];
+  try { _fReports = JSON.parse(localStorage.getItem('dmc_foreman_reports') || '[]'); } catch(e) {}
+  _fReports.filter(function(r) { return r.status === 'complete'; })
+    .forEach(function(r) {
+      (r.crew || []).forEach(function(c) {
+        entries.push({
+          employeeName: c.name,
+          username: c.name.toLowerCase().replace(/\s+/g, ''),
+          date: r.date, hours: parseFloat(c.hours) || 0,
+          jobLocation: r.projectLocation || '—',
+          jobNum: r.jobNum || '—',
+          gcName: r.gcName || '—',
+          source: 'foreman_report',
+          foremanName: r.foremanName || '—'
+        });
+      });
     });
-  });
-  var djHours = {};
-  try { djHours = JSON.parse(localStorage.getItem('dmc_dj_daily_hours') || '{}'); } catch(e) {}
-  Object.keys(djHours).forEach(function(dateKey) {
-    var h = djHours[dateKey];
-    if (h > 0) entries.push({ empName: 'DJ (Admin)', date: dateKey, hours: h, jobLocation: '—', jobNo: '—' });
-  });
+
+  // Sort all entries by date descending
+  entries.sort(function(a, b) { return a.date > b.date ? -1 : a.date < b.date ? 1 : 0; });
   return entries;
 }
 
@@ -5517,14 +5540,14 @@ function renderTimeReports(container) {
   var allEntries = _trLoadEntries();
 
   var empNames = [];
-  allEntries.forEach(function(e) { if (empNames.indexOf(e.empName) === -1) empNames.push(e.empName); });
+  allEntries.forEach(function(e) { if (empNames.indexOf(e.employeeName) === -1) empNames.push(e.employeeName); });
   empNames.sort();
 
   var filtered = allEntries.filter(function(e) { return e.date >= _trFilterStart && e.date <= _trFilterEnd; });
-  if (_trFilterEmp) filtered = filtered.filter(function(e) { return e.empName === _trFilterEmp; });
+  if (_trFilterEmp) filtered = filtered.filter(function(e) { return e.employeeName === _trFilterEmp; });
 
   var byEmp = {};
-  filtered.forEach(function(e) { if (!byEmp[e.empName]) byEmp[e.empName] = []; byEmp[e.empName].push(e); });
+  filtered.forEach(function(e) { if (!byEmp[e.employeeName]) byEmp[e.employeeName] = []; byEmp[e.employeeName].push(e); });
   var empList = Object.keys(byEmp).sort();
 
   var grandTotal = filtered.reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
@@ -5536,6 +5559,8 @@ function renderTimeReports(container) {
 
   var cellStyle = 'padding:5px 8px;border-bottom:1px solid rgba(255,255,255,0.05);';
   var thStyle   = 'padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);border-bottom:1px solid var(--asphalt-light);text-align:left;';
+
+  var accentColor = '#a78bfa';
 
   var empSections = '';
   if (empList.length === 0) {
@@ -5555,26 +5580,32 @@ function renderTimeReports(container) {
           + '<th style="' + thStyle + 'text-align:center;">Hours</th>'
           + '<th style="' + thStyle + '">Job Location</th>'
           + '<th style="' + thStyle + '">Job #</th>'
+          + '<th style="' + thStyle + '">GC</th>'
+          + '<th style="' + thStyle + '">Foreman</th>'
           + '</tr></thead><tbody>'
           + rows.map(function(r) {
               return '<tr>'
                 + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete);">' + _trFmtDate(r.date) + '</td>'
                 + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);text-align:center;">' + _trDayName(r.date) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:var(--stripe);text-align:center;">' + (parseFloat(r.hours) || 0).toFixed(1) + '</td>'
+                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:' + accentColor + ';text-align:center;">' + (parseFloat(r.hours) || 0).toFixed(1) + '</td>'
                 + '<td style="' + cellStyle + 'font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--white);">' + escHtml(r.jobLocation) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.jobNo) + '</td>'
+                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.jobNum) + '</td>'
+                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.gcName) + '</td>'
+                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.foremanName) + '</td>'
                 + '</tr>';
             }).join('')
-          + '</tbody></table>'
-          + '<div style="padding:6px 8px;text-align:right;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--stripe);border-top:1px solid var(--asphalt-light);">Total Hours: ' + empTotal.toFixed(1) + '</div>';
+          + '<tr>'
+          + '<td colspan="7" style="padding:6px 8px;text-align:right;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:' + accentColor + ';border-top:1px solid var(--asphalt-light);">Total Hours: ' + empTotal.toFixed(1) + '</td>'
+          + '</tr>'
+          + '</tbody></table>';
       }
 
       return '<div style="border:1px solid var(--asphalt-light);border-radius:var(--radius);overflow:hidden;background:var(--asphalt);margin-bottom:6px;">'
         + '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--asphalt-mid);'
         + (isOpen ? 'border-bottom:1px solid var(--asphalt-light);' : '') + '" onclick="window._trToggleEmp(' + JSON.stringify(empName) + ')">'
         + '<span style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);flex:1;">' + escHtml(empName) + '</span>'
-        + '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);font-weight:700;">' + empTotal.toFixed(1) + ' hrs</span>'
-        + '<span style="color:var(--concrete-dim);font-size:11px;margin-left:6px;">' + (isOpen ? '▲' : '▼') + '</span>'
+        + '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + accentColor + ';font-weight:700;">' + empTotal.toFixed(1) + ' hrs</span>'
+        + '<span style="color:var(--concrete-dim);font-size:14px;margin-left:6px;">' + (isOpen ? '∨' : '›') + '</span>'
         + '</div>'
         + tableHtml
         + '</div>';
@@ -5584,9 +5615,11 @@ function renderTimeReports(container) {
   var grandTotalBar = empList.length > 0
     ? '<div style="margin-top:16px;padding:12px 16px;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;">'
     + '<span style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">All Employees Total</span>'
-    + '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--stripe);">' + grandTotal.toFixed(1) + ' hours</span>'
+    + '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:' + accentColor + ';font-weight:700;">' + grandTotal.toFixed(1) + ' hours</span>'
     + '</div>'
     : '';
+
+  var btnStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete);font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;';
 
   container.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;min-height:0;height:100%;">'
     + '<div style="padding:12px 16px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--asphalt-mid);">'
@@ -5594,13 +5627,15 @@ function renderTimeReports(container) {
     +     '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--white);">⏱ Time Reports</div>'
     +     '<button style="background:none;border:none;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;padding:0;margin-top:2px;" onclick="_rpBackToGallery()">← Back to Reports</button>'
     +   '</div>'
-    +   '<button onclick="window._trExportCsv()" style="background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.35);border-radius:var(--radius);color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:7px 14px;cursor:pointer;white-space:nowrap;">📥 Export CSV</button>'
+    +   '<button onclick="window._trExportCsv()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:var(--radius);color:' + accentColor + ';font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:7px 14px;cursor:pointer;white-space:nowrap;">📥 Export CSV</button>'
     + '</div>'
     + '<div style="padding:10px 16px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;">'
+    +   '<button onclick="window._trShiftWeek(-1)" style="' + btnStyle + '">← Prev Week</button>'
     +   '<label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">From</label>'
     +   '<input type="date" value="' + _trFilterStart + '" onchange="window._trSetFilter(\'start\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
     +   '<label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">To</label>'
     +   '<input type="date" value="' + _trFilterEnd + '" onchange="window._trSetFilter(\'end\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
+    +   '<button onclick="window._trShiftWeek(1)" style="' + btnStyle + '">Next Week →</button>'
     +   '<select onchange="window._trSetFilter(\'emp\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
     +     empDropdown
     +   '</select>'
@@ -5621,11 +5656,32 @@ function renderTimeReports(container) {
     else _trFilterEmp = val;
     renderTimeReports(container);
   };
+  window._trShiftWeek = function(dir) {
+    function _shiftDate(dateStr, days) {
+      var d = new Date(dateStr + 'T12:00:00');
+      d.setDate(d.getDate() + days);
+      function _p(n) { return String(n).padStart(2, '0'); }
+      return d.getFullYear() + '-' + _p(d.getMonth() + 1) + '-' + _p(d.getDate());
+    }
+    _trFilterStart = _shiftDate(_trFilterStart, dir * 7);
+    _trFilterEnd   = _shiftDate(_trFilterEnd,   dir * 7);
+    renderTimeReports(container);
+  };
   window._trExportCsv = function() {
-    var csvRows = [['Employee Name','Date','Day','Hours','Job Location','Job Number']];
+    var csvRows = [['Employee','Date','Day','Hours','Job Location','Job #','GC','Foreman','Source']];
     empList.forEach(function(empName) {
       byEmp[empName].slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).forEach(function(r) {
-        csvRows.push([r.empName, _trFmtDate(r.date), _trDayName(r.date), (parseFloat(r.hours) || 0).toFixed(1), r.jobLocation, r.jobNo]);
+        csvRows.push([
+          r.employeeName,
+          _trFmtDate(r.date),
+          _trDayName(r.date),
+          (parseFloat(r.hours) || 0).toFixed(1),
+          r.jobLocation,
+          r.jobNum,
+          r.gcName,
+          r.foremanName,
+          r.source
+        ]);
       });
     });
     var csv = csvRows.map(function(row) {
@@ -5634,10 +5690,9 @@ function renderTimeReports(container) {
         return /[,"\n]/.test(s) ? '"' + s + '"' : s;
       }).join(',');
     }).join('\n');
-    var today = new Date().toISOString().slice(0, 10);
     var a = document.createElement('a');
     a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-    a.download = 'TimeReport_' + today + '.csv';
+    a.download = 'TimeReport_' + _trFilterStart + '_to_' + _trFilterEnd + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
