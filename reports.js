@@ -3438,6 +3438,7 @@ var invoiceActiveWeek  = null; // 'YYYY-MM-DD' Monday of selected week, or null 
 var invSearchQuery = '';
 var _invSearchDebounceTimer = null;
 var _invMixCount = 1;
+var _invEditMode = {}; // keyed by invoice ID — true when edit mode active
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 function invFmt(n) {
@@ -3998,7 +3999,7 @@ function _invMixRowsHtml(inv) {
       + '<span class="inv2-editable inv-field inv2-mix-num" data-inv="' + inv.id + '" data-field="tonQty" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.tonQty || '—') + '</span>'
       + '<span class="inv2-editable inv-field inv2-mix-num" data-inv="' + inv.id + '" data-field="mixPrice" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + (m.mixPrice && parseFloat(m.mixPrice) ? invFmt(parseFloat(m.mixPrice)) : '—') + '</span>'
       + '<span class="inv2-editable inv-field inv2-mix-num inv2-mix-total-cell" data-inv="' + inv.id + '" data-field="itemTotal" data-mi="' + mi + '" data-num="1" onclick="invActivateEdit(this)" title="Click to edit">' + rowTotal + '</span>'
-      + (canEdit && inv.mixItems.length > 1
+      + (canEdit && _invEditMode[inv.id] && inv.mixItems.length > 1
           ? '<button class="inv2-mix-del" onclick="event.stopPropagation();invRemoveMixRowFromCard(\'' + inv.id + '\',' + mi + ')" title="Remove">✕</button>'
           : '<span></span>')
       + '</div>';
@@ -4035,6 +4036,14 @@ function invToggleStatus(id, field) {
   inv.updatedAt = Date.now();
   saveInvoiceList();
   renderInvoiceTracker();
+}
+
+// ── Edit mode toggle ──────────────────────────────────────────────────────────
+function invToggleEditMode(invId) {
+  _invEditMode[invId] = !_invEditMode[invId];
+  var inv = invoiceList.find(function(i) { return i.id === invId; });
+  var card = document.getElementById('inv2-card-' + invId);
+  if (card && inv) card.outerHTML = _invRenderCard(inv);
 }
 
 // ── Approve modal ──────────────────────────────────────────────────────────────
@@ -4134,6 +4143,10 @@ function _invRenderCard(inv) {
     : null;
   var differs  = appRaw !== null && Math.abs(appRaw - billed) > 0.005;
   var diff     = differs ? (appRaw - billed) : null;
+  var _invJob  = (backlogJobs||[]).find(function(j) {
+    return (j.num||'').toString().trim() === (inv.jobNo||'').toString().trim();
+  });
+  var _invGC   = (_invJob && _invJob.gc) ? _invJob.gc : (inv.gcName || '—');
 
   function edSpan(field, val, cls) {
     return '<span class="inv2-editable' + (cls ? ' ' + cls : '') + '" data-inv="' + inv.id + '" data-field="' + field + '" onclick="invActivateEdit(this)" title="Click to edit">' + escHtml(val || '—') + '</span>';
@@ -4152,7 +4165,7 @@ function _invRenderCard(inv) {
     +   '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;margin-bottom:3px;">'
     +     '<div style="flex:1;min-width:0;">'
     +       '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-    +         edSpan('gcName', inv.gcName)
+    +         escHtml(_invGC)
     +       '</div>'
     +       '<div style="display:flex;align-items:baseline;gap:3px;flex-wrap:nowrap;margin-top:2px;overflow:hidden;">'
     +         '<span style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:#8B1A1A;flex-shrink:0;">' + edSpan('jobNo', inv.jobNo) + '</span>'
@@ -4162,7 +4175,7 @@ function _invRenderCard(inv) {
     +     '</div>'
     +     (canEdit
             ? '<div class="inv2-header-acts">'
-                + '<button class="inv2-icon-btn" onclick="event.stopPropagation();openInvoiceModal(\'' + inv.id + '\')" title="Edit in modal">✏️</button>'
+                + '<button class="inv2-icon-btn" onclick="event.stopPropagation();invToggleEditMode(\'' + inv.id + '\')" title="Toggle edit mode">' + (_invEditMode[inv.id] ? '✅ Done' : '✏️ Edit') + '</button>'
                 + '<button class="inv2-icon-btn inv2-del-btn" onclick="event.stopPropagation();deleteInvoice(\'' + inv.id + '\')" title="Delete">✕</button>'
                 + '</div>'
             : '')
@@ -4193,7 +4206,7 @@ function _invRenderCard(inv) {
                   + '<span class="inv2-editable inv-field inv2-truck-lbl" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="name" onclick="invBrkActivateEdit(this)" title="Click to change broker">' + escHtml(br.name || '—') + '</span>'
                   + '<span class="inv2-editable inv-field inv2-truck-count" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="count" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.count || '—') + '</span>'
                   + '<span class="inv2-editable inv-field inv2-truck-cost" data-inv="' + inv.id + '" data-brkidx="' + i + '" data-field="cost" onclick="invBrkActivateEdit(this)" title="Click to edit">' + (br.cost && parseFloat(br.cost) ? invFmt(parseFloat(br.cost)) : '—') + '</span>'
-                  + (canEdit ? '<button style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:11px;padding:0 3px;line-height:1;" onclick="event.stopPropagation();invRemoveBrkRow(\'' + inv.id + '\',' + i + ')" title="Remove">✕</button>' : '')
+                  + (canEdit && _invEditMode[inv.id] ? '<button style="background:none;border:none;cursor:pointer;color:var(--concrete-dim);font-size:11px;padding:0 3px;line-height:1;" onclick="event.stopPropagation();invRemoveBrkRow(\'' + inv.id + '\',' + i + ')" title="Remove">✕</button>' : '')
                   + '</div>';
               }).join('')
             : '<div class="inv2-truck-row"><span class="inv2-truck-icon">🔵</span><span class="inv2-truck-lbl" style="color:var(--concrete-dim);font-style:italic;">No broker trucks</span></div>';
@@ -4214,7 +4227,7 @@ function _invRenderCard(inv) {
     +     '<span style="text-align:center;">Mix Type</span><span style="text-align:center;">Tons</span><span style="text-align:center;">$/ton</span><span style="text-align:center;">Total</span><span></span>'
     +   '</div>'
     +   '<div data-mix-body="' + inv.id + '">' + _invMixRowsHtml(inv) + '</div>'
-    +   (canEdit ? '<button class="inv2-add-mix" onclick="event.stopPropagation();invAddMixRowToCard(\'' + inv.id + '\')">+ Add Mix Type</button>' : '')
+    +   (canEdit ? '<button class="inv2-add-mix" onclick="event.stopPropagation();invAddMixRowToCard(\'' + inv.id + '\')">+ Add Line Item</button>' : '')
     + '</div>'
 
     // ── BILLING (standalone, full width) ────────────────────────────────────
@@ -4896,7 +4909,7 @@ function openInvoiceModal(id, prefill) {
     + '</div>'
     + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types on this Invoice</div>'
     + '<div id="invMixRows">' + mixItems.map(function(m, i) { return mixRowHtml(m, i); }).join('') + '</div>'
-    + '<button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:16px;font-size:11px;">+ Add Mix Type</button>'
+    + '<button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:16px;font-size:11px;">+ Add Line Item</button>'
     + '<div style="margin-top:16px;">'
     +   '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">🚛 Actual Trucking Costs</div>'
     +   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">'
