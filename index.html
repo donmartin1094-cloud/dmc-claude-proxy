@@ -7601,7 +7601,7 @@ function _foremanSched2Weeks() {
   var today = new Date(); today.setHours(0,0,0,0);
   var DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  var rows = [];
+  var shifts = [];
   for (var d = 0; d < 14; d++) {
     var day = new Date(today); day.setDate(today.getDate() + d);
     var dateKey = day.getFullYear()+'-'+String(day.getMonth()+1).padStart(2,'0')+'-'+String(day.getDate()).padStart(2,'0');
@@ -7625,25 +7625,50 @@ function _foremanSched2Weeks() {
     }
     if (!blk) continue;
 
-    var f = blk.fields || {};
-    var bt = (typeof getBlockType==='function') ? getBlockType(blk.type) : { color:'#888', label: blk.type };
-    var isToday = d === 0;
-    var dateLabel = DAY_NAMES[day.getDay()] + ' ' + String(day.getMonth()+1).padStart(2,'0') + '/' + String(day.getDate()).padStart(2,'0');
-    var jobName = f.jobName || f.jobNum || bt.label || 'Shift';
-    var location = f.location || '';
-
-    rows.push(
-      '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06);">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:8.5px;color:' + (isToday?'var(--stripe)':'var(--concrete-dim)') + ';min-width:56px;flex-shrink:0;">' + escHtml(dateLabel) + '</div>' +
-        '<div style="width:8px;height:8px;border-radius:50%;background:' + (bt.color||'#888') + ';flex-shrink:0;"></div>' +
-        '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;color:var(--white);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1;">' + escHtml(jobName) + '</div>' +
-        (location ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:80px;">'+escHtml(location)+'</div>' : '') +
-      '</div>'
-    );
+    shifts.push({ blk: blk, day: day, d: d });
   }
 
-  var bodyHtml = rows.length
-    ? rows.join('')
+  var CARD_ACCENT = '#a78bfa';
+  var total = shifts.length;
+  var shown = shifts.slice(0, 10);
+
+  var cards = shown.map(function(s) {
+    var blk = s.blk;
+    var f = blk.fields || {};
+    var isToday = s.d === 0;
+    var dateLabel = DAY_NAMES[s.day.getDay()] + ' ' + String(s.day.getMonth()+1).padStart(2,'0') + '/' + String(s.day.getDate()).padStart(2,'0');
+
+    var _jn = f.jobName || '';
+    var gcName = f.gc || (_jn.indexOf(' — ') >= 0 ? _jn.split(' — ')[0].trim() : '');
+    var jobDisplayName = _jn.indexOf(' — ') >= 0 ? _jn.split(' — ').slice(1).join(' — ').trim() : _jn;
+    if (!jobDisplayName) jobDisplayName = f.jobNum || '';
+
+    var location = f.location || '';
+    var isNight = blk.type === 'night' || (blk.type||'').toLowerCase().indexOf('night') !== -1;
+    var shiftPill = isNight
+      ? '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;font-weight:700;color:#5ab4f5;background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.35);border-radius:10px;padding:2px 6px;">Night</span>'
+      : '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;font-weight:700;color:#7ecb8f;background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.35);border-radius:10px;padding:2px 6px;">Day</span>';
+
+    return '<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:3px solid ' + (isToday ? 'var(--stripe)' : CARD_ACCENT) + ';">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:700;color:' + (isToday ? 'var(--stripe)' : CARD_ACCENT) + ';display:flex;align-items:center;gap:5px;">' +
+          escHtml(dateLabel) +
+          (isToday ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--stripe);background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:8px;padding:1px 5px;">Today</span>' : '') +
+        '</div>' +
+        shiftPill +
+      '</div>' +
+      (jobDisplayName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);margin-bottom:2px;">' + escHtml(jobDisplayName) + '</div>' : '') +
+      (gcName ? '<div style="font-family:\'DM Mono\',monospace;font-size:8.5px;color:var(--concrete-dim);margin-bottom:1px;">' + escHtml(gcName) + '</div>' : '') +
+      (location ? '<div style="font-family:\'DM Mono\',monospace;font-size:8.5px;color:var(--concrete-dim);">📍 ' + escHtml(location) + '</div>' : '') +
+    '</div>';
+  });
+
+  var moreHtml = (total > 10)
+    ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:center;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">+ ' + (total - 10) + ' more shifts</div>'
+    : '';
+
+  var bodyHtml = cards.length
+    ? cards.join('') + moreHtml
     : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No shifts scheduled in the next 2 weeks.</div>';
 
   return '<div class="home-widget">' +
