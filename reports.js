@@ -4858,18 +4858,78 @@ function openInvoiceModal(id, prefill) {
     ? inv.mixItems
     : (p.mixItems && p.mixItems.length ? p.mixItems : [{ mixType: '', mixPrice: '', itemTotal: '' }]);
 
-  var supplierOptions = (typeof suppliersList !== 'undefined' ? suppliersList : []).map(function(s) {
-    return '<option value="' + escHtml(s.name) + '">';
-  }).join('');
-  var mixOptions = (typeof mixTypesList !== 'undefined' ? mixTypesList : []).map(function(m) {
-    return '<option value="' + escHtml(m.desc) + '">' + escHtml(m.displayName || m.desc) + '</option>';
-  }).join('');
+  // ── Supplier options: unique names from existing invoices ──────────────────
+  var _invSupNames = [];
+  var _invSupSeen  = {};
+  (typeof invoiceList !== 'undefined' ? invoiceList : []).forEach(function(iv) {
+    if (iv.supplier && !_invSupSeen[iv.supplier]) { _invSupSeen[iv.supplier] = true; _invSupNames.push(iv.supplier); }
+  });
+  _invSupNames.sort();
+
+  // ── Foreman options: role=foreman accounts + foremanRoster ─────────────────
+  var _invFmNames = [];
+  var _invFmSeen  = {};
+  if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+    DEFAULT_TEAM_ACCOUNTS.filter(function(a) { return a.role === 'foreman'; }).forEach(function(a) {
+      if (a.displayName && !_invFmSeen[a.displayName]) { _invFmSeen[a.displayName] = true; _invFmNames.push(a.displayName); }
+    });
+  }
+  try {
+    var _dynAccts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
+    _dynAccts.filter(function(a) { return a.role === 'foreman' && a.displayName; }).forEach(function(a) {
+      if (!_invFmSeen[a.displayName]) { _invFmSeen[a.displayName] = true; _invFmNames.push(a.displayName); }
+    });
+  } catch(e) {}
+  if (typeof foremanRoster !== 'undefined' && Array.isArray(foremanRoster)) {
+    foremanRoster.forEach(function(n) { if (n && !_invFmSeen[n]) { _invFmSeen[n] = true; _invFmNames.push(n); } });
+  }
+  _invFmNames.sort();
+
+  // ── Backlog job options: sorted by job number descending ───────────────────
+  var _blJobs = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).slice().sort(function(a, b) {
+    var na = (a.num || '').toLowerCase(), nb = (b.num || '').toLowerCase();
+    return na > nb ? -1 : na < nb ? 1 : 0;
+  });
+
+  // ── Mix type options: sorted alphabetically by displayName ─────────────────
+  var _mxTypes = (typeof mixTypesList !== 'undefined' ? mixTypesList : []).slice().sort(function(a, b) {
+    var da = (a.displayName || a.desc || '').toLowerCase(), db = (b.displayName || b.desc || '').toLowerCase();
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+
+  // ── Current field values ───────────────────────────────────────────────────
+  var _curJobNo    = (inv && inv.jobNo)    || p.jobNo    || '';
+  var _curJobName  = (inv && inv.jobName)  || p.jobName  || '';
+  var _curGcName   = (inv && inv.gcName)   || p.gcName   || '';
+  var _curForeman  = (inv && inv.foreman)  || p.foreman  || '';
+  var _curSupplier = (inv && inv.supplier) || p.supplier || '';
+
+  var _curJobInBacklog = _curJobNo !== '' && _blJobs.some(function(j) { return j.num === _curJobNo; });
+  var _showJobNoSel    = _blJobs.length > 0 && (_curJobNo === '' || _curJobInBacklog);
+  var _curFmKnown      = _curForeman  === '' || _invFmNames.indexOf(_curForeman)  >= 0;
+  var _curSupKnown     = _curSupplier === '' || _invSupNames.indexOf(_curSupplier) >= 0;
+  var _showFmSel       = _invFmNames.length  > 0 && _curFmKnown;
+  var _showSupSel      = _invSupNames.length > 0 && _curSupKnown;
+
+  var selStyle = "width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:'DM Mono',monospace;font-size:12px;padding:5px 8px;";
+
+  // ── Mix type widget: hidden input + select + fallback text input ───────────
+  function _invMixTypeHtml(idx, currentVal) {
+    var inList = !currentVal || _mxTypes.some(function(m) { return (m.displayName || m.desc) === currentVal; });
+    var mxOpts = '<option value="">— Select mix type —</option>'
+      + _mxTypes.map(function(m) {
+          var v = m.displayName || m.desc;
+          return '<option value="' + escHtml(v) + '"' + (currentVal === v ? ' selected' : '') + '>' + escHtml(v) + '</option>';
+        }).join('')
+      + '<option value="__other__">Other...</option>';
+    return '<input type="hidden" id="invMixType-' + idx + '" value="' + escHtml(currentVal || '') + '" />'
+      + '<select id="invMixTypeSel-' + idx + '" style="' + selStyle + (inList ? '' : 'display:none;') + '" onchange="window._invMixPick(' + idx + ',this)">' + mxOpts + '</select>'
+      + '<input id="invMixTypeText-' + idx + '" class="inv-input" placeholder="e.g. 12.5mm Surface" value="' + escHtml(inList ? '' : currentVal || '') + '" style="width:100%;' + (inList ? 'display:none;' : '') + '" oninput="document.getElementById(\'invMixType-' + idx + '\').value=this.value" />';
+  }
 
   function mixRowHtml(m, i) {
     return '<div class="inv-mix-row" id="invMixRow-' + i + '">'
-      + '<div><label class="inv-form-label">Mix Type</label>'
-      +   '<input class="inv-input" id="invMixType-' + i + '" list="invMixList" placeholder="e.g. 12.5mm Surface" value="' + escHtml(m.mixType || '') + '" style="width:100%;" />'
-      +   '<datalist id="invMixList">' + mixOptions + '</datalist></div>'
+      + '<div><label class="inv-form-label">Mix Type</label>' + _invMixTypeHtml(i, m.mixType || '') + '</div>'
       + '<div><label class="inv-form-label">Tonnage (tons)</label>'
       +   '<input class="inv-input" id="invTonQty-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.tonQty || '') + '" style="width:100%;" oninput="invCalcTotal(' + i + ')" /></div>'
       + '<div><label class="inv-form-label">Price / Ton ($)</label>'
@@ -4879,6 +4939,27 @@ function openInvoiceModal(id, prefill) {
       + (i > 0 ? '<button onclick="removeInvMixRow(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>' : '<div></div>')
       + '</div>';
   }
+  window._invMixRowHtml = function(m, i) { return mixRowHtml(m, i); };
+
+  // ── Option strings ─────────────────────────────────────────────────────────
+  var _jobNoSelOpts = '<option value="">— Select job —</option>'
+    + _blJobs.map(function(j) {
+        var label = (j.num ? j.num + ' — ' : '') + (j.name || '');
+        return '<option value="' + escHtml(j.num || '') + '"' + (_curJobNo && _curJobNo === j.num ? ' selected' : '') + '>' + escHtml(label) + '</option>';
+      }).join('')
+    + '<option value="__manual__">✎ Enter manually</option>';
+
+  var _fmSelOpts = '<option value="">— Select foreman —</option>'
+    + _invFmNames.map(function(n) {
+        return '<option value="' + escHtml(n) + '"' + (_curForeman === n ? ' selected' : '') + '>' + escHtml(n) + '</option>';
+      }).join('')
+    + '<option value="__other__">Other...</option>';
+
+  var _supSelOpts = '<option value="">— Select supplier —</option>'
+    + _invSupNames.map(function(n) {
+        return '<option value="' + escHtml(n) + '"' + (_curSupplier === n ? ' selected' : '') + '>' + escHtml(n) + '</option>';
+      }).join('')
+    + '<option value="__new__">Add new supplier...</option>';
 
   var at = (inv && inv.actualTrucking) || {};
 
@@ -4904,19 +4985,32 @@ function openInvoiceModal(id, prefill) {
   overlay.innerHTML = '<div class="inv-modal">'
     + '<div class="inv-modal-title">' + (isEdit ? 'Edit' : 'New') + ' Invoice Entry</div>'
     + '<div class="inv-form-grid">'
+    // Date + Invoice #
     +   '<div><label class="inv-form-label">Date of Work *</label>'
     +     '<input class="inv-input" id="invDate" type="date" value="' + ((inv && inv.dateOfWork) || p.dateOfWork || '') + '" style="width:100%;" /></div>'
     +   '<div><label class="inv-form-label">Invoice #</label>'
     +     '<input class="inv-input" id="invNo" value="' + escHtml((inv && inv.invoiceNo) || '') + '" placeholder="e.g. INV-20241" style="width:100%;" /></div>'
+    // Foreman dropdown
     +   '<div><label class="inv-form-label">Foreman</label>'
-    +     '<input class="inv-input" id="invForeman" value="' + escHtml((inv && inv.foreman) || p.foreman || '') + '" placeholder="Foreman name" style="width:100%;" /></div>'
+    +     '<input type="hidden" id="invForeman" value="' + escHtml(_curForeman) + '" />'
+    +     '<select id="invForemanSel" style="' + selStyle + (_showFmSel ? '' : 'display:none;') + '" onchange="window._invForemanPick(this)">' + _fmSelOpts + '</select>'
+    +     '<input id="invForemanText" class="inv-input" placeholder="Foreman name" value="' + escHtml(_showFmSel ? '' : _curForeman) + '" style="width:100%;' + (_showFmSel ? 'display:none;' : '') + '" oninput="document.getElementById(\'invForeman\').value=this.value" /></div>'
+    // Job # dropdown
     +   '<div><label class="inv-form-label">Job #</label>'
-    +     '<input class="inv-input" id="invJobNo" value="' + escHtml((inv && inv.jobNo) || p.jobNo || '') + '" placeholder="e.g. 2024-001" style="width:100%;" /></div>'
-    +   '<div class="inv-form-full"><label class="inv-form-label">Job Name</label>'
-    +     '<input class="inv-input" id="invJobName" value="' + escHtml((inv && inv.jobName) || p.jobName || '') + '" placeholder="e.g. Granite State — Route 3" style="width:100%;" /></div>'
+    +     '<input type="hidden" id="invJobNo" value="' + escHtml(_curJobNo) + '" />'
+    +     '<select id="invJobNoSel" style="' + selStyle + (_showJobNoSel ? '' : 'display:none;') + '" onchange="window._invJobPick(this)">' + _jobNoSelOpts + '</select>'
+    +     '<input id="invJobNoText" class="inv-input" placeholder="e.g. 2024-001" value="' + escHtml(_showJobNoSel ? '' : _curJobNo) + '" style="width:100%;' + (_showJobNoSel ? 'display:none;' : '') + '" oninput="document.getElementById(\'invJobNo\').value=this.value" /></div>'
+    // Job Name (half-width, readonly when backlog job active)
+    +   '<div><label class="inv-form-label">Job Name</label>'
+    +     '<input class="inv-input" id="invJobName" value="' + escHtml(_curJobName) + '" placeholder="e.g. Main St Overlay" style="width:100%;" ' + (_curJobInBacklog ? 'readonly' : '') + '/></div>'
+    // GC (half-width, readonly when backlog job active)
+    +   '<div><label class="inv-form-label">GC</label>'
+    +     '<input class="inv-input" id="invGcName" value="' + escHtml(_curGcName) + '" placeholder="e.g. Granite State" style="width:100%;" ' + (_curJobInBacklog ? 'readonly' : '') + '/></div>'
+    // Supplier dropdown (full-width)
     +   '<div class="inv-form-full"><label class="inv-form-label">Supplier</label>'
-    +     '<input class="inv-input" id="invSupplier" list="invSupplierList" value="' + escHtml((inv && inv.supplier) || p.supplier || '') + '" placeholder="Select or type supplier" style="width:100%;" />'
-    +     '<datalist id="invSupplierList">' + supplierOptions + '</datalist></div>'
+    +     '<input type="hidden" id="invSupplier" value="' + escHtml(_curSupplier) + '" />'
+    +     '<select id="invSupplierSel" style="' + selStyle + (_showSupSel ? '' : 'display:none;') + '" onchange="window._invSupPick(this)">' + _supSelOpts + '</select>'
+    +     '<input id="invSupplierText" class="inv-input" placeholder="Supplier name" value="' + escHtml(_showSupSel ? '' : _curSupplier) + '" style="width:100%;' + (_showSupSel ? 'display:none;' : '') + '" oninput="document.getElementById(\'invSupplier\').value=this.value" /></div>'
     + '</div>'
     + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types on this Invoice</div>'
     + '<div id="invMixRows">' + mixItems.map(function(m, i) { return mixRowHtml(m, i); }).join('') + '</div>'
@@ -4964,6 +5058,79 @@ function openInvoiceModal(id, prefill) {
   window._invAttachments = ((inv && inv.attachments) || []).map(function(a) { return Object.assign({}, a); });
   if (typeof invRenderAttList === 'function') invRenderAttList();
   renderInvModalBrkRows();
+
+  // ── Picker interaction handlers ────────────────────────────────────────────
+  window._invJobPick = function(sel) {
+    var val       = sel.value;
+    var hiddenNo  = document.getElementById('invJobNo');
+    var noText    = document.getElementById('invJobNoText');
+    var jobNameEl = document.getElementById('invJobName');
+    var gcEl      = document.getElementById('invGcName');
+    if (val === '__manual__') {
+      sel.style.display = 'none';
+      noText.style.display = '';
+      noText.value = '';
+      if (hiddenNo)  hiddenNo.value = '';
+      if (jobNameEl) jobNameEl.readOnly = false;
+      if (gcEl)      gcEl.readOnly = false;
+      noText.focus();
+    } else {
+      if (hiddenNo) hiddenNo.value = val;
+      var job = _blJobs.find(function(j) { return j.num === val; });
+      if (job) {
+        if (jobNameEl) { jobNameEl.value = job.name || ''; jobNameEl.readOnly = true; }
+        if (gcEl)      { gcEl.value      = job.gc   || ''; gcEl.readOnly      = true; }
+      } else {
+        if (jobNameEl) jobNameEl.readOnly = false;
+        if (gcEl)      gcEl.readOnly      = false;
+      }
+    }
+  };
+
+  window._invForemanPick = function(sel) {
+    var val      = sel.value;
+    var hiddenFm = document.getElementById('invForeman');
+    var fmText   = document.getElementById('invForemanText');
+    if (val === '__other__') {
+      sel.style.display = 'none';
+      fmText.style.display = '';
+      fmText.value = '';
+      if (hiddenFm) hiddenFm.value = '';
+      fmText.focus();
+    } else {
+      if (hiddenFm) hiddenFm.value = val;
+    }
+  };
+
+  window._invSupPick = function(sel) {
+    var val       = sel.value;
+    var hiddenSup = document.getElementById('invSupplier');
+    var supText   = document.getElementById('invSupplierText');
+    if (val === '__new__') {
+      sel.style.display = 'none';
+      supText.style.display = '';
+      supText.value = '';
+      if (hiddenSup) hiddenSup.value = '';
+      supText.focus();
+    } else {
+      if (hiddenSup) hiddenSup.value = val;
+    }
+  };
+
+  window._invMixPick = function(idx, sel) {
+    var val    = sel.value;
+    var hidden = document.getElementById('invMixType-' + idx);
+    var mxText = document.getElementById('invMixTypeText-' + idx);
+    if (val === '__other__') {
+      sel.style.display = 'none';
+      mxText.style.display = '';
+      mxText.value = '';
+      if (hidden) hidden.value = '';
+      mxText.focus();
+    } else {
+      if (hidden) hidden.value = val;
+    }
+  };
 }
 
 function renderInvModalBrkRows() {
@@ -5003,23 +5170,11 @@ function addInvMixRow() {
   var wrap = document.getElementById('invMixRows');
   if (!wrap) return;
   _invMixCount = wrap.querySelectorAll('.inv-mix-row').length;
-  var mixOptions = (typeof mixTypesList !== 'undefined' ? mixTypesList : []).map(function(m) {
-    return '<option value="' + escHtml(m.desc) + '">' + escHtml(m.displayName || m.desc) + '</option>';
-  }).join('');
-  var div = document.createElement('div');
-  div.innerHTML = '<div class="inv-mix-row" id="invMixRow-' + _invMixCount + '">'
-    + '<div><label class="inv-form-label">Mix Type</label>'
-    +   '<input class="inv-input" id="invMixType-' + _invMixCount + '" list="invMixList' + _invMixCount + '" placeholder="e.g. 12.5mm Surface" style="width:100%;" />'
-    +   '<datalist id="invMixList' + _invMixCount + '">' + mixOptions + '</datalist></div>'
-    + '<div><label class="inv-form-label">Tonnage (tons)</label>'
-    +   '<input class="inv-input" id="invTonQty-' + _invMixCount + '" type="number" step="0.01" placeholder="0.00" style="width:100%;" oninput="invCalcTotal(' + _invMixCount + ')" /></div>'
-    + '<div><label class="inv-form-label">Price / Ton ($)</label>'
-    +   '<input class="inv-input" id="invMixPrice-' + _invMixCount + '" type="number" step="0.01" placeholder="0.00" style="width:100%;" oninput="invCalcTotal(' + _invMixCount + ')" /></div>'
-    + '<div><label class="inv-form-label">Item Total ($)</label>'
-    +   '<input class="inv-input" id="invItemTotal-' + _invMixCount + '" type="number" step="0.01" placeholder="0.00" style="width:100%;background:rgba(126,203,143,0.06);" /></div>'
-    + '<button onclick="this.closest(\'.inv-mix-row\').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>'
-    + '</div>';
-  wrap.appendChild(div.firstElementChild);
+  if (typeof window._invMixRowHtml === 'function') {
+    var div = document.createElement('div');
+    div.innerHTML = window._invMixRowHtml({ mixType: '', tonQty: '', mixPrice: '', itemTotal: '' }, _invMixCount);
+    wrap.appendChild(div.firstElementChild);
+  }
 }
 
 function removeInvMixRow(i) {
@@ -5070,7 +5225,7 @@ function saveInvoiceEntry(editId) {
     foreman:     gv('invForeman'),
     jobNo:       gv('invJobNo'),
     jobName:     jn,
-    gcName:      jn.indexOf(' — ') >= 0 ? jn.split(' — ')[0].trim() : '',
+    gcName:      gv('invGcName'),
     supplier:    gv('invSupplier'),
     mixItems:    mixItems,
     actualTrucking: {
