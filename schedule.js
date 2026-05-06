@@ -2801,7 +2801,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
   const effectiveType = bdata.type || 'blank';
   const btype = getBlockType(effectiveType);
   const isBlankExtra = effectiveType === 'blank';
-  const extraBg = isBlankExtra ? '#ffffff' : btype.color;
+  const extraBg = isBlankExtra ? '#ffffff' : (bdata._verifiedColor || btype.color);
   const fc = '#000000';
   const fields = bdata.fields || {};
 
@@ -4542,7 +4542,7 @@ function renderSchedule() {
         // Weekend with no work set → lilac; otherwise use btype color
         const isWeekendBlank = isWeekend && effectiveType === 'blank';
         const isWeekdayBlank = !isWeekend && effectiveType === 'blank';
-        const blockBg = isHoliday ? '#e8d5f5' : isWeekendBlank ? '#e8d5f5' : isWeekdayBlank ? '#ffffff' : btype.color;
+        const blockBg = isHoliday ? '#e8d5f5' : isWeekendBlank ? '#e8d5f5' : isWeekdayBlank ? '#ffffff' : (bdata._verifiedColor || btype.color);
         const fc = '#000000';
         const fields = bdata.fields || {};
         const canEdit = (isAdmin() || canEditTab('schedule')) && schedEditMode;

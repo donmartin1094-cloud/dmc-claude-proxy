@@ -27845,8 +27845,11 @@ function _crewConfirmInit() {
     // 6:00–6:59 PM → confirm today's crews
     if (h === 18) _crewConfirmShow(todayKey, 'evening');
 
-    // 6:00–6:59 AM → confirm previous night shift crews
-    if (h === 6)  _crewConfirmShow(yesterdayKey, 'morning');
+    // 6:00–6:59 AM → confirm previous night shift crews + admin verify yesterday's reports
+    if (h === 6) {
+      _crewConfirmShow(yesterdayKey, 'morning');
+      setTimeout(function() { _adminVerifyShow(yesterdayKey); }, 1500);
+    }
   }
 
   // Run immediately in case app was opened during the trigger window
@@ -27854,6 +27857,139 @@ function _crewConfirmInit() {
   // Then check every 5 minutes
   if (_crewConfirmInterval) clearInterval(_crewConfirmInterval);
   _crewConfirmInterval = setInterval(check, 5 * 60 * 1000);
+}
+
+// ── Admin Report Verification Modal ──────────────────────────────────────────
+
+function _adminVerifyShow(dateKey) {
+  if (!isAdmin()) return;
+  if (localStorage.getItem('dmc_verify_prompt_' + dateKey)) return;
+  var rpts = (typeof foremanReports !== 'undefined' ? foremanReports : []).filter(function(r){ return r.date === dateKey; });
+  if (!rpts.length) return;
+  if (document.getElementById('_adminVerifyOverlay')) return;
+
+  var dateLabel = new Date(dateKey + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+
+  var rows = rpts.map(function(r) {
+    var crewCount = (r.labor||[]).filter(function(l){ return l.name && l.name.trim(); }).length;
+    var totalHrs  = (r.labor||[]).reduce(function(s,l){ return s+(parseFloat(l.totalHours||l.machineHours||l.handHours)||0); }, 0);
+    return '<div id="_avRow_'+r.id+'" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;">'+
+      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);">👷 '+escHtml(r.foreman||'—')+'</div>'+
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);margin-top:2px;">'+escHtml(r.jobLocation||'—')+(r.jobNumber?' · #'+escHtml(r.jobNumber):'')+(r.gcName?' · '+escHtml(r.gcName):'')+'</div>'+
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:2px;">'+crewCount+' crew · '+totalHrs.toFixed(1)+' hrs</div>'+
+        '</div>'+
+        '<div id="_avBadge_'+r.id+'" style="font-size:14px;flex-shrink:0;">'+(r.locationVerified===true?'✅':r.locationVerified===false?'⚠️':'○')+'</div>'+
+      '</div>'+
+      '<div id="_avFlagInput_'+r.id+'" style="display:none;margin-bottom:8px;">'+
+        '<input class="form-input" id="_avNote_'+r.id+'" placeholder="Describe the issue..." style="width:100%;font-size:11px;padding:6px 10px;box-sizing:border-box;"/>'+
+        '<button onclick="_adminVerifyFlag(\''+r.id+'\',\''+dateKey+'\')" style="margin-top:4px;width:100%;padding:6px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.4);border-radius:var(--radius);color:#fb923c;font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">Save Flag</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;">'+
+        '<button onclick="_adminVerifyOne(\''+r.id+'\',\''+dateKey+'\')" style="flex:1;padding:7px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.35);border-radius:var(--radius);color:#4ade80;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;cursor:pointer;">✅ Verify Location</button>'+
+        '<button onclick="_adminVerifyShowFlag(\''+r.id+'\')" style="flex:1;padding:7px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.35);border-radius:var(--radius);color:#fb923c;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;cursor:pointer;">⚠️ Flag Issue</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  var overlay = document.createElement('div');
+  overlay.id = '_adminVerifyOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:2px solid rgba(74,222,128,0.3);border-radius:var(--radius-lg);width:100%;max-width:540px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">'+
+      '<div style="display:flex;align-items:flex-start;padding:18px 22px 14px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">'+
+        '<div>'+
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:2px;color:#4ade80;">📋 Verify Shift Reports</div>'+
+          '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-top:2px;">'+escHtml(dateLabel)+'</div>'+
+        '</div>'+
+        '<span style="flex:1;"></span>'+
+        '<button onclick="document.getElementById(\'_adminVerifyOverlay\').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;padding:0;line-height:1;">✕</button>'+
+      '</div>'+
+      '<div id="_avBody" style="flex:1;overflow-y:auto;padding:16px 22px;">'+rows+'</div>'+
+      '<div style="padding:12px 22px;border-top:1px solid var(--asphalt-light);flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;">'+
+        '<button onclick="_adminVerifyAll(\''+dateKey+'\')" style="padding:7px 16px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.4);border-radius:var(--radius);color:#4ade80;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;cursor:pointer;">✅ Verify All</button>'+
+        '<button onclick="_adminVerifyDone(\''+dateKey+'\')" style="padding:7px 16px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">Done</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function _adminVerifyOne(reportId, dateKey) {
+  var r = (typeof foremanReports !== 'undefined' ? foremanReports : []).find(function(x){ return x.id === reportId; });
+  if (!r) return;
+  var cu = localStorage.getItem('dmc_u') || '';
+  r.locationVerified   = true;
+  r.locationVerifiedAt = Date.now();
+  r.locationVerifiedBy = cu;
+  r.updatedAt = Date.now();
+  if (typeof saveForemanReports === 'function') saveForemanReports();
+  var badge = document.getElementById('_avBadge_' + reportId);
+  if (badge) badge.textContent = '✅';
+  _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316');
+}
+
+function _adminVerifyShowFlag(reportId) {
+  var el = document.getElementById('_avFlagInput_' + reportId);
+  if (el) { el.style.display = el.style.display === 'none' ? '' : 'none'; }
+}
+
+function _adminVerifyFlag(reportId, dateKey) {
+  var r = (typeof foremanReports !== 'undefined' ? foremanReports : []).find(function(x){ return x.id === reportId; });
+  if (!r) return;
+  var noteEl = document.getElementById('_avNote_' + reportId);
+  r.locationVerified    = false;
+  r.locationIssueNote   = noteEl ? noteEl.value.trim() : '';
+  r.locationVerifiedAt  = Date.now();
+  r.locationVerifiedBy  = localStorage.getItem('dmc_u') || '';
+  r.updatedAt = Date.now();
+  if (typeof saveForemanReports === 'function') saveForemanReports();
+  var badge = document.getElementById('_avBadge_' + reportId);
+  if (badge) badge.textContent = '⚠️';
+  var flagEl = document.getElementById('_avFlagInput_' + reportId);
+  if (flagEl) flagEl.style.display = 'none';
+}
+
+function _adminVerifyAll(dateKey) {
+  var cu = localStorage.getItem('dmc_u') || '';
+  var rpts = (typeof foremanReports !== 'undefined' ? foremanReports : []).filter(function(r){ return r.date === dateKey; });
+  rpts.forEach(function(r) {
+    r.locationVerified   = true;
+    r.locationVerifiedAt = Date.now();
+    r.locationVerifiedBy = cu;
+    r.updatedAt = Date.now();
+    var badge = document.getElementById('_avBadge_' + r.id);
+    if (badge) badge.textContent = '✅';
+    _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316');
+  });
+  if (typeof saveForemanReports === 'function') saveForemanReports();
+}
+
+function _adminVerifyDone(dateKey) {
+  localStorage.setItem('dmc_verify_prompt_' + dateKey, '1');
+  var ov = document.getElementById('_adminVerifyOverlay');
+  if (ov) ov.remove();
+}
+
+function _adminVerifyScheduleColor(dateKey, jobNumber, color) {
+  if (!dateKey || typeof schedData === 'undefined') return;
+  var day = schedData[dateKey] || {};
+  var slots = [['top', day.top], ['bottom', day.bottom]];
+  (day.extras || []).forEach(function(ex, i){ if (ex && ex.data) slots.push(['extra_'+i, ex.data]); });
+  var changed = false;
+  slots.forEach(function(pair) {
+    var slotName = pair[0]; var bdata = pair[1];
+    if (!bdata) return;
+    var flds = bdata.fields || {};
+    if (jobNumber && (flds.jobNum || '').trim() === (jobNumber || '').trim()) {
+      bdata._verifiedColor = color;
+      changed = true;
+    }
+  });
+  if (changed && typeof saveSchedDataDirect === 'function') {
+    saveSchedDataDirect();
+    if (typeof renderSchedule === 'function') renderSchedule();
+  }
 }
 
 // ── Login UI ──

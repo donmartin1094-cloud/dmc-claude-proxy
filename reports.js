@@ -2229,6 +2229,10 @@ function deleteQCReport(id) {
 var FOREMAN_REPORTS_KEY = 'pavescope_foreman_reports';
 var foremanReports = JSON.parse(localStorage.getItem(FOREMAN_REPORTS_KEY) || '[]');
 var _frSortBy = 'date'; // 'date' | 'foreman'
+var _frFilterForeman = '';   // '' = all, or foreman name
+var _frFilterMonth   = '';   // '' = all, or 'YYYY-MM'
+var _frFilterVerif   = 'all'; // 'all' | 'verified' | 'unverified' | 'flagged'
+var _frExpandedId    = null;  // currently expanded report id
 
 function saveForemanReports() {
   localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(foremanReports));
@@ -2237,51 +2241,163 @@ function saveForemanReports() {
 }
 
 // ── Repository list rendering ────────────────────────────────────────────────
+function _frVerifBadge(r) {
+  if (r.locationVerified === true)  return '<span style="color:#4ade80;font-size:11px;" title="Location Verified">✅</span>';
+  if (r.locationVerified === false) return '<span style="color:#fb923c;font-size:11px;" title="Issue Flagged">⚠️</span>';
+  return '<span style="color:var(--concrete-dim);font-size:11px;" title="Unverified">○</span>';
+}
+
+function _frRenderDetail(r) {
+  var fmtTime = function(t){ if(!t) return '—'; var p=t.split(':'); var h=parseInt(p[0]),m=p[1]||'00',ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m+' '+ap; };
+  var workTypeLabels = {machinePave:'Machine Pave',levelingCourse:'Leveling Course',trenchPave:'Trench Pave',handPave:'Hand Pave',sidewalks:'Sidewalks',patch:'Patch',berm:'Berm'};
+  var totalCrewHrs = 0;
+  var laborRows = (r.labor||[]).map(function(l) {
+    var h = parseFloat(l.totalHours||l.machineHours||l.handHours)||0;
+    totalCrewHrs += h;
+    return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
+      '<span style="color:var(--concrete-dim);width:70px;flex-shrink:0;">'+escHtml(l.role||'')+'</span>'+
+      '<span style="flex:1;color:var(--white);">'+escHtml(l.name||'—')+'</span>'+
+      '<span style="color:var(--stripe);width:50px;text-align:right;">'+h.toFixed(1)+' hrs</span>'+
+    '</div>';
+  }).join('');
+  var workRows = (r.workItems||[]).filter(function(w){ return w.workType; }).map(function(w) {
+    var tons = (parseFloat(w.denseGraded)||0)+(parseFloat(w.blackBase)||0)+(parseFloat(w.binder)||0)+(parseFloat(w.top)||0);
+    return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
+      '<span style="flex:1;color:var(--white);">'+escHtml(workTypeLabels[w.workType]||w.workType)+'</span>'+
+      (parseFloat(w.squareYards)>0?'<span style="color:var(--concrete-dim);">'+parseFloat(w.squareYards).toFixed(0)+' SY</span>':'')+''+
+      (tons>0?'<span style="color:var(--stripe);">'+tons.toFixed(1)+' T</span>':'')+''+
+    '</div>';
+  }).join('');
+  var equipRows = Object.keys(r.equipment||{}).filter(function(k){ return r.equipment[k]; }).map(function(k) {
+    var eq = r.equipment[k]; var hrs = typeof eq==='object'?eq.hours:eq;
+    return '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);padding:2px 0;">'+escHtml(k)+(hrs?' — '+hrs+' hrs':'')+'</div>';
+  }).join('');
+  var verifLine = r.locationVerified===true
+    ? '<div style="margin-top:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:#4ade80;">✅ Location verified'+(r.locationVerifiedBy?' by '+escHtml(r.locationVerifiedBy):'')+'</div>'
+    : r.locationVerified===false
+      ? '<div style="margin-top:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:#fb923c;">⚠️ Issue flagged'+(r.locationIssueNote?': '+escHtml(r.locationIssueNote):'')+'</div>'
+      : '';
+  return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);margin:4px 16px 8px;padding:14px 16px;font-size:11px;">'+
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Job #</div><div style="color:var(--stripe);font-weight:700;">'+escHtml(r.jobNumber||'—')+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">GC</div><div style="color:var(--white);">'+escHtml(r.gcName||'—')+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Location</div><div style="color:var(--white);">'+escHtml(r.jobLocation||'—')+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Time</div><div style="color:var(--white);">'+fmtTime(r.startingTime)+' – '+fmtTime(r.endingTime)+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Plant</div><div style="color:var(--white);">'+escHtml(r.plantLocation||'—')+'</div></div>'+
+    '</div>'+
+    (laborRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Roster</div>'+laborRows+'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);text-align:right;margin-top:4px;">Total: '+totalCrewHrs.toFixed(1)+' hrs</div></div>':'')+
+    (workRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Mix / Production</div>'+workRows+'</div>':'')+
+    (equipRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Equipment</div>'+equipRows+'</div>':'')+
+    (r.delayNotes?'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:6px;"><span style="text-transform:uppercase;letter-spacing:1px;font-size:8px;">Notes: </span>'+escHtml(r.delayNotes)+'</div>':'')+
+    verifLine+
+    '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'+
+      '<button onclick="event.stopPropagation();openForemanReportForm(\''+r.id+'\')" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:3px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">✏️ Edit</button>'+
+      '<button onclick="event.stopPropagation();printForemanReport(\''+r.id+'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">🖨 Print</button>'+
+      '<button onclick="event.stopPropagation();deleteForemanReport(\''+r.id+'\')" style="background:none;border:1px solid rgba(217,79,61,0.3);border-radius:3px;color:var(--red);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">🗑 Delete</button>'+
+    '</div>'+
+  '</div>';
+}
+
 function renderForemanReports(containerEl) {
   if (!containerEl) return;
   _injectReportsPrintStyles();
-  var sorted = foremanReports.slice().sort(function(a, b) {
-    if (_frSortBy === 'foreman') {
-      var fc = (a.foreman||'').localeCompare(b.foreman||'');
-      if (fc !== 0) return fc;
-      return (b.date||'').localeCompare(a.date||'');
-    }
-    return (b.date||'').localeCompare(a.date||'');
-  });
 
-  var sortBar =
-    '<div style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;background:var(--asphalt-mid);">'+
-      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--concrete-dim);">Sort:</span>'+
-      '<button onclick="_frSortBy=\'date\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
-        'style="background:'+(_frSortBy==='date'?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(_frSortBy==='date'?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:3px;color:'+(_frSortBy==='date'?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 10px;cursor:pointer;">📅 Date</button>'+
-      '<button onclick="_frSortBy=\'foreman\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
-        'style="background:'+(_frSortBy==='foreman'?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(_frSortBy==='foreman'?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:3px;color:'+(_frSortBy==='foreman'?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 10px;cursor:pointer;">👷 Foreman</button>'+
+  // ── Filter bar ──────────────────────────────────────────────────────────────
+  var allForemen = [];
+  foremanReports.forEach(function(r){ if (r.foreman && allForemen.indexOf(r.foreman) < 0) allForemen.push(r.foreman); });
+  allForemen.sort();
+  var allMonths = [];
+  foremanReports.forEach(function(r){ var m = (r.date||'').slice(0,7); if (m && allMonths.indexOf(m) < 0) allMonths.push(m); });
+  allMonths.sort().reverse();
+
+  var foremanOpts = '<option value="">All Foremen</option>'+allForemen.map(function(f){ return '<option value="'+escHtml(f)+'"'+(f===_frFilterForeman?' selected':'')+'>'+escHtml(f)+'</option>'; }).join('');
+  var monthOpts   = '<option value="">All Months</option>'+allMonths.map(function(m){ var d=new Date(m+'-01T12:00:00'); var lbl=d.toLocaleDateString('en-US',{month:'long',year:'numeric'}); return '<option value="'+m+'"'+(m===_frFilterMonth?' selected':'')+'>'+escHtml(lbl)+'</option>'; }).join('');
+  var selStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 6px;cursor:pointer;';
+  var verifBtns = ['all','verified','unverified','flagged'].map(function(v){
+    var labels={all:'All',verified:'✅ Verified',unverified:'○ Unverified',flagged:'⚠️ Flagged'};
+    var act = v===_frFilterVerif;
+    return '<button onclick="_frFilterVerif=\''+v+'\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
+      'style="background:'+(act?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(act?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:3px;color:'+(act?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 8px;cursor:pointer;">'+labels[v]+'</button>';
+  }).join('');
+
+  var filterBar =
+    '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;background:var(--asphalt-mid);flex-wrap:wrap;">'+
+      '<select onchange="_frFilterForeman=this.value;renderForemanReports(document.getElementById(\'frListWrap\'))" style="'+selStyle+'">'+foremanOpts+'</select>'+
+      '<select onchange="_frFilterMonth=this.value;renderForemanReports(document.getElementById(\'frListWrap\'))" style="'+selStyle+'">'+monthOpts+'</select>'+
+      '<div style="display:flex;gap:4px;">'+verifBtns+'</div>'+
       '<div style="flex:1;"></div>'+
-      '<button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;">🖨 Print / Save PDF</button>'+
+      '<button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;">🖨 Print</button>'+
       '<button onclick="openForemanReportForm(null)" style="background:var(--stripe);border:none;border-radius:var(--radius);padding:4px 14px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;cursor:pointer;">+ New Report</button>'+
     '</div>';
 
-  var rows = sorted.length ? sorted.map(function(r) {
-    var dt = r.date ? new Date(r.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}) : '—';
-    var totalTons = 0;
-    (r.workItems||[]).forEach(function(w) {
-      totalTons += (parseFloat(w.denseGraded)||0)+(parseFloat(w.blackBase)||0)+(parseFloat(w.binder)||0)+(parseFloat(w.top)||0);
-    });
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;background:var(--asphalt);transition:background 0.1s;" '+
-      'onmouseover="this.style.background=\'var(--asphalt-light)\'" onmouseout="this.style.background=\'var(--asphalt)\'" onclick="openForemanReportForm(\''+r.id+'\')">'+
-      '<span style="font-size:16px;">👷</span>'+
-      '<div style="flex:1;min-width:0;">'+
-        '<div style="font-size:12px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(r.foreman||'—')+' — '+escHtml(r.jobLocation||r.gcName||'—')+'</div>'+
-        '<div style="font-size:10px;color:var(--concrete-dim);margin-top:2px;">'+escHtml(dt)+(r.gcName?' · '+escHtml(r.gcName):'')+( totalTons > 0 ? ' · '+totalTons.toFixed(1)+' tons' : '')+'</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:6px;flex-shrink:0;">'+
-        '<button onclick="event.stopPropagation();printForemanReport(\''+r.id+'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-size:10px;padding:3px 8px;cursor:pointer;">🖨 Print</button>'+
-        '<button onclick="event.stopPropagation();deleteForemanReport(\''+r.id+'\')" style="background:none;border:none;color:var(--concrete-dim);font-size:13px;cursor:pointer;padding:0 4px;" title="Delete">✕</button>'+
-      '</div>'+
-    '</div>';
-  }).join('') : '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-size:12px;">No Foremen\'s Reports yet — click <strong style="color:var(--stripe);">+ New Report</strong> to create one.</div>';
+  // ── Apply filters ────────────────────────────────────────────────────────────
+  var filtered = foremanReports.filter(function(r) {
+    if (_frFilterForeman && (r.foreman||'') !== _frFilterForeman) return false;
+    if (_frFilterMonth  && (r.date||'').slice(0,7) !== _frFilterMonth)   return false;
+    if (_frFilterVerif === 'verified'   && r.locationVerified !== true)  return false;
+    if (_frFilterVerif === 'unverified' && r.locationVerified !== undefined && r.locationVerified !== null) return false;
+    if (_frFilterVerif === 'flagged'    && r.locationVerified !== false)  return false;
+    return true;
+  });
 
-  containerEl.innerHTML = sortBar + '<div style="flex:1;overflow-y:auto;">' + rows + '</div>';
+  if (!filtered.length) {
+    containerEl.innerHTML = filterBar + '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-size:12px;">No reports match the current filters.</div>';
+    return;
+  }
+
+  // ── Group: foreman → month → reports ────────────────────────────────────────
+  var byForeman = {};
+  filtered.forEach(function(r) {
+    var fn = r.foreman || '(Unknown)';
+    var mo = (r.date||'').slice(0,7) || '0000-00';
+    if (!byForeman[fn]) byForeman[fn] = {};
+    if (!byForeman[fn][mo]) byForeman[fn][mo] = [];
+    byForeman[fn][mo].push(r);
+  });
+
+  var foremanNames = Object.keys(byForeman).sort();
+
+  var bodyHtml = foremanNames.map(function(fn) {
+    var months = Object.keys(byForeman[fn]).sort().reverse();
+    var monthSections = months.map(function(mo) {
+      var reports = byForeman[fn][mo].slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+      var moLabel = mo !== '0000-00' ? new Date(mo+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Unknown Date';
+      var items = reports.map(function(r) {
+        var dp = (r.date||'').split('-');
+        var dateStr = dp.length===3 ? dp[1]+'.'+dp[2]+'.'+dp[0] : (r.date||'—');
+        var label = dateStr + (r.gcName?'.'+r.gcName:'') + (r.jobLocation?'.'+r.jobLocation:'');
+        var isExpanded = _frExpandedId === r.id;
+        return '<div>'+
+          '<div onclick="_frExpandedId=_frExpandedId===\''+r.id+'\'?null:\''+r.id+'\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
+            'style="display:flex;align-items:center;gap:8px;padding:7px 16px 7px 32px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.03);" '+
+            'onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'\'">'+
+            '<span style="font-size:10px;color:var(--concrete-dim);">'+(isExpanded?'▼':'▶')+'</span>'+
+            _frVerifBadge(r)+
+            '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(label)+'</span>'+
+          '</div>'+
+          (isExpanded ? _frRenderDetail(r) : '')+
+        '</div>';
+      }).join('');
+      return '<div>'+
+        '<div style="padding:5px 16px 5px 22px;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.04);">'+
+          '<span style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">'+escHtml(moLabel)+'</span>'+
+          '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--asphalt-light);margin-left:8px;">'+reports.length+' report'+(reports.length!==1?'s':'')+'</span>'+
+        '</div>'+
+        items+
+      '</div>';
+    }).join('');
+
+    return '<div style="border-bottom:2px solid var(--asphalt-light);">'+
+      '<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--asphalt-mid);">'+
+        '<span style="font-size:16px;">👷</span>'+
+        '<span style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);">'+escHtml(fn)+'</span>'+
+        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-left:4px;">'+byForeman[fn][Object.keys(byForeman[fn])[0]].length+' this month</span>'+
+      '</div>'+
+      monthSections+
+    '</div>';
+  }).join('');
+
+  containerEl.innerHTML = filterBar + '<div style="flex:1;overflow-y:auto;">' + bodyHtml + '</div>';
 }
 
 function deleteForemanReport(id) {
@@ -2619,6 +2735,17 @@ function saveForemanReportForm(existingId) {
     foremanReports.push(report);
   }
   saveForemanReports();
+
+  // Notify admin accounts when a foreman submits a report
+  try {
+    var _frNotifMsg = (report.foreman||'Foreman') + ' submitted shift report for ' + (report.jobLocation||report.gcName||'—') + ' — ' + (report.date||'');
+    var _frAdminAccts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]').filter(function(a){ return a.role === 'admin'; });
+    if (_frAdminAccts.length) {
+      _frAdminAccts.forEach(function(a){ pushNotif('success', '📋 Report Submitted', _frNotifMsg, null, a.username || a.email); });
+    } else {
+      pushNotif('success', '📋 Report Submitted', _frNotifMsg, null, 'dj@donmartincorp.com');
+    }
+  } catch(_frNe) {}
 
   // Auto-create certified payroll entry for MassDOT projects
   try {
