@@ -7916,53 +7916,30 @@ function _operatorThisWeekHtml() {
 function _opWeekBlockClick(e, el) {
   e.stopPropagation();
   if (typeof hwSchedTipHide === 'function') hwSchedTipHide();
-  var existing = document.getElementById('_opWeekDetailPop');
+  var existing = document.getElementById('_hwSchedMobilePop');
   if (existing && existing._src === el) { existing.remove(); return; }
   if (existing) existing.remove();
   var raw = el.getAttribute('data-stt');
   if (!raw) return;
   var tip; try { tip = JSON.parse(decodeURIComponent(raw)); } catch(err) { return; }
+  // operators field → crew so _hwSchedTipHtml renders it identically to admin
+  if (!tip.crew && tip.operators) tip.crew = tip.operators;
   var pop = document.createElement('div');
-  pop.id = '_opWeekDetailPop';
+  pop.id = '_hwSchedMobilePop';
   pop._src = el;
-  var col = tip.color || '#5ab4f5';
-  function tipRow(icon, label, val) {
-    if (!val) return '';
-    return '<div style="display:flex;align-items:flex-start;gap:7px;">'+
-      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;width:52px;">'+escHtml(icon)+'</span>'+
-      '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.82);">'+escHtml(val)+'</span>'+
-    '</div>';
-  }
-  pop.innerHTML =
-    '<div style="background:var(--asphalt-mid);border:1.5px solid '+col+'55;border-radius:12px;padding:14px 16px;width:248px;box-shadow:0 8px 32px rgba(0,0,0,0.75);">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
-        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:15px;letter-spacing:1.5px;color:'+col+';">'+escHtml((tip.type||'').toUpperCase())+'</div>'+
-        (tip.shift ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:'+col+';background:'+col+'1a;border:1px solid '+col+'44;border-radius:4px;padding:2px 6px;">'+escHtml(tip.shift)+'</span>' : '')+
-      '</div>'+
-      (tip.jobNum ? '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:800;color:var(--stripe);margin-bottom:4px;">#'+escHtml(tip.jobNum)+'</div>' : '')+
-      (tip.jobName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);margin-bottom:10px;line-height:1.3;">'+escHtml(tip.jobName)+'</div>' : '')+
-      '<div style="display:flex;flex-direction:column;gap:5px;">'+
-        tipRow('GC', 'GC', tip.gc)+
-        tipRow('📍 Location', 'Location', tip.loc)+
-        tipRow('🔧 Equip', 'Equipment', tip.equip)+
-        tipRow('👷 Crew', 'Crew', tip.operators)+
-        tipRow('⏱ Load', 'Load Time', tip.loadTime)+
-        tipRow('📝 Notes', 'Notes', tip.notes)+
-      '</div>'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:10px;padding-top:7px;border-top:1px solid rgba(255,255,255,0.08);">'+escHtml(tip.day||'')+'</div>'+
-    '</div>';
-  pop.style.cssText = 'position:fixed;z-index:9200;';
+  pop.className = 'hw-sched-tooltip';
+  pop.style.display = 'block';
+  pop.style.pointerEvents = 'none';
+  pop.innerHTML = _hwSchedTipHtml(tip);
   var r = el.getBoundingClientRect();
-  var left = Math.min(r.left, window.innerWidth - 264);
+  var left = Math.min(r.left, window.innerWidth - 224);
   var top = r.bottom + 6;
-  if (top + 300 > window.innerHeight) top = Math.max(4, r.top - 300);
+  if (top + 220 > window.innerHeight) top = r.top - 210;
   pop.style.left = left + 'px';
-  pop.style.top = top + 'px';
+  pop.style.top  = top  + 'px';
   document.body.appendChild(pop);
   setTimeout(function() {
-    document.addEventListener('click', function _opWkCls(ev) {
-      if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', _opWkCls); }
-    });
+    document.addEventListener('click', function _cls() { pop.remove(); document.removeEventListener('click', _cls); }, { once: true });
   }, 50);
 }
 
