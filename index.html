@@ -27304,19 +27304,26 @@ async function initApp(username) {
     if (e.target === this) this.classList.remove('active');
   });
 
-  // Operator-specific nav restrictions — hide Employees, Mail, non-Theme settings from all nav surfaces
+  // Operator-specific nav restrictions — secondary safety net after canSeeTab override
   function _applyOperatorNavRestrictions() {
     if (typeof getCurrentRole !== 'function' || getCurrentRole() !== 'operator' || isAdmin()) return;
+    // Items NOT covered by extraMap in applyTabPermissions — must be hidden explicitly
     var _opHide = [
       // Sidebar tabs
       'tabEmployees', 'tabMail',
       // Sidebar settings sub-buttons (keep tabSettings + tabSettingsTheme)
       'tabSettingsSchedule', 'tabSettingsRosters', 'tabSettingsPlants',
       'tabSettingsTrucking', 'tabSettingsUsers',
-      // Header folders
+      // Header folders not in extraMap
       'hdrFolderMail', 'hdrFolderTakeoffs',
-      // Compact collapsed nav
-      'collNavEmployees',
+      // Compact collapsed nav items not in extraMap
+      'collNavMail', 'collNavEmployees',
+      // AR sub-items not in extraMap
+      'collNavArAia', 'collNavArArrow', 'collNavArMix',
+      // Reports sub-items not in extraMap
+      'collNavReportsArrow', 'collNavRep2Wk', 'collNavRepCertif',
+      'collNavRepDaily', 'collNavRepForemens', 'collNavRepJobMix', 'collNavRepQC',
+      // Settings non-theme collapsed nav
       'collNavStngSchedule', 'collNavStngRosters', 'collNavStngPlants',
       'collNavStngTrucking', 'collNavStngUsers'
     ];
@@ -27329,6 +27336,17 @@ async function initApp(username) {
       if (btn) btn.style.display = 'none';
     });
   }
+  // Primary fix: override canSeeTab at render time so applyTabPermissions hides all
+  // collNav*/hdrFolder* elements for operators via extraMap iteration
+  (function() {
+    var _origCST = canSeeTab;
+    window.canSeeTab = canSeeTab = function(tabId) {
+      if (typeof getCurrentRole === 'function' && getCurrentRole() === 'operator' && !isAdmin()) {
+        return tabId === 'equipment';
+      }
+      return _origCST.apply(this, arguments);
+    };
+  })();
   // Wrap applyTabPermissions so operator restrictions run after every call
   (function() {
     var _origATP = applyTabPermissions;
