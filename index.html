@@ -7868,6 +7868,7 @@ function _operatorThisWeekHtml() {
       notes:   f.notes || '',
       day:     dayKey
     };
+    console.log('OPERATOR data-stt:', JSON.stringify(tip));
     var tipStr = encodeURIComponent(JSON.stringify(tip));
     var col = bt.color || '#5ab4f5';
     return '<div class="hw-sched-block" style="background:'+col+'22;border:1.5px solid '+col+'66;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:3px 5px;gap:2px;cursor:pointer;" '+
@@ -8566,6 +8567,7 @@ function widgetToday() {
       notes:   f.notes || '',
       day:     dayKey
     };
+    console.log('ADMIN data-stt:', JSON.stringify(tip));
     var tipStr = encodeURIComponent(JSON.stringify(tip));
     return '<div class="hw-sched-block" style="background:' + bt.color + '22;border:1.5px solid ' + bt.color + '66;" ' +
       'data-stt="' + tipStr + '" ' +
