@@ -21548,18 +21548,27 @@ function getWeekLabel(weekKey) {
   } catch(e) { return weekKey; }
 }
 
+// Derives a predictable login username from a full name (first-initial + last-name).
+// "John Smith" → "jsmith", mirrors the existing foreman convention (fjoaquim, marruda).
+function _deriveCrewUsername(fullName) {
+  var parts = (fullName || '').trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[parts.length - 1]).toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  return (fullName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function getCrewForForeman(username) {
-  // Resolve foreman's display name from their login account
   var uLc = (username || '').toLowerCase();
-  var foremanAcct = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase() === uLc; });
-  var foremanName = foremanAcct ? foremanAcct.displayName : username;
-  // Look up assigned laborers from the employees array
   var assigned = (typeof employees !== 'undefined' ? employees : []).filter(function(e) {
-    return e.role === 'laborer' && e.foremanAssignment === foremanName && e.status !== 'inactive';
+    if (e.status === 'inactive') return false;
+    if (e.crewForeman === uLc) return true;
+    // Louie Medeiros inherits legacy 'marruda' crew assignments
+    if (uLc === 'lmedeiros' && e.crewForeman === 'marruda') return true;
+    return false;
   });
-  // Map to the shape the wizard expects
   return assigned.map(function(e) {
-    return { username: e.id, displayName: e.name, role: 'Laborer' };
+    return { username: _deriveCrewUsername(e.name), displayName: e.name, role: e.role || 'crew' };
   });
 }
 
@@ -26435,6 +26444,7 @@ const DEFAULT_TEAM_ACCOUNTS = [
   // ── Foremans ──────────────────────────────────────────────────────────────
   { username:'fjoaquim',    email:'fjoaquim@donmartincorp.com',           password:'DMC2024!',         role:'foreman',  displayName:'Filipe Joaquim', active:true, driverTypes:[] },
   { username:'marruda',     email:'marruda@donmartincorp.com',            password:'DMC2024!',         role:'foreman',  displayName:'Mario Arruda',   active:true, driverTypes:[] },
+  { username:'lmedeiros',   email:'lmedeiros@donmartincorp.com',          password:'DMC2024!',         role:'foreman',  displayName:'Louie Medeiros', active:true, driverTypes:[] },
 ];
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog

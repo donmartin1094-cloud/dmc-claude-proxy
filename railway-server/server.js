@@ -244,6 +244,9 @@ app.post('/auth-login', (req, res) => {
     'ATow':        'DMCTow2025',
     'Christian':   'DMCWelcome2026!',
     'DSouza':      'Pestario86!!',
+    'fjoaquim':    'DMC2024!',
+    'marruda':     'DMC2024!',
+    'lmedeiros':   'DMC2024!',
   };
   const uLower = login.toLowerCase();
   const matchKey = Object.keys(ACCOUNTS).find(k => k.toLowerCase() === uLower);
