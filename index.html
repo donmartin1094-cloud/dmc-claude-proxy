@@ -7822,40 +7822,148 @@ function _operatorThisWeekHtml() {
   thisMonday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
   var DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-  var rows = DAY_NAMES.map(function(dayName, i) {
-    var d = new Date(thisMonday); d.setDate(thisMonday.getDate() + i);
-    var dk = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    var sd = (typeof schedData !== 'undefined') ? (schedData[dk] || {}) : {};
-    var blk = null;
-    var chk = function(b) { if (b && b.type !== 'blank' && !blk && _matchOp((b.fields||{}).operators||'')) blk = b; };
-    chk(sd.top); chk(sd.bottom);
-    (sd.extras||[]).forEach(function(ex){ if (ex&&ex.data) chk(ex.data); });
-    var isToday = dk === todayKey;
-    if (blk) {
-      var f = blk.fields || {};
-      var bt = (typeof getBlockType === 'function') ? getBlockType(blk.type||'blank') : null;
-      var col = (bt && bt.color) ? bt.color : '#3a3a3a';
-      var jn = f.jobName || '—';
-      if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
-      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+(isToday?'var(--stripe)':'var(--concrete-dim)')+';width:28px;flex-shrink:0;">'+dayName+'</div>'+
-        '<div style="width:3px;height:24px;background:'+col+';border-radius:2px;flex-shrink:0;"></div>'+
-        '<div style="flex:1;min-width:0;">'+
-          '<div style="font-family:\'DM Sans\',sans-serif;font-size:10px;font-weight:700;color:'+(isToday?'var(--white)':'rgba(255,255,255,0.8)')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(jn)+'</div>'+
-          (f.jobNum ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);">#'+escHtml(f.jobNum)+'</div>' : '')+
-        '</div>'+
-      '</div>';
-    }
-    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+(isToday?'var(--stripe)':'rgba(255,255,255,0.2)')+';width:28px;flex-shrink:0;">'+dayName+'</div>'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:rgba(255,255,255,0.15);font-style:italic;">—</div>'+
+  // Build days array — Mon–Fri always, Sat/Sun only when assigned
+  var days = [];
+  for (var _i = 0; _i < 7; _i++) {
+    var _d = new Date(thisMonday); _d.setDate(thisMonday.getDate() + _i);
+    var _dk = _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    var _sd = (typeof schedData !== 'undefined') ? (schedData[_dk] || {}) : {};
+    var _blk = null;
+    var _chk = function(b) { if (b && b.type !== 'blank' && !_blk && _matchOp((b.fields||{}).operators||'')) _blk = b; };
+    _chk(_sd.top); _chk(_sd.bottom);
+    (_sd.extras||[]).forEach(function(ex){ if (ex&&ex.data) _chk(ex.data); });
+    if (_i >= 5 && !_blk) continue;
+    days.push({ key: _dk, name: DAY_NAMES[_i], date: _d.getDate(), isToday: _dk === todayKey, blk: _blk });
+  }
+
+  var N = days.length;
+  if (!N) {
+    return '<div class="home-widget">'+
+      '<div class="home-widget-header"><div class="home-widget-title">📅 This Week</div></div>'+
+      '<div class="home-widget-body home-widget-empty">No assignments this week</div>'+
     '</div>';
-  }).join('');
+  }
+
+  // Block cell — hw-sched-block class + operator-detail interior (job#, name, shift pill)
+  function opBlockCell(bd, dayKey) {
+    if (!bd || !bd.type || bd.type === 'blank') {
+      return '<div style="min-height:44px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
+    }
+    var bt = (typeof getBlockType === 'function') ? getBlockType(bd.type) : { color:'#5ab4f5', label: bd.type };
+    var f = bd.fields || {};
+    var jn = f.jobName || '';
+    if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
+    var gc = f.gc || (f.jobName && f.jobName.indexOf(' — ') >= 0 ? f.jobName.split(' — ')[0] : '') || '';
+    var shiftLabel = (bt.label || bd.type || '').replace(' Work','');
+    var _td2 = {}; try { _td2 = JSON.parse(f.trucking||'{}'); } catch(e) {}
+    var loadTime = _td2.loadTime || f.loadTime || '';
+    var opList = (f.operators||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+    var tip = {
+      type: bt.label || bd.type,
+      color: bt.color || '#888',
+      jobName: f.jobName || '',
+      jobNum: f.jobNum || '',
+      gc: gc,
+      loc: f.location || '',
+      equip: f.equipment || '',
+      operators: opList.join(', '),
+      loadTime: loadTime,
+      shift: shiftLabel,
+      notes: f.notes || '',
+      day: dayKey
+    };
+    var tipStr = encodeURIComponent(JSON.stringify(tip));
+    var col = bt.color || '#5ab4f5';
+    return '<div class="hw-sched-block" style="background:'+col+'22;border:1.5px solid '+col+'66;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:3px 5px;gap:2px;cursor:pointer;" '+
+      'data-stt="'+tipStr+'" '+
+      'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" '+
+      'onclick="_opWeekBlockClick(event,this)">'+
+      (f.jobNum ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:800;color:'+col+';line-height:1.1;">#'+escHtml(f.jobNum)+'</span>' : '')+
+      (jn ? '<span style="font-family:\'DM Sans\',sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,0.9);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+escHtml(jn.substring(0,14))+'</span>' : '')+
+      (shiftLabel ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+col+';background:'+col+'1a;border-radius:3px;padding:1px 4px;align-self:flex-start;line-height:1.2;">'+escHtml(shiftLabel)+'</span>' : '')+
+    '</div>';
+  }
+
+  var cells = [];
+
+  // Header row — same format as admin widgetToday()
+  cells.push('<div></div>');
+  days.forEach(function(d) {
+    var isT = d.isToday;
+    cells.push('<div style="text-align:center;padding-bottom:3px;border-bottom:'+(isT?'2px solid var(--stripe)':'1px solid rgba(255,255,255,0.08)')+';">'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:'+(isT?'var(--stripe)':'var(--concrete-dim)')+';letter-spacing:.5px;">'+d.name+'</div>'+
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:'+(isT?'var(--stripe)':'var(--white)')+';line-height:1.1;">'+d.date+'</div>'+
+    '</div>');
+  });
+
+  // Single data row — "Me" label + one block per day
+  cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="'+escHtml(_dn)+'">Me</div>');
+  days.forEach(function(day) {
+    cells.push('<div style="padding:1px;">'+opBlockCell(day.blk, day.key)+'</div>');
+  });
 
   return '<div class="home-widget">'+
     '<div class="home-widget-header"><div class="home-widget-title">📅 This Week</div></div>'+
-    '<div class="home-widget-body">'+rows+'</div>'+
+    '<div class="home-widget-body" style="padding:10px 12px;overflow-x:auto;">'+
+      '<div style="display:grid;grid-template-columns:38px repeat('+N+',1fr);gap:4px;min-width:0;">'+
+        cells.join('')+
+      '</div>'+
+    '</div>'+
   '</div>';
+}
+
+// Operator This Week block tap — full detail popup (works on both touch and desktop)
+function _opWeekBlockClick(e, el) {
+  e.stopPropagation();
+  if (typeof hwSchedTipHide === 'function') hwSchedTipHide();
+  var existing = document.getElementById('_opWeekDetailPop');
+  if (existing && existing._src === el) { existing.remove(); return; }
+  if (existing) existing.remove();
+  var raw = el.getAttribute('data-stt');
+  if (!raw) return;
+  var tip; try { tip = JSON.parse(decodeURIComponent(raw)); } catch(err) { return; }
+  var pop = document.createElement('div');
+  pop.id = '_opWeekDetailPop';
+  pop._src = el;
+  var col = tip.color || '#5ab4f5';
+  function tipRow(icon, label, val) {
+    if (!val) return '';
+    return '<div style="display:flex;align-items:flex-start;gap:7px;">'+
+      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;width:52px;">'+escHtml(icon)+'</span>'+
+      '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:rgba(255,255,255,0.82);">'+escHtml(val)+'</span>'+
+    '</div>';
+  }
+  pop.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1.5px solid '+col+'55;border-radius:12px;padding:14px 16px;width:248px;box-shadow:0 8px 32px rgba(0,0,0,0.75);">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:15px;letter-spacing:1.5px;color:'+col+';">'+escHtml((tip.type||'').toUpperCase())+'</div>'+
+        (tip.shift ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:'+col+';background:'+col+'1a;border:1px solid '+col+'44;border-radius:4px;padding:2px 6px;">'+escHtml(tip.shift)+'</span>' : '')+
+      '</div>'+
+      (tip.jobNum ? '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:800;color:var(--stripe);margin-bottom:4px;">#'+escHtml(tip.jobNum)+'</div>' : '')+
+      (tip.jobName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);margin-bottom:10px;line-height:1.3;">'+escHtml(tip.jobName)+'</div>' : '')+
+      '<div style="display:flex;flex-direction:column;gap:5px;">'+
+        tipRow('GC', 'GC', tip.gc)+
+        tipRow('📍 Location', 'Location', tip.loc)+
+        tipRow('🔧 Equip', 'Equipment', tip.equip)+
+        tipRow('👷 Crew', 'Crew', tip.operators)+
+        tipRow('⏱ Load', 'Load Time', tip.loadTime)+
+        tipRow('📝 Notes', 'Notes', tip.notes)+
+      '</div>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:10px;padding-top:7px;border-top:1px solid rgba(255,255,255,0.08);">'+escHtml(tip.day||'')+'</div>'+
+    '</div>';
+  pop.style.cssText = 'position:fixed;z-index:9200;';
+  var r = el.getBoundingClientRect();
+  var left = Math.min(r.left, window.innerWidth - 264);
+  var top = r.bottom + 6;
+  if (top + 300 > window.innerHeight) top = Math.max(4, r.top - 300);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+  document.body.appendChild(pop);
+  setTimeout(function() {
+    document.addEventListener('click', function _opWkCls(ev) {
+      if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', _opWkCls); }
+    });
+  }, 50);
 }
 
 function renderHomeView(el) {
@@ -27353,6 +27461,57 @@ async function initApp(username) {
     applyTabPermissions = function() { _origATP.apply(this, arguments); _applyOperatorNavRestrictions(); };
   })();
 
+  // Hook into uspmToggleItem to send push notifications when an operator is added to a slot
+  (function() {
+    var _origUSPM = uspmToggleItem;
+    window.uspmToggleItem = uspmToggleItem = function(key, slot, field, type, name, el) {
+      var _prevItems = [];
+      if (type === 'operators' && field === 'operators') {
+        try { _prevItems = getPickerItems(key, slot, field).slice(); } catch(e) {}
+      }
+      _origUSPM.apply(this, arguments);
+      if (type !== 'operators' || field !== 'operators') return;
+      try {
+        var _curItems = getPickerItems(key, slot, field);
+        var _added = _curItems.filter(function(n) { return _prevItems.indexOf(n) < 0; });
+        if (!_added.length) return;
+        var _jobName = '(No Job Name)';
+        var _foremanName = (typeof foremanRoster !== 'undefined' && foremanRoster[0]) ? foremanRoster[0] : 'Foreman';
+        if (slot.startsWith('extra_')) {
+          var _ei = parseInt(slot.replace('extra_', ''));
+          var _exBlk = ((schedData[key]||{}).extras||[])[_ei];
+          var _ef = (_exBlk && _exBlk.data && _exBlk.data.fields) ? _exBlk.data.fields : {};
+          if (_ef.jobName) _jobName = _ef.jobName;
+          if (_exBlk && _exBlk.foreman) _foremanName = _exBlk.foreman;
+        } else {
+          var _sf = ((schedData[key]||{})[slot]||{}).fields || {};
+          if (_sf.jobName) _jobName = _sf.jobName;
+          if (typeof foremanRoster !== 'undefined') {
+            _foremanName = slot === 'top' ? (foremanRoster[0] || 'Foreman') : (foremanRoster[1] || 'Foreman');
+          }
+        }
+        if (_jobName.indexOf(' — ') >= 0) _jobName = _jobName.split(' — ').slice(1).join(' — ');
+        var _dateLabel = key;
+        try { _dateLabel = new Date(key+'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }); } catch(e2) {}
+        _added.forEach(function(opName) {
+          var _acct = null;
+          try {
+            if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+              _acct = DEFAULT_TEAM_ACCOUNTS.find(function(a) {
+                var dn = (a.displayName||'').toLowerCase().trim();
+                var on = opName.toLowerCase().trim();
+                return dn === on || dn.split(' ')[0] === on.split(' ')[0];
+              });
+            }
+          } catch(e3) {}
+          pushNotif('info', '📋 New Assignment',
+            'You have been assigned to ' + _jobName + ' on ' + _dateLabel + ' with Foreman ' + _foremanName,
+            null, _acct ? _acct.username : null, null);
+        });
+      } catch(e) {}
+    };
+  })();
+
   // For restricted field roles, wipe any cached tabPerms from localStorage so stale
   // 'view' permissions can never re-enable the master schedule for operator/laborer/driver.
   (function() {
@@ -27724,6 +27883,8 @@ async function initApp(username) {
   // Start crew confirmation timer (6pm / 6am check for admins)
   setTimeout(function() {
     try { if (typeof _crewConfirmInit === 'function') _crewConfirmInit(); } catch(e) {}
+    // 6PM next-day assignment notify for operators (runs for all roles, guards inside)
+    try { if (typeof _opAssignmentNotifyInit === 'function') _opAssignmentNotifyInit(); } catch(e) {}
   }, 2000);
 
   // Enforce the two-core-admin policy after login without blocking startup.
@@ -28382,6 +28543,67 @@ function _adminVerifyScheduleColor(dateKey, jobNumber, color) {
     saveSchedDataDirect();
     if (typeof renderSchedule === 'function') renderSchedule();
   }
+}
+
+// ── Operator next-day assignment notification (6PM daily) ────────────────────
+
+function _opNextDayNotify(tomorrowKey) {
+  if (localStorage.getItem('dmc_6pm_notify_' + tomorrowKey)) return;
+  var _opAccounts = [];
+  try {
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      _opAccounts = DEFAULT_TEAM_ACCOUNTS.filter(function(a) { return a.role === 'operator'; });
+    }
+  } catch(e) {}
+  if (!_opAccounts.length) return;
+  var _sd = (typeof schedData !== 'undefined') ? (schedData[tomorrowKey] || {}) : {};
+  var _fr = (typeof foremanRoster !== 'undefined') ? foremanRoster : [];
+  _opAccounts.forEach(function(acct) {
+    var _dn = (acct.displayName || acct.username || '').toLowerCase().trim();
+    if (!_dn) return;
+    var _matchOp = function(opStr) {
+      if (!opStr) return false;
+      return opStr.split(',').map(function(s){ return s.trim().toLowerCase(); }).some(function(op) {
+        return op === _dn || op.split(' ')[0] === _dn.split(' ')[0] || op.indexOf(_dn) !== -1 || _dn.indexOf(op) !== -1;
+      });
+    };
+    var _blk = null;
+    var _foremanName = null;
+    var _checkSlot = function(b, foreman) {
+      if (b && b.type !== 'blank' && !_blk && _matchOp((b.fields||{}).operators||'')) {
+        _blk = b;
+        _foremanName = foreman;
+      }
+    };
+    _checkSlot(_sd.top, _fr[0] || 'Foreman');
+    _checkSlot(_sd.bottom, _fr[1] || 'Foreman');
+    (_sd.extras||[]).forEach(function(ex) {
+      if (ex && ex.data) _checkSlot(ex.data, ex.foreman || _fr[0] || 'Foreman');
+    });
+    if (!_blk) return;
+    var _f = (_blk.fields) || {};
+    var _jn = _f.jobName || '';
+    if (_jn.indexOf(' — ') >= 0) _jn = _jn.split(' — ').slice(1).join(' — ');
+    var _bt = (typeof getBlockType === 'function') ? getBlockType(_blk.type || 'blank') : null;
+    var _shift = _bt ? (_bt.label||'').replace(' Work','') : '';
+    var _msg = '⏰ Tomorrow\'s Assignment: ' + (_jn||'(No Job)') +
+      ' with Foreman ' + (_foremanName||'—') +
+      (_shift ? ' — ' + _shift + ' Shift' : '');
+    pushNotif('info', '⏰ Tomorrow\'s Assignment', _msg, null, acct.username, null);
+  });
+  localStorage.setItem('dmc_6pm_notify_' + tomorrowKey, '1');
+}
+
+function _opAssignmentNotifyInit() {
+  function _opCheck() {
+    var now = new Date();
+    if (now.getHours() !== 18) return;
+    var _tom = new Date(now); _tom.setDate(_tom.getDate() + 1);
+    var _tomorrowKey = _tom.getFullYear()+'-'+String(_tom.getMonth()+1).padStart(2,'0')+'-'+String(_tom.getDate()).padStart(2,'0');
+    _opNextDayNotify(_tomorrowKey);
+  }
+  _opCheck();
+  setInterval(_opCheck, 5 * 60 * 1000);
 }
 
 // ── Login UI ──
