@@ -19175,7 +19175,7 @@ function renderEmployeeTracker(containerEl) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROSTER VIEW
 // ─────────────────────────────────────────────────────────────────────────────
-var _empCrewCollapsed = { fjoaquim: false, marruda: false, unassigned: true };
+var _empCrewCollapsed = { fjoaquim: false, lmedeiros: false, unassigned: true };
 
 function _empRosterRow(emp) {
   var roleLabel  = (EMP_ROLES.find(function(r){ return r.key===emp.role; })||{label:emp.role||'—'}).label;
@@ -19188,9 +19188,9 @@ function _empRosterRow(emp) {
   var isInactive = emp.status === 'inactive';
   var icon = emp.role==='foreman'||emp.role==='superintendent'?'👷':emp.role==='driver'||emp.role==='driver_broker'?'🚛':emp.role==='operator'?'⚙️':'👤';
   var crewBadge = emp.crewForeman==='fjoaquim'
-    ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#5ab4f5;background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">FJ</span>'
-    : emp.crewForeman==='marruda'
-      ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#c084f5;background:rgba(192,132,245,0.1);border:1px solid rgba(192,132,245,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">MA</span>'
+    ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#a78bfa;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">FJ</span>'
+    : emp.crewForeman==='lmedeiros'
+      ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#a78bfa;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">LM</span>'
       : '';
   return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px 10px 28px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+(isInactive?'opacity:0.45;':'')+'" '+
     'onclick="openEmployeeProfileOverlay(\''+emp.id+'\')" '+
@@ -19248,14 +19248,98 @@ function _empRenderRoster(containerEl) {
       'style="background:'+(active?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(active?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:var(--radius);padding:4px 12px;color:'+(active?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+labels[f]+'</button>';
   }).join('');
 
-  var fjCrew  = filtered.filter(function(e){ return e.crewForeman==='fjoaquim'; });
-  var maCrew  = filtered.filter(function(e){ return e.crewForeman==='marruda'; });
-  var unassigned = filtered.filter(function(e){ return !e.crewForeman; });
+  // ── Crew columns ──────────────────────────────────────────────────────────
+  var crewLeaders = ['Filipe Joaquim', 'Mario Arruda', 'Louie Medeiros'];
+
+  var fjCrew = filtered.filter(function(e){ return e.crewForeman==='fjoaquim'; })
+    .slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var lmCrew = filtered.filter(function(e){ return e.crewForeman==='lmedeiros'; })
+    .slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+
+  // Mario Arruda — special first entry in Louie's column
+  var marioEmp = employees.find(function(e){ return (e.name||'').toLowerCase().indexOf('mario arruda') !== -1; });
+  var marioRow = marioEmp
+    ? '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" '+
+        'onclick="openEmployeeProfileOverlay(\''+marioEmp.id+'\')" '+
+        'onmouseover="this.style.background=\'var(--asphalt-light)\'" onmouseout="this.style.background=\'transparent\'">'+
+        '<div style="width:32px;height:32px;border-radius:50%;background:var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">👷</div>'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:12px;font-weight:700;color:var(--white);">'+escHtml(marioEmp.name||'Mario Arruda')+'</div>'+
+          '<div style="font-size:10px;color:var(--concrete-dim);font-style:italic;margin-top:1px;">Replacement Foreman</div>'+
+        '</div>'+
+      '</div>'
+    : '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">'+
+        '<div style="width:32px;height:32px;border-radius:50%;background:var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">👷</div>'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:12px;font-weight:700;color:var(--white);">Mario Arruda</div>'+
+          '<div style="font-size:10px;color:var(--concrete-dim);font-style:italic;margin-top:1px;">Replacement Foreman</div>'+
+        '</div>'+
+      '</div>';
+
+  var isMobile = window.innerWidth <= 600;
+  var colStyle = 'flex:1;background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;min-width:0;';
+
+  var fjCol =
+    '<div style="'+colStyle+'">'+
+      '<div style="font-size:15px;font-weight:700;color:var(--white);">Filipe Joaquim</div>'+
+      '<div style="font-size:11px;color:#a78bfa;margin-top:2px;">Foreman</div>'+
+      '<div style="border-top:1px solid rgba(255,255,255,0.1);margin:10px 0;"></div>'+
+      (fjCrew.length
+        ? fjCrew.map(_empRosterRow).join('')
+        : '<div style="font-size:11px;color:rgba(255,255,255,0.3);padding:8px 0;">No crew members assigned</div>')+
+    '</div>';
+
+  var lmCol =
+    '<div style="'+colStyle+'">'+
+      '<div style="font-size:15px;font-weight:700;color:var(--white);">Louie Medeiros</div>'+
+      '<div style="font-size:11px;color:#a78bfa;margin-top:2px;">Foreman</div>'+
+      '<div style="border-top:1px solid rgba(255,255,255,0.1);margin:10px 0;"></div>'+
+      marioRow+
+      (lmCrew.length ? lmCrew.map(_empRosterRow).join('') : '')+
+    '</div>';
+
+  var crewCols =
+    '<div style="display:flex;gap:16px;padding:16px;'+(isMobile?'flex-direction:column;':'')+'">'+
+      fjCol+lmCol+
+    '</div>';
+
+  // ── Role-based groups below the crew columns ──────────────────────────────
+  var bottomPool = filtered.filter(function(e){
+    if (e.crewForeman === 'fjoaquim' || e.crewForeman === 'lmedeiros') return false;
+    if (crewLeaders.indexOf(e.name) !== -1) return false;
+    return true;
+  });
+
+  var officeGroup = bottomPool.filter(function(e){ return e.role==='admin'||e.role==='office'; });
+  var opGroup     = bottomPool.filter(function(e){ return e.role==='operator'; });
+  var driverGroup = bottomPool.filter(function(e){
+    return e.role==='driver'||e.role==='driver_broker'||e.role==='lowbed_driver'||e.role==='rental_lowbed_driver';
+  });
+  var otherGroup  = bottomPool.filter(function(e){
+    return ['admin','office','operator','driver','driver_broker','lowbed_driver','rental_lowbed_driver'].indexOf(e.role) === -1;
+  });
+
+  var makeGroupSection = function(label, members) {
+    if (!members.length) return '';
+    var sorted = members.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+    return '<div style="margin-bottom:16px;">'+
+      '<div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">'+label+'</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+sorted.map(_empRosterRow).join('')+'</div>'+
+    '</div>';
+  };
+
+  var bottomGroups = (officeGroup.length||opGroup.length||driverGroup.length||otherGroup.length)
+    ? '<div style="border-top:1px solid rgba(255,255,255,0.1);margin:0 16px;"></div>'+
+      '<div style="padding:16px;">'+
+        makeGroupSection('Office / Admin', officeGroup)+
+        makeGroupSection('Operators', opGroup)+
+        makeGroupSection('Drivers', driverGroup)+
+        makeGroupSection('Other', otherGroup)+
+      '</div>'
+    : '';
 
   var body = filtered.length
-    ? _empCrewSection('fjoaquim', 'Filipe Joaquim\'s Crew', '#5ab4f5', fjCrew, _empCrewCollapsed.fjoaquim) +
-      _empCrewSection('marruda',  'Mario Arruda\'s Crew',   '#c084f5', maCrew, _empCrewCollapsed.marruda)  +
-      _empCrewSection('unassigned','Unassigned',             'var(--concrete-dim)', unassigned, _empCrewCollapsed.unassigned)
+    ? crewCols + bottomGroups
     : '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-size:12px;">No employees found. Click <strong style="color:var(--stripe);">+ Add Employee</strong> to build the roster.</div>';
 
   containerEl.innerHTML =
@@ -19328,8 +19412,8 @@ function openEmployeeProfileOverlay(id) {
         '<div><label class="form-label">Hourly Rate ($)</label><input class="form-input" id="epHourlyRate" type="number" step="0.25" min="0" placeholder="0.00" value="'+(e.hourlyRate||'')+'"/></div>'+
         '<div><label class="form-label">Crew Assignment</label><select class="form-input" id="epCrewForeman">'+
           '<option value="" '+((!e.crewForeman)?'selected':'')+'>— Unassigned —</option>'+
-          '<option value="fjoaquim" '+(e.crewForeman==='fjoaquim'?'selected':'')+'>Filipe Joaquim</option>'+
-          '<option value="marruda"  '+(e.crewForeman==='marruda' ?'selected':'')+'>Mario Arruda</option>'+
+          '<option value="fjoaquim"  '+(e.crewForeman==='fjoaquim' ?'selected':'')+'>Filipe\'s Crew (Filipe Joaquim)</option>'+
+          '<option value="lmedeiros" '+(e.crewForeman==='lmedeiros'?'selected':'')+'>Louie\'s Crew (Louie Medeiros)</option>'+
         '</select></div>'+
       '</div>'+
     '</div>'+
