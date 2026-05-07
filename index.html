@@ -7830,13 +7830,14 @@ function _operatorThisWeekHtml() {
     var _sd = (typeof schedData !== 'undefined') ? (schedData[_dk] || {}) : {};
     var _blk = null;
     var _blkForeman = '';
+    var _blkSlot = '';
     var _fr = (typeof foremanRoster !== 'undefined') ? foremanRoster : [];
-    var _chk = function(b, foreman) { if (b && b.type !== 'blank' && !_blk && _matchOp((b.fields||{}).operators||'')) { _blk = b; _blkForeman = foreman; } };
-    _chk(_sd.top, _fr[0] || 'Filipe Joaquim');
-    _chk(_sd.bottom, _fr[1] || 'Louie Medeiros');
-    (_sd.extras||[]).forEach(function(ex){ if (ex&&ex.data) _chk(ex.data, ex.foreman || _fr[0] || 'Filipe Joaquim'); });
+    var _chk = function(b, foreman, slot) { if (b && b.type !== 'blank' && !_blk && _matchOp((b.fields||{}).operators||'')) { _blk = b; _blkForeman = foreman; _blkSlot = slot; } };
+    _chk(_sd.top, _fr[0] || 'Filipe Joaquim', 'top');
+    _chk(_sd.bottom, _fr[1] || 'Louie Medeiros', 'bottom');
+    (_sd.extras||[]).forEach(function(ex, _exi){ if (ex&&ex.data) _chk(ex.data, ex.foreman || _fr[0] || 'Filipe Joaquim', 'extra_' + _exi); });
     if (_i >= 5 && !_blk) continue;
-    days.push({ key: _dk, name: DAY_NAMES[_i], date: _d.getDate(), isToday: _dk === todayKey, blk: _blk, foreman: _blkForeman });
+    days.push({ key: _dk, name: DAY_NAMES[_i], date: _d.getDate(), isToday: _dk === todayKey, blk: _blk, foreman: _blkForeman, slot: _blkSlot });
   }
 
   var N = days.length;
@@ -7848,7 +7849,7 @@ function _operatorThisWeekHtml() {
   }
 
   // Block cell — hw-sched-block class + operator-detail interior (job#, name, shift pill)
-  function opBlockCell(bd, dayKey, foreman) {
+  function opBlockCell(bd, dayKey, foreman, slot) {
     if (!bd || !bd.type || bd.type === 'blank') {
       return '<div style="min-height:44px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
     }
@@ -7857,24 +7858,10 @@ function _operatorThisWeekHtml() {
     var jn = f.jobName || '';
     if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
     var shiftLabel = (bt.label || bd.type || '').replace(' Work','');
-    var tip = {
-      type:    bt.label || bd.type,
-      color:   bt.color || '#888',
-      jobName: f.jobName || '',
-      jobNum:  f.jobNum  || '',
-      crew:    foreman || '',
-      loc:     f.location || (function(){ try { var _jn=f.jobName||'',_jk=f.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); return (_mj&&_mj.location)||''; } catch(e){ return ''; } })(),
-      equip:   f.equipment || '',
-      notes:   f.notes || '',
-      day:     dayKey
-    };
-    console.log('OPERATOR data-stt:', JSON.stringify(tip));
-    var tipStr = encodeURIComponent(JSON.stringify(tip));
     var col = bt.color || '#5ab4f5';
     return '<div class="hw-sched-block" style="background:'+col+'22;border:1.5px solid '+col+'66;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:3px 5px;gap:2px;cursor:pointer;" '+
-      'data-stt="'+tipStr+'" '+
       'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" '+
-      'onclick="_opWeekBlockClick(event,this)">'+
+      'onclick="openMobBlockDetail(\''+dayKey+'\',\''+slot+'\')">'+
       (f.jobNum ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:800;color:'+col+';line-height:1.1;">#'+escHtml(f.jobNum)+'</span>' : '')+
       (jn ? '<span style="font-family:\'DM Sans\',sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,0.9);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+escHtml(jn.substring(0,14))+'</span>' : '')+
       (shiftLabel ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+col+';background:'+col+'1a;border-radius:3px;padding:1px 4px;align-self:flex-start;line-height:1.2;">'+escHtml(shiftLabel)+'</span>' : '')+
@@ -7896,7 +7883,7 @@ function _operatorThisWeekHtml() {
   // Single data row — "Me" label + one block per day
   cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="'+escHtml(_dn)+'">Me</div>');
   days.forEach(function(day) {
-    cells.push('<div style="padding:1px;">'+opBlockCell(day.blk, day.key, day.foreman)+'</div>');
+    cells.push('<div style="padding:1px;">'+opBlockCell(day.blk, day.key, day.foreman, day.slot)+'</div>');
   });
 
   return '<div class="home-widget">'+
@@ -7907,35 +7894,6 @@ function _operatorThisWeekHtml() {
       '</div>'+
     '</div>'+
   '</div>';
-}
-
-// Operator This Week block tap — full detail popup (works on both touch and desktop)
-function _opWeekBlockClick(e, el) {
-  e.stopPropagation();
-  if (typeof hwSchedTipHide === 'function') hwSchedTipHide();
-  var existing = document.getElementById('_hwSchedMobilePop');
-  if (existing && existing._src === el) { existing.remove(); return; }
-  if (existing) existing.remove();
-  var raw = el.getAttribute('data-stt');
-  if (!raw) return;
-  var tip; try { tip = JSON.parse(decodeURIComponent(raw)); } catch(err) { return; }
-  var pop = document.createElement('div');
-  pop.id = '_hwSchedMobilePop';
-  pop._src = el;
-  pop.className = 'hw-sched-tooltip';
-  pop.style.display = 'block';
-  pop.style.pointerEvents = 'none';
-  pop.innerHTML = _hwSchedTipHtml(tip);
-  var r = el.getBoundingClientRect();
-  var left = Math.min(r.left, window.innerWidth - 224);
-  var top = r.bottom + 6;
-  if (top + 220 > window.innerHeight) top = r.top - 210;
-  pop.style.left = left + 'px';
-  pop.style.top  = top  + 'px';
-  document.body.appendChild(pop);
-  setTimeout(function() {
-    document.addEventListener('click', function _cls() { pop.remove(); document.removeEventListener('click', _cls); }, { once: true });
-  }, 50);
 }
 
 function renderHomeView(el) {
@@ -8567,7 +8525,6 @@ function widgetToday() {
       notes:   f.notes || '',
       day:     dayKey
     };
-    console.log('ADMIN data-stt:', JSON.stringify(tip));
     var tipStr = encodeURIComponent(JSON.stringify(tip));
     return '<div class="hw-sched-block" style="background:' + bt.color + '22;border:1.5px solid ' + bt.color + '66;" ' +
       'data-stt="' + tipStr + '" ' +
