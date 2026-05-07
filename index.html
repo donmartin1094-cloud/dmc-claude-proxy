@@ -5065,6 +5065,14 @@ function switchTab(tab) {
     }
   }
 
+  // Operator route guard — only home, equipment, settings-theme allowed
+  if (typeof getCurrentRole === 'function' && getCurrentRole() === 'operator' && !isAdmin()) {
+    if (tab !== 'home' && tab !== 'equipment' && tab !== 'settings-theme') {
+      switchTab('home');
+      return;
+    }
+  }
+
   // Update header folder active state
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',
@@ -7329,9 +7337,11 @@ async function _homeInitGps() {
   if (_homeGps.map) { try { _homeGps.map.remove(); } catch(e){} _homeGps.map=null; }
 
   // Use rendered column height so map fills the flex-stretched GPS panel.
+  // For operators the admin panel doesn't exist — fall back to parent container height.
   var _gpsCol = document.getElementById('homeGpsFleetPanel');
+  var _gpsFallbackH = (mapEl.parentElement && mapEl.parentElement.clientHeight > 0) ? mapEl.parentElement.clientHeight : 420;
   mapEl.style.width  = '100%';
-  mapEl.style.height = (_gpsCol && _gpsCol.clientHeight > 0 ? _gpsCol.clientHeight : 420) + 'px';
+  mapEl.style.height = (_gpsCol && _gpsCol.clientHeight > 0 ? _gpsCol.clientHeight : _gpsFallbackH) + 'px';
 
   // Pass renderer explicitly so it is created during map init, not lazily
   // on the first layer add (which would fail if container is still 0-sized).
@@ -7999,7 +8009,7 @@ function renderHomeView(el) {
       try { _opMyHoursHtml = widgetMyHours(); } catch(e) {}
       var _opThisWeekHtml = '';
       try { _opThisWeekHtml = _operatorThisWeekHtml(); } catch(e) {}
-      _showOpGps = window.innerWidth > 600;
+      _showOpGps = true;
       _operatorTopSectionHtml =
         '<div style="display:flex;gap:16px;align-items:flex-start;width:100%;flex-wrap:wrap;padding:0 0 8px;">' +
           '<div style="flex:1;min-width:180px;box-sizing:border-box;">' +
@@ -22598,6 +22608,7 @@ function renderEquipmentFleet(containerEl) {
   if (!containerEl) return;
   _fleetUpdateBadge();
 
+  var _fleetIsOp = typeof getCurrentRole === 'function' && getCurrentRole() === 'operator' && !isAdmin();
   var active = equipmentFleet.filter(function(e) { return e.active !== false; });
 
   // Apply search filter
@@ -22721,7 +22732,7 @@ function renderEquipmentFleet(containerEl) {
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'+
             '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--stripe);">🔧 Fleet</div>'+
             '<div style="flex:1;"></div>'+
-            '<button onclick="openAddEquipmentOverlay()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:var(--radius);padding:6px 12px;color:var(--stripe);font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add</button>'+
+            (!_fleetIsOp ? '<button onclick="openAddEquipmentOverlay()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:var(--radius);padding:6px 12px;color:var(--stripe);font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add</button>' : '')+
           '</div>'+
           '<button onclick="_fleetPrintAllQR()" style="width:100%;margin-bottom:7px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;">'+
             '<span style="font-size:14px;">🖨️</span> Print QR Code Sheet'+
@@ -22739,7 +22750,7 @@ function renderEquipmentFleet(containerEl) {
               'oninput="_fleetSearch=this.value;'+_re+'" '+
               'style="font-size:11px;padding:5px 10px;width:160px;"/>'+
             groupToggle+
-            '<button onclick="openAddEquipmentOverlay()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:var(--radius);padding:7px 16px;color:var(--stripe);font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">+ Add Equipment</button>'+
+            (!_fleetIsOp ? '<button onclick="openAddEquipmentOverlay()" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:var(--radius);padding:7px 16px;color:var(--stripe);font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">+ Add Equipment</button>' : '')+
             '<button onclick="_fleetPrintAllQR()" title="Print QR Code Sheet" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:7px 12px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;"><span style="font-size:14px;">🖨️</span> Print QR Sheet</button>'+
           '</div>'+
           '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 2px;">'+pillsHTML+'</div>'
@@ -23044,6 +23055,7 @@ function openEquipmentDetail(id) {
 
 function _fleetDetailHTML(eq) {
   var _isAdm = isAdmin();
+  var _isOp  = typeof getCurrentRole === 'function' && getCurrentRole() === 'operator' && !_isAdm;
   var si = _fleetStatusInfo(eq.status || 'operational');
   var typLabel = (FLEET_TYPES.find(function(t){ return t.key===eq.type; })||{label:eq.type||'Equipment'}).label;
   var subTypLabel = eq.subType ? ((FLEET_SUBTYPES[eq.type]||[]).find(function(s){ return s.key===eq.subType; })||{}).label || '' : '';
@@ -23101,9 +23113,9 @@ function _fleetDetailHTML(eq) {
       '<button onclick="document.getElementById(\'_fleetDetailOverlay\').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;padding:0 10px 0 0;line-height:1;">←</button>'+
       '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);letter-spacing:1px;">'+escHtml(eq.id)+'</span>'+
       '<span style="flex:1;"></span>'+
-      '<button onclick="openFleetAssignJob(\''+eq.id+'\')" style="background:'+(eq.assignedJobId?'rgba(245,197,24,0.1)':'none')+';border:1px solid '+(eq.assignedJobId?'rgba(245,197,24,0.4)':'var(--asphalt-light)')+';border-radius:var(--radius);padding:5px 12px;color:'+(eq.assignedJobId?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;margin-right:6px;">📍 '+(eq.assignedJobName?escHtml(eq.assignedJobName):'Assign to Job')+'</button>'+
-      '<button onclick="openAddEquipmentOverlay(\''+eq.id+'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 12px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;margin-right:6px;">Edit</button>'+
-      '<button onclick="_fleetShowDeleteConfirm(\''+eq.id+'\')" style="background:none;border:1px solid rgba(217,79,61,0.4);border-radius:var(--radius);padding:5px 10px;color:var(--red);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;" title="Delete equipment">🗑</button>'+
+      (!_isOp ? '<button onclick="openFleetAssignJob(\''+eq.id+'\')" style="background:'+(eq.assignedJobId?'rgba(245,197,24,0.1)':'none')+';border:1px solid '+(eq.assignedJobId?'rgba(245,197,24,0.4)':'var(--asphalt-light)')+';border-radius:var(--radius);padding:5px 12px;color:'+(eq.assignedJobId?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;margin-right:6px;">📍 '+(eq.assignedJobName?escHtml(eq.assignedJobName):'Assign to Job')+'</button>' : '')+
+      (!_isOp ? '<button onclick="openAddEquipmentOverlay(\''+eq.id+'\')" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:5px 12px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;margin-right:6px;">Edit</button>' : '')+
+      (!_isOp ? '<button onclick="_fleetShowDeleteConfirm(\''+eq.id+'\')" style="background:none;border:1px solid rgba(217,79,61,0.4);border-radius:var(--radius);padding:5px 10px;color:var(--red);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;" title="Delete equipment">🗑</button>' : '')+
     '</div>'+
     // Scrollable body
     '<div style="flex:1;overflow-y:auto;padding:20px;">'+
@@ -23128,15 +23140,17 @@ function _fleetDetailHTML(eq) {
         '<div style="flex:1;min-width:220px;">'+
           '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:32px;letter-spacing:2px;color:var(--white);line-height:1;">'+escHtml(eq.name||eq.id)+'</div>'+
           '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin:4px 0 16px;">'+escHtml(typLabel)+(subTypLabel?' · '+escHtml(subTypLabel):'')+(eq.weightClass?(function(){ var wc=FLEET_WEIGHT_CLASSES.find(function(w){return w.key===eq.weightClass;}); return wc?' · <span style="color:'+wc.color+';">'+wc.label+'</span>':''; })():'')+(eq.year?' · '+escHtml(eq.year):'')+(eq.make?' · '+escHtml(eq.make)+(eq.model?' '+escHtml(eq.model):''):'')+(eq.serial?' · S/N: '+escHtml(eq.serial):'')+'</div>'+
-          // Status selector
-          '<div style="margin-bottom:10px;">'+
-            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--concrete-dim);margin-bottom:6px;">Status</div>'+
-            '<div style="display:flex;gap:6px;">'+statusBtns+'</div>'+
-          '</div>'+
-          // Status note input
-          '<input class="form-input" id="_fleetStatusNoteInput_'+eq.id+'" value="'+escHtml(eq.statusNote||'')+'" placeholder="Status note (visible on fleet card)..." '+
-            'onchange="_fleetSaveStatusNote(\''+eq.id+'\',this.value)" '+
-            'style="font-size:11px;padding:7px 10px;width:100%;margin-top:6px;"/>'+
+          // Status selector — hidden for operators (read-only)
+          (!_isOp ?
+            '<div style="margin-bottom:10px;">'+
+              '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--concrete-dim);margin-bottom:6px;">Status</div>'+
+              '<div style="display:flex;gap:6px;">'+statusBtns+'</div>'+
+            '</div>'+
+            // Status note input
+            '<input class="form-input" id="_fleetStatusNoteInput_'+eq.id+'" value="'+escHtml(eq.statusNote||'')+'" placeholder="Status note (visible on fleet card)..." '+
+              'onchange="_fleetSaveStatusNote(\''+eq.id+'\',this.value)" '+
+              'style="font-size:11px;padding:7px 10px;width:100%;margin-top:6px;"/>'
+          : '')+
         '</div>'+
         // Right: QR code
         '<div style="flex-shrink:0;text-align:center;">'+
@@ -27290,6 +27304,37 @@ async function initApp(username) {
     if (e.target === this) this.classList.remove('active');
   });
 
+  // Operator-specific nav restrictions — hide Employees, Mail, non-Theme settings from all nav surfaces
+  function _applyOperatorNavRestrictions() {
+    if (typeof getCurrentRole !== 'function' || getCurrentRole() !== 'operator' || isAdmin()) return;
+    var _opHide = [
+      // Sidebar tabs
+      'tabEmployees', 'tabMail',
+      // Sidebar settings sub-buttons (keep tabSettings + tabSettingsTheme)
+      'tabSettingsSchedule', 'tabSettingsRosters', 'tabSettingsPlants',
+      'tabSettingsTrucking', 'tabSettingsUsers',
+      // Header folders
+      'hdrFolderMail', 'hdrFolderTakeoffs',
+      // Compact collapsed nav
+      'collNavEmployees',
+      'collNavStngSchedule', 'collNavStngRosters', 'collNavStngPlants',
+      'collNavStngTrucking', 'collNavStngUsers'
+    ];
+    _opHide.forEach(function(id) {
+      var el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    // Settings page tab bar: hide all but Theme
+    ['schedule','rosters','plants','trucking','users','homewidgets'].forEach(function(t) {
+      var btn = document.getElementById('stng-tab-' + t);
+      if (btn) btn.style.display = 'none';
+    });
+  }
+  // Wrap applyTabPermissions so operator restrictions run after every call
+  (function() {
+    var _origATP = applyTabPermissions;
+    applyTabPermissions = function() { _origATP.apply(this, arguments); _applyOperatorNavRestrictions(); };
+  })();
+
   // For restricted field roles, wipe any cached tabPerms from localStorage so stale
   // 'view' permissions can never re-enable the master schedule for operator/laborer/driver.
   (function() {
@@ -29557,6 +29602,14 @@ async function refreshAccountsFromCloud() {
 }
 
 async function switchSettingsTab(tab) {
+  // Operators: only allow Theme tab; forcibly hide all other settings tabs
+  if (typeof getCurrentRole === 'function' && getCurrentRole() === 'operator' && !isAdmin()) {
+    tab = 'theme';
+    ['schedule','rosters','plants','trucking','users','homewidgets'].forEach(function(t) {
+      var _sb = document.getElementById('stng-tab-' + t);
+      if (_sb) _sb.style.display = 'none';
+    });
+  }
   const tabs = ['theme','schedule','rosters','plants','trucking','users','homewidgets'];
   tabs.forEach(t => {
     const btn = document.getElementById('stng-tab-' + t);
@@ -31276,6 +31329,13 @@ function _navItemVisible(n) {
     equipment:'equipment',
     heimdall:'heimdall'
   };
+  // Settings-* tabs: show for all non-driver roles; operators see only settings-theme
+  if (n.action === 'tab' && n.tab && n.tab.startsWith('settings-')) {
+    var _nr = typeof getCurrentRole === 'function' ? getCurrentRole() : 'staff';
+    if (_nr === 'driver' || _nr === 'lowbed_driver') return false;
+    if (_nr === 'operator' && !isAdmin()) return n.tab === 'settings-theme';
+    return true;
+  }
   if (typeof canSeeTab !== 'function') return true;
   if (n.action === 'tab' && n.tab) {
     var parent = _tabParent[n.tab] || n.tab;
