@@ -27789,7 +27789,14 @@ async function initApp(username) {
     switchTab(_resumeTab);
     try { history.replaceState({ tab: _resumeTab }, '', '#' + _resumeTab); } catch(e) {}
   } else {
-    goHome();
+    // Fresh login (sessionStorage cleared by doLogin) or explicit home — route every role to home.
+    // renderHomeView() handles the correct view per role (admin widgets, foreman schedule, operator week).
+    var _loginRole = getCurrentRole();
+    if (_loginRole === 'foreman' || _loginRole === 'operator') {
+      switchTab('home');
+    } else {
+      switchTab('home'); // admins also go home — renderHomeView handles the rest
+    }
     try { history.replaceState({ tab: 'home' }, '', '#home'); } catch(e) {}
   }
   _loadHomePrefsFromCloud();
