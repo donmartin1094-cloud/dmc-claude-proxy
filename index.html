@@ -19189,7 +19189,7 @@ function _empRosterRow(emp) {
   var icon = emp.role==='foreman'||emp.role==='superintendent'?'👷':emp.role==='driver'||emp.role==='driver_broker'?'🚛':emp.role==='operator'?'⚙️':'👤';
   var crewBadge = emp.crewForeman==='fjoaquim'
     ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#a78bfa;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">FJ</span>'
-    : emp.crewForeman==='lmedeiros'
+    : (emp.crewForeman==='lmedeiros'||emp.crewForeman==='marruda')
       ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#a78bfa;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">LM</span>'
       : '';
   return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px 10px 28px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+(isInactive?'opacity:0.45;':'')+'" '+
@@ -19253,7 +19253,7 @@ function _empRenderRoster(containerEl) {
 
   var fjCrew = filtered.filter(function(e){ return e.crewForeman==='fjoaquim'; })
     .slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-  var lmCrew = filtered.filter(function(e){ return e.crewForeman==='lmedeiros'; })
+  var lmCrew = filtered.filter(function(e){ return e.crewForeman==='lmedeiros'||e.crewForeman==='marruda'; })
     .slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
 
   // Mario Arruda — special first entry in Louie's column
@@ -19305,7 +19305,7 @@ function _empRenderRoster(containerEl) {
 
   // ── Role-based groups below the crew columns ──────────────────────────────
   var bottomPool = filtered.filter(function(e){
-    if (e.crewForeman === 'fjoaquim' || e.crewForeman === 'lmedeiros') return false;
+    if (e.crewForeman === 'fjoaquim' || e.crewForeman === 'lmedeiros' || e.crewForeman === 'marruda') return false;
     if (crewLeaders.indexOf(e.name) !== -1) return false;
     return true;
   });
