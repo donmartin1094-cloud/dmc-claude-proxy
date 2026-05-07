@@ -19175,6 +19175,58 @@ function renderEmployeeTracker(containerEl) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROSTER VIEW
 // ─────────────────────────────────────────────────────────────────────────────
+var _empCrewCollapsed = { fjoaquim: false, marruda: false, unassigned: true };
+
+function _empRosterRow(emp) {
+  var roleLabel  = (EMP_ROLES.find(function(r){ return r.key===emp.role; })||{label:emp.role||'—'}).label;
+  var certStates = (emp.certs||[]).map(_empCertStatus);
+  var worstOrder = {expired:0,critical:1,warning:2,notice:3,ok:4,noexpiry:5};
+  var worstCert  = certStates.reduce(function(w,s){ return (worstOrder[s.status]||5)<(worstOrder[w.status]||5)?s:w; }, {status:'ok',label:'Current',color:'#7ecb8f'});
+  var certBadge  = emp.certs&&emp.certs.length
+    ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+worstCert.color+';background:'+worstCert.color+'22;border-radius:3px;padding:1px 6px;">'+(worstCert.status==='ok'||worstCert.status==='noexpiry'?'✓ Current':'⚠ '+worstCert.label)+'</span>'
+    : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);opacity:0.4;">no certs</span>';
+  var isInactive = emp.status === 'inactive';
+  var icon = emp.role==='foreman'||emp.role==='superintendent'?'👷':emp.role==='driver'||emp.role==='driver_broker'?'🚛':emp.role==='operator'?'⚙️':'👤';
+  var crewBadge = emp.crewForeman==='fjoaquim'
+    ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#5ab4f5;background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">FJ</span>'
+    : emp.crewForeman==='marruda'
+      ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:#c084f5;background:rgba(192,132,245,0.1);border:1px solid rgba(192,132,245,0.3);border-radius:3px;padding:1px 6px;white-space:nowrap;">MA</span>'
+      : '';
+  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px 10px 28px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+(isInactive?'opacity:0.45;':'')+'" '+
+    'onclick="openEmployeeProfileOverlay(\''+emp.id+'\')" '+
+    'onmouseover="this.style.background=\'var(--asphalt-light)\'" onmouseout="this.style.background=\'transparent\'">'+
+    '<div style="width:32px;height:32px;border-radius:50%;background:var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">'+icon+'</div>'+
+    '<div style="flex:1;min-width:0;">'+
+      '<div style="font-size:12px;font-weight:700;color:'+(isInactive?'var(--concrete-dim)':'var(--white)')+';">'+escHtml(emp.name||'Unnamed')+'</div>'+
+      '<div style="font-size:10px;color:var(--concrete-dim);margin-top:1px;">'+escHtml(roleLabel)+(emp.empType==='broker'?' · Broker':'')+(isInactive?' · Inactive':'')+'</div>'+
+    '</div>'+
+    (crewBadge?'<div style="flex-shrink:0;">'+crewBadge+'</div>':'')+
+    '<div style="flex-shrink:0;">'+certBadge+'</div>'+
+    (emp.role==='driver'||emp.role==='driver_broker'
+      ? '<div style="flex-shrink:0;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:right;line-height:1.6;">'+(emp.travelRate?'$'+parseFloat(emp.travelRate).toFixed(2)+'/hr travel<br>':'')+(emp.jobRate?'$'+parseFloat(emp.jobRate).toFixed(2)+'/hr job':'—')+'</div>'
+      : (emp.hourlyRate?'<div style="flex-shrink:0;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">$'+parseFloat(emp.hourlyRate).toFixed(2)+'/hr</div>':'')
+    )+
+    '<div style="flex-shrink:0;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+(emp.certs&&emp.certs.length?emp.certs.length+' cert'+(emp.certs.length>1?'s':''):'0 certs')+'</div>'+
+  '</div>';
+}
+
+function _empCrewSection(key, label, color, members, collapsed) {
+  if (!members.length && key !== 'unassigned') return '';
+  var sorted = members.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var rows = sorted.map(_empRosterRow).join('');
+  var headerStyle = key==='unassigned'
+    ? 'display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--asphalt);border-bottom:1px solid var(--asphalt-light);cursor:pointer;'
+    : 'display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--asphalt);border-bottom:1px solid var(--asphalt-light);cursor:pointer;border-left:3px solid '+color+';';
+  return '<div>'+
+    '<div style="'+headerStyle+'" onclick="_empCrewCollapsed.'+key+'=!_empCrewCollapsed.'+key+';_empRenderRoster(document.getElementById(\'_empBody\'))">'+
+      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+color+';">'+(collapsed?'▶':'▼')+'</span>'+
+      '<span style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:'+(key==='unassigned'?'var(--concrete-dim)':color)+';flex:1;">'+label+'</span>'+
+      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+members.length+' employee'+(members.length!==1?'s':'')+'</span>'+
+    '</div>'+
+    (collapsed?'':'<div>'+rows+'</div>')+
+  '</div>';
+}
+
 function _empRenderRoster(containerEl) {
   if (!containerEl) return;
   var filtered = employees.filter(function(emp) {
@@ -19196,33 +19248,15 @@ function _empRenderRoster(containerEl) {
       'style="background:'+(active?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(active?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:var(--radius);padding:4px 12px;color:'+(active?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;">'+labels[f]+'</button>';
   }).join('');
 
-  var rows = filtered.length ? filtered.map(function(emp) {
-    var roleLabel = (EMP_ROLES.find(function(r){ return r.key===emp.role; })||{label:emp.role||'—'}).label;
-    var certStates = (emp.certs||[]).map(_empCertStatus);
-    var worstOrder = {expired:0,critical:1,warning:2,notice:3,ok:4,noexpiry:5};
-    var worstCert  = certStates.reduce(function(w,s){ return (worstOrder[s.status]||5)<(worstOrder[w.status]||5)?s:w; }, {status:'ok',label:'Current',color:'#7ecb8f'});
-    var certBadge  = emp.certs&&emp.certs.length
-      ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+worstCert.color+';background:'+worstCert.color+'22;border-radius:3px;padding:1px 6px;">'+(worstCert.status==='ok'||worstCert.status==='noexpiry'?'✓ Current':'⚠ '+worstCert.label)+'</span>'
-      : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);opacity:0.4;">no certs</span>';
-    var isInactive = emp.status === 'inactive';
-    var icon = emp.role==='foreman'||emp.role==='superintendent'?'👷':emp.role==='driver'||emp.role==='driver_broker'?'🚛':emp.role==='operator'?'⚙️':'👤';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;'+(isInactive?'opacity:0.45;':'')+'" '+
-      'onclick="openEmployeeProfileOverlay(\''+emp.id+'\')" '+
-      'onmouseover="this.style.background=\'var(--asphalt-light)\'" onmouseout="this.style.background=\'transparent\'">'+
-      '<div style="width:34px;height:34px;border-radius:50%;background:var(--asphalt-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">'+icon+'</div>'+
-      '<div style="flex:1;min-width:0;">'+
-        '<div style="font-size:12px;font-weight:700;color:'+(isInactive?'var(--concrete-dim)':'var(--white)')+';">'+escHtml(emp.name||'Unnamed')+'</div>'+
-        '<div style="font-size:10px;color:var(--concrete-dim);margin-top:1px;">'+escHtml(roleLabel)+(emp.empType==='broker'?' · Broker':'')+(isInactive?' · Inactive':'')+'</div>'+
-      '</div>'+
-      '<div style="flex-shrink:0;">'+certBadge+'</div>'+
-      (emp.role==='driver'||emp.role==='driver_broker'
-        ? '<div style="flex-shrink:0;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:right;line-height:1.6;">'+(emp.travelRate?'$'+parseFloat(emp.travelRate).toFixed(2)+'/hr travel<br>':'')+(emp.jobRate?'$'+parseFloat(emp.jobRate).toFixed(2)+'/hr job':'—')+'</div>'
-        : (emp.hourlyRate?'<div style="flex-shrink:0;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">$'+parseFloat(emp.hourlyRate).toFixed(2)+'/hr</div>':'')
-      )+
-      '<div style="flex-shrink:0;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+(emp.certs&&emp.certs.length?emp.certs.length+' cert'+(emp.certs.length>1?'s':''):'0 certs')+'</div>'+
-    '</div>';
-  }).join('') :
-    '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-size:12px;">No employees found. Click <strong style="color:var(--stripe);">+ Add Employee</strong> to build the roster.</div>';
+  var fjCrew  = filtered.filter(function(e){ return e.crewForeman==='fjoaquim'; });
+  var maCrew  = filtered.filter(function(e){ return e.crewForeman==='marruda'; });
+  var unassigned = filtered.filter(function(e){ return !e.crewForeman; });
+
+  var body = filtered.length
+    ? _empCrewSection('fjoaquim', 'Filipe Joaquim\'s Crew', '#5ab4f5', fjCrew, _empCrewCollapsed.fjoaquim) +
+      _empCrewSection('marruda',  'Mario Arruda\'s Crew',   '#c084f5', maCrew, _empCrewCollapsed.marruda)  +
+      _empCrewSection('unassigned','Unassigned',             'var(--concrete-dim)', unassigned, _empCrewCollapsed.unassigned)
+    : '<div style="padding:48px;text-align:center;color:var(--concrete-dim);font-size:12px;">No employees found. Click <strong style="color:var(--stripe);">+ Add Employee</strong> to build the roster.</div>';
 
   containerEl.innerHTML =
     '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--asphalt-light);background:var(--asphalt-mid);flex-wrap:wrap;">'+
@@ -19233,7 +19267,7 @@ function _empRenderRoster(containerEl) {
       '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+employees.length+' employees</span>'+
       '<button onclick="openEmployeeProfileOverlay(null)" style="background:var(--stripe);border:none;border-radius:var(--radius);padding:5px 16px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;cursor:pointer;">+ Add Employee</button>'+
     '</div>'+
-    '<div style="flex:1;overflow-y:auto;">'+rows+'</div>';
+    '<div style="flex:1;overflow-y:auto;">'+body+'</div>';
 }
 
 // ── Employee Profile Overlay ──────────────────────────────────────────────────
@@ -19292,6 +19326,11 @@ function openEmployeeProfileOverlay(id) {
           '<option value="inactive" '+(e.status==='inactive'?'selected':'')+'>Inactive</option>'+
         '</select></div>'+
         '<div><label class="form-label">Hourly Rate ($)</label><input class="form-input" id="epHourlyRate" type="number" step="0.25" min="0" placeholder="0.00" value="'+(e.hourlyRate||'')+'"/></div>'+
+        '<div><label class="form-label">Crew Assignment</label><select class="form-input" id="epCrewForeman">'+
+          '<option value="" '+((!e.crewForeman)?'selected':'')+'>— Unassigned —</option>'+
+          '<option value="fjoaquim" '+(e.crewForeman==='fjoaquim'?'selected':'')+'>Filipe Joaquim</option>'+
+          '<option value="marruda"  '+(e.crewForeman==='marruda' ?'selected':'')+'>Mario Arruda</option>'+
+        '</select></div>'+
       '</div>'+
     '</div>'+
 
@@ -19444,6 +19483,7 @@ function saveEmployeeProfileForm(existingId) {
   var employeeId       = (overlay.querySelector('#epEmployeeId')     ||{}).value||'';
   var gender           = (overlay.querySelector('#epGender')         ||{}).value||'';
   var foremanAssignment= (overlay.querySelector('#epForemanAssign')  ||{}).value||'';
+  var crewForeman      = (overlay.querySelector('#epCrewForeman')    ||{}).value||'';
   var driverType       = (overlay.querySelector('#epDriverType')     ||{}).value||'';
   var certs = [];
   overlay.querySelectorAll('#epCertsContainer [data-cert-idx]').forEach(function(row) {
@@ -19459,7 +19499,7 @@ function saveEmployeeProfileForm(existingId) {
     role, empType, status, hourlyRate, travelRate, jobRate,
     truckNo, brokerCompany, hasAppAccess, certs, notes,
     dob, certJobCategory, race, isMinority, isFemale,
-    employeeId, gender, foremanAssignment, driverType,
+    employeeId, gender, foremanAssignment, crewForeman, driverType,
     createdAt: existingId?(employees.find(function(e){ return e.id===existingId; })||{}).createdAt||Date.now():Date.now(),
     updatedAt: Date.now(),
   };
