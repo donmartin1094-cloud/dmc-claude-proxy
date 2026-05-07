@@ -7857,25 +7857,16 @@ function _operatorThisWeekHtml() {
     var jn = f.jobName || '';
     if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
     var shiftLabel = (bt.label || bd.type || '').replace(' Work','');
-    var _opLoc = f.location || (function() {
-      try {
-        var _bj = (backlogJobs||[]).find(function(j) {
-          return (j.num||'').toString().trim() === (f.jobNum||'').toString().trim()
-            || (j.name||'').toLowerCase() === (f.jobName||'').toLowerCase();
-        });
-        return _bj ? (_bj.location || _bj.address || '') : '';
-      } catch(e) { return ''; }
-    })();
     var tip = {
-      type: bt.label || bd.type,
-      color: bt.color || '#888',
+      type:    bt.label || bd.type,
+      color:   bt.color || '#888',
       jobName: f.jobName || '',
-      jobNum: f.jobNum || '',
-      crew: foreman || '',
-      loc: _opLoc,
-      equip: f.equipment || '',
-      notes: f.notes || '',
-      day: dayKey
+      jobNum:  f.jobNum  || '',
+      crew:    foreman || '',
+      loc:     f.location || (function(){ try { var _jn=f.jobName||'',_jk=f.jobNum||'',_mj=(backlogJobs||[]).find(function(j){ return (_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jn&&j.name&&j.name.trim().toLowerCase()===_jn.trim().toLowerCase()); }); return (_mj&&_mj.location)||''; } catch(e){ return ''; } })(),
+      equip:   f.equipment || '',
+      notes:   f.notes || '',
+      day:     dayKey
     };
     var tipStr = encodeURIComponent(JSON.stringify(tip));
     var col = bt.color || '#5ab4f5';
