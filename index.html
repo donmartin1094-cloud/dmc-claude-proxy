@@ -7715,6 +7715,139 @@ function _foremanNextTwoWeeksHtml() {
 }
 
 let _jpCloudLoaded = false;
+// ── Operator home: today's schedule slot where this operator appears in fields.operators ──
+function _operatorTodayCardHtml() {
+  var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+  var _dn = _u;
+  try {
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      var _hc = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase() === _u; });
+      if (_hc && _hc.displayName) _dn = _hc.displayName;
+    }
+  } catch(e) {}
+
+  var _today = new Date();
+  var _todayKey = _today.getFullYear()+'-'+String(_today.getMonth()+1).padStart(2,'0')+'-'+String(_today.getDate()).padStart(2,'0');
+  var _sd = (typeof schedData !== 'undefined') ? (schedData[_todayKey] || {}) : {};
+
+  var _matchOp = function(opStr) {
+    if (!opStr) return false;
+    var dn = _dn.toLowerCase().trim();
+    return opStr.split(',').map(function(s){ return s.trim().toLowerCase(); }).some(function(op) {
+      return op === dn || op.split(' ')[0] === dn.split(' ')[0] || op.indexOf(dn) !== -1 || dn.indexOf(op) !== -1;
+    });
+  };
+
+  var _blk = null;
+  var _checkBlock = function(b) {
+    if (!b || b.type === 'blank' || _blk) return;
+    if (_matchOp((b.fields || {}).operators || '')) _blk = b;
+  };
+  _checkBlock(_sd.top);
+  _checkBlock(_sd.bottom);
+  (_sd.extras || []).forEach(function(ex) { if (ex && ex.data) _checkBlock(ex.data); });
+
+  if (!_blk) return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:18px 14px;font-family:\'DM Mono\',monospace;font-size:11px;color:rgba(155,148,136,0.45);text-align:center;font-style:italic;">No assignment scheduled for today</div>';
+
+  var _f = (_blk.fields) || {};
+  var _bt = (typeof getBlockType === 'function') ? getBlockType(_blk.type || 'blank') : null;
+  var _col = (_bt && _bt.color) ? _bt.color : '#3a3a3a';
+  var _EQI = { paver:'🟡', roller:'🔵', excavator:'🟠', dozer:'🟤', grader:'🟣', milling_machine:'⬛', loader:'🟢' };
+  var _gcName = _f.gc || (_f.jobName&&_f.jobName.indexOf('—')>=0 ? _f.jobName.split(' — ')[0] : '') || '';
+  var _jdName = _f.jobName ? (_f.jobName.indexOf(' — ')>=0 ? _f.jobName.split(' — ').slice(1).join(' — ') : _f.jobName) : '';
+  var _eqArr = []; try { _eqArr = JSON.parse(_f.equipment || '[]'); } catch(e) {}
+  var _eqChips = _eqArr.map(function(eq) {
+    var n = typeof eq==='string' ? eq : (eq.name||String(eq));
+    var t = typeof eq==='object' ? (eq.type||'') : '';
+    return '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:var(--concrete-dim);background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:2px 6px;white-space:nowrap;">'+(_EQI[t]||'🔧')+' '+escHtml(n)+'</span>';
+  }).join('');
+  var _opList = (_f.operators||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var _opChips = _opList.map(function(op) {
+    return '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:#5ab4f5;background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.3);border-radius:4px;padding:2px 6px;white-space:nowrap;">👤 '+escHtml(op)+'</span>';
+  }).join('');
+  var _td2 = {}; try { _td2 = JSON.parse(_f.trucking||'{}'); } catch(e) {}
+  var _trucks = _td2.trucks || ''; var _loadTime = _td2.loadTime || _f.loadTime || '';
+
+  return '<div style="background:'+_col+'14;border:1px solid '+_col+'44;border-left:4px solid '+_col+';border-radius:8px;overflow:hidden;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:'+_col+'22;border-bottom:1px solid '+_col+'33;">'+
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:800;color:#fff;">Today\'s Assignment</div>'+
+      (_f.jobNum ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:800;color:var(--stripe);background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.3);border-radius:4px;padding:2px 7px;">#'+escHtml(_f.jobNum)+'</span>' : '')+
+    '</div>'+
+    '<div style="padding:10px 12px;display:flex;flex-direction:column;gap:5px;">'+
+      (_jdName ? '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:800;color:var(--white);">'+escHtml(_jdName)+'</div>' : '')+
+      (_gcName ? '<div style="font-family:\'DM Mono\',monospace;font-size:8.8px;color:var(--concrete-dim);">'+escHtml(_gcName)+'</div>' : '')+
+      ((_trucks||_loadTime) ? '<div style="display:flex;flex-wrap:wrap;gap:3px;">'+
+        (_trucks   ? '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:var(--concrete-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:2px 5px;">🚛 '+escHtml(_trucks)+'</span>' : '')+
+        (_loadTime ? '<span style="font-family:\'DM Mono\',monospace;font-size:7.5px;color:var(--concrete-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:2px 5px;">⏱ '+escHtml(_loadTime)+'</span>' : '')+
+      '</div>' : '')+
+      (_opChips ? '<div style="display:flex;flex-wrap:wrap;gap:3px;">'+_opChips+'</div>' : '')+
+      (_eqChips ? '<div style="display:flex;flex-wrap:wrap;gap:3px;">'+_eqChips+'</div>' : '')+
+    '</div>'+
+  '</div>';
+}
+
+// ── Operator home: this-week schedule grid filtered to this operator's assignments ──
+function _operatorThisWeekHtml() {
+  var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+  var _dn = _u;
+  try {
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      var _hc = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase() === _u; });
+      if (_hc && _hc.displayName) _dn = _hc.displayName;
+    }
+  } catch(e) {}
+
+  var _matchOp = function(opStr) {
+    if (!opStr) return false;
+    var dn = _dn.toLowerCase().trim();
+    return opStr.split(',').map(function(s){ return s.trim().toLowerCase(); }).some(function(op) {
+      return op === dn || op.split(' ')[0] === dn.split(' ')[0] || op.indexOf(dn) !== -1 || dn.indexOf(op) !== -1;
+    });
+  };
+
+  var today = new Date();
+  var todayKey = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var dow = today.getDay();
+  var thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  var DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  var rows = DAY_NAMES.map(function(dayName, i) {
+    var d = new Date(thisMonday); d.setDate(thisMonday.getDate() + i);
+    var dk = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    var sd = (typeof schedData !== 'undefined') ? (schedData[dk] || {}) : {};
+    var blk = null;
+    var chk = function(b) { if (b && b.type !== 'blank' && !blk && _matchOp((b.fields||{}).operators||'')) blk = b; };
+    chk(sd.top); chk(sd.bottom);
+    (sd.extras||[]).forEach(function(ex){ if (ex&&ex.data) chk(ex.data); });
+    var isToday = dk === todayKey;
+    if (blk) {
+      var f = blk.fields || {};
+      var bt = (typeof getBlockType === 'function') ? getBlockType(blk.type||'blank') : null;
+      var col = (bt && bt.color) ? bt.color : '#3a3a3a';
+      var jn = f.jobName || '—';
+      if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+(isToday?'var(--stripe)':'var(--concrete-dim)')+';width:28px;flex-shrink:0;">'+dayName+'</div>'+
+        '<div style="width:3px;height:24px;background:'+col+';border-radius:2px;flex-shrink:0;"></div>'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-family:\'DM Sans\',sans-serif;font-size:10px;font-weight:700;color:'+(isToday?'var(--white)':'rgba(255,255,255,0.8)')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(jn)+'</div>'+
+          (f.jobNum ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);">#'+escHtml(f.jobNum)+'</div>' : '')+
+        '</div>'+
+      '</div>';
+    }
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:'+(isToday?'var(--stripe)':'rgba(255,255,255,0.2)')+';width:28px;flex-shrink:0;">'+dayName+'</div>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:rgba(255,255,255,0.15);font-style:italic;">—</div>'+
+    '</div>';
+  }).join('');
+
+  return '<div class="home-widget">'+
+    '<div class="home-widget-header"><div class="home-widget-title">📅 This Week</div></div>'+
+    '<div class="home-widget-body">'+rows+'</div>'+
+  '</div>';
+}
+
 function renderHomeView(el) {
   if (!el) return;
   // Load photos from cloud once per page load (refresh)
@@ -7758,6 +7891,7 @@ function renderHomeView(el) {
     const _isDriver  = _role === 'driver' || _role === 'lowbed_driver';
     const _isForeman = _role === 'foreman';
     const _isCrewRole = ['operator','laborer','mechanic'].includes(_role);
+    const _isOperator = _role === 'operator';
     const _isRestrictedRole = ['operator','laborer','driver','lowbed_driver'].includes(_role);
 
     const _driverWidgets = new Set(['today', 'jobphotos', 'fleet']);
@@ -7813,6 +7947,8 @@ function renderHomeView(el) {
     let widgetsHtml = '';
     if (_homeIsAdmin()) {
       widgetsHtml = activeWidgets.map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
+    } else if (_isOperator) {
+      widgetsHtml = ''; // operator home screen is rendered outside the widget grid
     } else if (_isRestrictedRole) {
       widgetsHtml = widget7DaySched();
     } else if (_isForeman) {
@@ -7853,6 +7989,31 @@ function renderHomeView(el) {
         '</div>';
     }
 
+    // Pre-compute operator top-row panels
+    var _operatorTopSectionHtml = '';
+    var _operatorCardSafe = '';
+    var _showOpGps = false;
+    if (_isOperator) {
+      try { _operatorCardSafe = _operatorTodayCardHtml(); } catch(e) { _operatorCardSafe = ''; }
+      var _opMyHoursHtml = '';
+      try { _opMyHoursHtml = widgetMyHours(); } catch(e) {}
+      var _opThisWeekHtml = '';
+      try { _opThisWeekHtml = _operatorThisWeekHtml(); } catch(e) {}
+      _showOpGps = window.innerWidth > 600;
+      _operatorTopSectionHtml =
+        '<div style="display:flex;gap:16px;align-items:flex-start;width:100%;flex-wrap:wrap;padding:0 0 8px;">' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' +
+            '<div class="home-greeting-text">' +
+              '<div class="home-greeting-sub">' + greeting + ',</div>' +
+              '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+              '<div class="home-greeting-date">' + dateStr + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _opMyHoursHtml + '</div>' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _opThisWeekHtml + '</div>' +
+        '</div>';
+    }
+
     const _showGpsPanel = _homeIsAdmin();
     const _isMobAdmin   = _showGpsPanel && window.innerWidth <= 600;
     const adminWidgetBarHtml = (_showGpsPanel && !_isMobAdmin)
@@ -7881,9 +8042,11 @@ function renderHomeView(el) {
       : '';
     el.innerHTML = `
       <div class="home-wrap${_isMobAdmin ? ' home-wrap-mob-admin' : ''}">
-        ${_isForeman
-          ? _topSectionHtml
-          : '<div class="home-greeting">' +
+        ${_isOperator
+          ? _operatorTopSectionHtml
+          : _isForeman
+            ? _topSectionHtml
+            : '<div class="home-greeting">' +
               (_homeIsAdmin() && !_isMobAdmin
                 ? '<div style="min-width:0;">' + _homeWeekScheduleWidget() + '</div>' +
                   '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0;">' +
@@ -7908,9 +8071,11 @@ function renderHomeView(el) {
         ${adminPanelHtml}
         ${adminWidgetBarHtml}
         ${_isForeman ? '<div id="foremanTodayCard" style="width:100%;max-width:600px;margin:0 auto;box-sizing:border-box;padding:12px 16px 4px;">' + _foremanCardSafe + '</div>' : ''}
+        ${_isOperator ? '<div style="width:100%;max-width:600px;margin:0 auto;box-sizing:border-box;padding:4px 16px 4px;">' + _operatorCardSafe + '</div>' : ''}
+        ${_isOperator && _showOpGps ? '<div style="width:100%;height:240px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;margin:4px 0 0;flex-shrink:0;"><div class="home-gps-map-inner" id="homeGpsMapEl" style="width:100%;height:100%;"></div></div>' : ''}
         <div class="home-widgets-grid">${widgetsHtml}</div>
       </div>`;
-    if (_showGpsPanel) { var _gpsGen = ++_homeGps.gen; setTimeout(function(){ if (_homeGps.gen === _gpsGen) _homeInitGps(); }, 150); }
+    if (_showGpsPanel || (_isOperator && _showOpGps)) { var _gpsGen = ++_homeGps.gen; setTimeout(function(){ if (_homeGps.gen === _gpsGen) _homeInitGps(); }, 150); }
   } catch(err) {
     console.error('renderHomeView error:', err);
     el.innerHTML = `<div style="padding:40px;font-family:'DM Sans',sans-serif;color:var(--white);">
@@ -21548,13 +21713,25 @@ function getWeekLabel(weekKey) {
   } catch(e) { return weekKey; }
 }
 
-// Derives a predictable login username from a full name (first-initial + last-name).
-// "John Smith" → "jsmith", mirrors the existing foreman convention (fjoaquim, marruda).
+// Explicit display-name → login-username map so foreman report hours land under the right key.
+var _CREW_USERNAME_MAP = {
+  'Eric Estrela':   'eestrela',
+  'Steve Leate':    'sleate',
+  'Jeremy Martell': 'jmartell',
+  'Freeman Perry':  'fperry',
+  'Eddy Benfeito':  'ebenfeito',
+  'Aaron Silva':    'asilva',
+  'Corey Silva':    'csilva',
+  'Djalo Cardoso':  'dcardoso',
+  'Filipe Joaquim': 'fjoaquim',
+  'Mario Arruda':   'marruda',
+  'Louie Medeiros': 'lmedeiros'
+};
+
 function _deriveCrewUsername(fullName) {
+  if (_CREW_USERNAME_MAP[fullName]) return _CREW_USERNAME_MAP[fullName];
   var parts = (fullName || '').trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0].charAt(0) + parts[parts.length - 1]).toLowerCase().replace(/[^a-z0-9]/g, '');
-  }
+  if (parts.length >= 2) return (parts[0].charAt(0) + parts[parts.length - 1]).toLowerCase().replace(/[^a-z0-9]/g, '');
   return (fullName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
@@ -26445,6 +26622,15 @@ const DEFAULT_TEAM_ACCOUNTS = [
   { username:'fjoaquim',    email:'fjoaquim@donmartincorp.com',           password:'DMC2024!',         role:'foreman',  displayName:'Filipe Joaquim', active:true, driverTypes:[] },
   { username:'marruda',     email:'marruda@donmartincorp.com',            password:'DMC2024!',         role:'foreman',  displayName:'Mario Arruda',   active:true, driverTypes:[] },
   { username:'lmedeiros',   email:'lmedeiros@donmartincorp.com',          password:'DMC2024!',         role:'foreman',  displayName:'Louie Medeiros', active:true, driverTypes:[] },
+  // ── Operators ────────────────────────────────────────────────────────────────
+  { username:'eestrela',  password:'DMC2024!', role:'operator', displayName:'Eric Estrela',    active:true, driverTypes:[] },
+  { username:'sleate',    password:'DMC2024!', role:'operator', displayName:'Steve Leate',      active:true, driverTypes:[] },
+  { username:'jmartell',  password:'DMC2024!', role:'operator', displayName:'Jeremy Martell',   active:true, driverTypes:[] },
+  { username:'fperry',    password:'DMC2024!', role:'operator', displayName:'Freeman Perry',    active:true, driverTypes:[] },
+  { username:'ebenfeito', password:'DMC2024!', role:'operator', displayName:'Eddy Benfeito',   active:true, driverTypes:[] },
+  { username:'asilva',    password:'DMC2024!', role:'operator', displayName:'Aaron Silva',      active:true, driverTypes:[] },
+  { username:'csilva',    password:'DMC2024!', role:'operator', displayName:'Corey Silva',      active:true, driverTypes:[] },
+  { username:'dcardoso',  password:'DMC2024!', role:'operator', displayName:'Djalo Cardoso',   active:true, driverTypes:[] },
 ];
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog
@@ -27003,8 +27189,17 @@ async function initApp(username) {
       }
       // Ensure foreman accounts exist in stored roster
       var _foremanDefaults = [
-        { username:'fjoaquim', displayName:'Filipe Joaquim', email:'fjoaquim@donmartincorp.com', password:'DMC2024!', role:'foreman', active:true, driverTypes:[] },
-        { username:'marruda',  displayName:'Mario Arruda',   email:'marruda@donmartincorp.com',  password:'DMC2024!', role:'foreman', active:true, driverTypes:[] }
+        { username:'fjoaquim',  displayName:'Filipe Joaquim', email:'fjoaquim@donmartincorp.com',  password:'DMC2024!', role:'foreman',  active:true, driverTypes:[] },
+        { username:'marruda',   displayName:'Mario Arruda',   email:'marruda@donmartincorp.com',   password:'DMC2024!', role:'foreman',  active:true, driverTypes:[] },
+        { username:'lmedeiros', displayName:'Louie Medeiros', email:'lmedeiros@donmartincorp.com', password:'DMC2024!', role:'foreman',  active:true, driverTypes:[] },
+        { username:'eestrela',  displayName:'Eric Estrela',   password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'sleate',    displayName:'Steve Leate',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'jmartell',  displayName:'Jeremy Martell', password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'fperry',    displayName:'Freeman Perry',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'ebenfeito', displayName:'Eddy Benfeito',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'asilva',    displayName:'Aaron Silva',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'csilva',    displayName:'Corey Silva',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'dcardoso',  displayName:'Djalo Cardoso',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] }
       ];
       var _changed = false;
       _foremanDefaults.forEach(function(fd) {
