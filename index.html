@@ -7829,11 +7829,14 @@ function _operatorThisWeekHtml() {
     var _dk = _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
     var _sd = (typeof schedData !== 'undefined') ? (schedData[_dk] || {}) : {};
     var _blk = null;
-    var _chk = function(b) { if (b && b.type !== 'blank' && !_blk && _matchOp((b.fields||{}).operators||'')) _blk = b; };
-    _chk(_sd.top); _chk(_sd.bottom);
-    (_sd.extras||[]).forEach(function(ex){ if (ex&&ex.data) _chk(ex.data); });
+    var _blkForeman = '';
+    var _fr = (typeof foremanRoster !== 'undefined') ? foremanRoster : [];
+    var _chk = function(b, foreman) { if (b && b.type !== 'blank' && !_blk && _matchOp((b.fields||{}).operators||'')) { _blk = b; _blkForeman = foreman; } };
+    _chk(_sd.top, _fr[0] || 'Filipe Joaquim');
+    _chk(_sd.bottom, _fr[1] || 'Louie Medeiros');
+    (_sd.extras||[]).forEach(function(ex){ if (ex&&ex.data) _chk(ex.data, ex.foreman || _fr[0] || 'Filipe Joaquim'); });
     if (_i >= 5 && !_blk) continue;
-    days.push({ key: _dk, name: DAY_NAMES[_i], date: _d.getDate(), isToday: _dk === todayKey, blk: _blk });
+    days.push({ key: _dk, name: DAY_NAMES[_i], date: _d.getDate(), isToday: _dk === todayKey, blk: _blk, foreman: _blkForeman });
   }
 
   var N = days.length;
@@ -7845,7 +7848,7 @@ function _operatorThisWeekHtml() {
   }
 
   // Block cell — hw-sched-block class + operator-detail interior (job#, name, shift pill)
-  function opBlockCell(bd, dayKey) {
+  function opBlockCell(bd, dayKey, foreman) {
     if (!bd || !bd.type || bd.type === 'blank') {
       return '<div style="min-height:44px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
     }
@@ -7853,22 +7856,24 @@ function _operatorThisWeekHtml() {
     var f = bd.fields || {};
     var jn = f.jobName || '';
     if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
-    var gc = f.gc || (f.jobName && f.jobName.indexOf(' — ') >= 0 ? f.jobName.split(' — ')[0] : '') || '';
     var shiftLabel = (bt.label || bd.type || '').replace(' Work','');
-    var _td2 = {}; try { _td2 = JSON.parse(f.trucking||'{}'); } catch(e) {}
-    var loadTime = _td2.loadTime || f.loadTime || '';
-    var opList = (f.operators||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+    var _opLoc = f.location || (function() {
+      try {
+        var _bj = (backlogJobs||[]).find(function(j) {
+          return (j.num||'').toString().trim() === (f.jobNum||'').toString().trim()
+            || (j.name||'').toLowerCase() === (f.jobName||'').toLowerCase();
+        });
+        return _bj ? (_bj.location || _bj.address || '') : '';
+      } catch(e) { return ''; }
+    })();
     var tip = {
       type: bt.label || bd.type,
       color: bt.color || '#888',
       jobName: f.jobName || '',
       jobNum: f.jobNum || '',
-      gc: gc,
-      loc: f.location || '',
+      crew: foreman || '',
+      loc: _opLoc,
       equip: f.equipment || '',
-      operators: opList.join(', '),
-      loadTime: loadTime,
-      shift: shiftLabel,
       notes: f.notes || '',
       day: dayKey
     };
@@ -7899,7 +7904,7 @@ function _operatorThisWeekHtml() {
   // Single data row — "Me" label + one block per day
   cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="'+escHtml(_dn)+'">Me</div>');
   days.forEach(function(day) {
-    cells.push('<div style="padding:1px;">'+opBlockCell(day.blk, day.key)+'</div>');
+    cells.push('<div style="padding:1px;">'+opBlockCell(day.blk, day.key, day.foreman)+'</div>');
   });
 
   return '<div class="home-widget">'+
@@ -7922,8 +7927,6 @@ function _opWeekBlockClick(e, el) {
   var raw = el.getAttribute('data-stt');
   if (!raw) return;
   var tip; try { tip = JSON.parse(decodeURIComponent(raw)); } catch(err) { return; }
-  // operators field → crew so _hwSchedTipHtml renders it identically to admin
-  if (!tip.crew && tip.operators) tip.crew = tip.operators;
   var pop = document.createElement('div');
   pop.id = '_hwSchedMobilePop';
   pop._src = el;
