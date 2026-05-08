@@ -32668,7 +32668,8 @@ function _buildDmcFormHtml(fd) {
   var R = function(l,r){return '<tr><td class="do-tc">'+l+'</td><td class="do-dv"></td><td class="do-tc">'+r+'</td></tr>';};
   var S = function(t){return '<tr><td colspan="3" class="do-sh">'+t+'</td></tr>';};
   var F = function(nm,lbl,v1,v2){return R('<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp(nm,v1)+'</div>','<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp2(nm,v2)+'</div>');};
-  var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">TONS:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp('mat'+i+'n',m1.name)+'</div>','<div class="do-fr"><span class="do-lb">TONS:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp2('mat'+i+'n',m2.name)+'</div>');};
+  var _doRmn=typeof _resolveMixNickname==='function'?_resolveMixNickname:function(n){return n;};
+  var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">TONS:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp('mat'+i+'n',_doRmn(m1.name))+'</div>','<div class="do-fr"><span class="do-lb">TONS:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp2('mat'+i+'n',_doRmn(m2.name))+'</div>');};
   var T = function(i){var t1=fd.truckList[i]||'',t2=has2?(s2.truckList&&s2.truckList[i]||''):'';return R('<div class="do-nr"><span class="do-nm">'+(i+1)+')</span>'+inp('truck'+i,t1)+'</div>','<div class="do-nr"><span class="do-nm">'+(i+1)+')</span>'+inp2('truck'+i,t2)+'</div>');};
   var _dmcGcVal=fd.gc||(function(){var _bj=(backlogJobs||[]).find(function(j){return(j.num||'').toString().trim()===(fd.jobNum||'').toString().trim();});return(_bj&&_bj.gc)||'';})();
   var colHdr=has2?'<tr><td class="do-tc do-col-hdr">STOP 1</td><td class="do-dv"></td><td class="do-tc do-col-hdr">STOP 2</td></tr>':'';
@@ -32698,8 +32699,8 @@ function _buildDmcFormHtml(fd) {
   ].join('');
   return '<div class="do-dmc-form"><div class="do-dmc-hdr">'
     +'<svg width="52" height="44" viewBox="0 0 52 44" xmlns="http://www.w3.org/2000/svg"><polygon points="3,0 49,22 3,44" fill="none" stroke="#c00" stroke-width="3.5"/><polygon points="11,5 41,22 11,39" fill="none" stroke="#c00" stroke-width="2"/></svg>'
-    +'<div class="do-cn"><span style="color:#c00">D</span>ON<span style="color:#333">MARTIN</span><span style="color:#c00">C</span>ORP</div>'
-    +'<div class="do-cs">DON MARTIN CORPORATION &bull; PAVING CONTRACTOR &bull; 781.834.0071 &bull; Est. 1986</div>'
+    +'<div style="font-size:14pt;font-weight:bold;font-family:Arial,sans-serif;margin-top:6px;letter-spacing:.3px;">DON MARTIN CORPORATION</div>'
+    +'<div class="do-cs">PAVING CONTRACTOR &middot; 781.834.0071 &middot; Est. 1986</div>'
     +'</div><table class="do-form"><colgroup><col class="do-c1"><col class="do-cdv"><col class="do-c2"></colgroup><tbody>'+rows+'</tbody></table></div>';
 }
 
@@ -32715,7 +32716,8 @@ function _buildAmrizeFormHtml(fd) {
   var R = function(l,r){return '<tr><td class="do-tc">'+l+'</td><td class="do-dv"></td><td class="do-tc">'+r+'</td></tr>';};
   var S = function(t){return '<tr><td colspan="3" class="do-sh">'+t+'</td></tr>';};
   var F = function(nm,lbl,v1,v2){return R('<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp(nm,v1)+'</div>','<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp2(nm,v2)+'</div>');};
-  var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">Tons:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">Mix Type:</span>'+inp('mat'+i+'n',m1.name)+'</div>','<div class="do-fr"><span class="do-lb">Tons:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">Mix Type:</span>'+inp2('mat'+i+'n',m2.name)+'</div>');};
+  var _doRmn=typeof _resolveMixNickname==='function'?_resolveMixNickname:function(n){return n;};
+  var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">Tons:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">Mix Type:</span>'+inp('mat'+i+'n',_doRmn(m1.name))+'</div>','<div class="do-fr"><span class="do-lb">Tons:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">Mix Type:</span>'+inp2('mat'+i+'n',_doRmn(m2.name))+'</div>');};
   var topInfo='<table class="do-tbl"><colgroup><col style="width:50%"><col style="width:50%"></colgroup><tbody>'
     +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Date of Request:</span>'+inpH('reqDate',fd.reqDate)+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Date of Pick-Up:</span>'+inpH('pickDate',fd.pickDate)+'</div></td></tr>'
     +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Customer Name:</span>'+inpH('custName','DON MARTIN CORPORATION')+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Customer Number:</span>'+inpH('custNum','DON MA')+'</div></td></tr>'

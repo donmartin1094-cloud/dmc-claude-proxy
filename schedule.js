@@ -7811,6 +7811,19 @@ function generateDailyOrder(dateKey, slot, event) {
   _launchDailyOrderModal(dateKey, slot);
 }
 
+function _resolveMixNickname(rawName) {
+  if (!rawName) return '';
+  var _mt = (typeof mixTypesList !== 'undefined' ? mixTypesList : JSON.parse(localStorage.getItem(MIX_TYPES_KEY)||'[]'))
+    .find(function(m){
+      return (m.desc||'').toLowerCase()===rawName.toLowerCase() ||
+             (m.displayName||'').toLowerCase()===rawName.toLowerCase() ||
+             (m.ticketCodes||[]).some(function(tc){
+               return tc.replace(/,/g,' ').toLowerCase()===rawName.replace(/,/g,' ').toLowerCase();
+             });
+    });
+  return _mt ? (_mt.displayName||rawName) : rawName;
+}
+
 function _launchDailyOrderModal(dateKey, slot) {
   var _exArr = ((schedData[dateKey]||{}).extras)||[];
   var bdata;
@@ -7837,7 +7850,7 @@ function _launchDailyOrderModal(dateKey, slot) {
   else{proj=jn;}
   var loc = f.location||'';
   if (!loc){try{var _jk=f.jobNum||'',_jnlc=(f.jobName||'').toLowerCase();var _mj=(backlogJobs||[]).find(function(j){return(_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jnlc&&j.name&&j.name.trim().toLowerCase()===_jnlc);});if(_mj){if(_mj.location)loc=_mj.location;if(!gc&&_mj.gcName)gc=_mj.gcName;}}catch(e){}}
-  var mats = parseMaterialField(f.material||'');
+  var mats = parseMaterialField(f.material||'').map(function(m){return {name:_resolveMixNickname(m.name||''),tons:m.tons||''};});
   while(mats.length<4)mats.push({name:'',tons:''});
   mats=mats.slice(0,4);
   var trk={}; try{trk=JSON.parse(f.trucking||'{}');}catch(e){}
@@ -7854,7 +7867,7 @@ function _launchDailyOrderModal(dateKey, slot) {
       if(sjn.indexOf(' — ')>=0){sgc=sjn.split(' — ')[0];sproj=sjn.split(' — ').slice(1).join(' — ');}else{sproj=sjn;}
       var sloc=sf.location||'';
       if(!sloc){try{var _sjk=sf.jobNum||'',_sjnlc=(sf.jobName||'').toLowerCase();var _smj=(backlogJobs||[]).find(function(j){return(_sjk&&j.num&&j.num.toString().trim()===_sjk.toString().trim())||(_sjnlc&&j.name&&j.name.trim().toLowerCase()===_sjnlc);});if(_smj&&_smj.location)sloc=_smj.location;}catch(e){}}
-      var smats=parseMaterialField(sf.material||'');
+      var smats=parseMaterialField(sf.material||'').map(function(m){return {name:_resolveMixNickname(m.name||''),tons:m.tons||''};});
       while(smats.length<4)smats.push({name:'',tons:''});
       smats=smats.slice(0,4);
       var strk={}; try{strk=JSON.parse(sf.trucking||'{}');}catch(e){}
