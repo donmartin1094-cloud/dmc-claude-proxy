@@ -3122,11 +3122,13 @@ function previewDailyOrder(id) {
   document.querySelectorAll(`.reports-file-row[data-preview-id="${id}"]`).forEach(r => r.classList.add('reports-file-active'));
   const stored = JSON.parse(localStorage.getItem(DAILY_ORDERS_KEY) || '[]');
   const order = stored.find(o => o.id === id) || dailyOrders.find(o => o.id === id);
-  if (!order) return;
+  if (!order) { console.log('PREVIEW: order not found', id); return; }
+  console.log('PREVIEW: order found', JSON.stringify({id:order.id,orderType:order.orderType,hasBlob64:!!order.blob64,blob64Start:order.blob64?order.blob64.slice(0,30):'',supplier:order.supplier,jobNum:order.jobNum,gcName:order.gcName}));
 
   // If we have a stored HTML blob, show it directly in the iframe preview
   const blob64 = order.blob64;
   if (blob64 && blob64.startsWith('data:text/html')) {
+    console.log('PREVIEW: BLOB64 PATH');
     const bytes = atob(blob64.split(',')[1]);
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
@@ -3140,7 +3142,9 @@ function previewDailyOrder(id) {
   }
 
   // Legacy fallback: reconstruct preview from schedule data
+  console.log('PREVIEW: LEGACY FALLBACK PATH — orderType:', order.orderType, '| _buildAmrizeFormHtml available:', typeof _buildAmrizeFormHtml === 'function');
   if (order.orderType === 'amrize' && typeof _buildAmrizeFormHtml === 'function') {
+    console.log('PREVIEW: AMRIZE PATH HIT');
     var _afd = {
       isAmrize: true,
       foreman: order.foreman || '',
