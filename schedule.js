@@ -7807,9 +7807,66 @@ function downloadBlob(blob, fileName) {
 }
 
 function generateDailyOrder(dateKey, slot, event) {
-  console.log('[Order] generateDailyOrder called', dateKey, slot);
   if (event) event.stopPropagation();
-  buildDailyOrder(dateKey, slot);
+  _launchDailyOrderModal(dateKey, slot);
+}
+
+function _launchDailyOrderModal(dateKey, slot) {
+  var _exArr = ((schedData[dateKey]||{}).extras)||[];
+  var bdata;
+  if (slot.startsWith('extra_')) {
+    var _eidx = parseInt(slot.replace('extra_',''));
+    bdata = (_exArr[_eidx]&&_exArr[_eidx].data)||{type:'blank',fields:{}};
+  } else {
+    bdata = (schedData[dateKey]||{})[slot]||{type:'blank',fields:{}};
+  }
+  var f = bdata.fields||{};
+  var _fr2 = (typeof foremanRoster!=='undefined') ? foremanRoster : [];
+  var foreman = slot==='top' ? (_fr2[0]||'Filipe Joaquim')
+    : slot==='bottom' ? (_fr2[1]||'Louie Medeiros')
+    : (slot.startsWith('extra_')
+        ? ((_exArr[parseInt(slot.replace('extra_',''))]||{}).foreman||_fr2[0]||'Filipe Joaquim')
+        : (_fr2[1]||'Louie Medeiros'));
+  var pts = dateKey.split('-');
+  var jobDateObj = new Date(parseInt(pts[0]),parseInt(pts[1])-1,parseInt(pts[2]));
+  var orderDate = jobDateObj.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var pickDate  = jobDateObj.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+  var reqDate   = new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+  var jn = f.jobName||'', gc = '', proj = '';
+  if (jn.indexOf(' — ')>=0){gc=jn.split(' — ')[0];proj=jn.split(' — ').slice(1).join(' — ');}
+  else{proj=jn;}
+  var loc = f.location||'';
+  if (!loc){try{var _jk=f.jobNum||'',_jnlc=(f.jobName||'').toLowerCase();var _mj=(backlogJobs||[]).find(function(j){return(_jk&&j.num&&j.num.toString().trim()===_jk.toString().trim())||(_jnlc&&j.name&&j.name.trim().toLowerCase()===_jnlc);});if(_mj){if(_mj.location)loc=_mj.location;if(!gc&&_mj.gcName)gc=_mj.gcName;}}catch(e){}}
+  var mats = parseMaterialField(f.material||'');
+  while(mats.length<4)mats.push({name:'',tons:''});
+  mats=mats.slice(0,4);
+  var trk={}; try{trk=JSON.parse(f.trucking||'{}');}catch(e){}
+  var ops=(f.operators||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  var tlist=(trk.truckList&&trk.truckList.length)?trk.truckList.slice():ops.slice();
+  while(tlist.length<5)tlist.push('');
+  var plant=f.plant||'', isAmrize=_isAmrizePlant(plant);
+  var secondStop=null;
+  if (slot==='top'||slot==='bottom'){
+    var _ssEx=_exArr.filter(function(ex){return ex&&ex.parentSlot===slot&&_isSameSupplier(plant,(ex.data&&ex.data.fields&&ex.data.fields.plant)||'');});
+    if(_ssEx.length>0){
+      var sf=(_ssEx[0].data&&_ssEx[0].data.fields)||{};
+      var sjn=sf.jobName||'',sgc='',sproj='';
+      if(sjn.indexOf(' — ')>=0){sgc=sjn.split(' — ')[0];sproj=sjn.split(' — ').slice(1).join(' — ');}else{sproj=sjn;}
+      var sloc=sf.location||'';
+      if(!sloc){try{var _sjk=sf.jobNum||'',_sjnlc=(sf.jobName||'').toLowerCase();var _smj=(backlogJobs||[]).find(function(j){return(_sjk&&j.num&&j.num.toString().trim()===_sjk.toString().trim())||(_sjnlc&&j.name&&j.name.trim().toLowerCase()===_sjnlc);});if(_smj&&_smj.location)sloc=_smj.location;}catch(e){}}
+      var smats=parseMaterialField(sf.material||'');
+      while(smats.length<4)smats.push({name:'',tons:''});
+      smats=smats.slice(0,4);
+      var strk={}; try{strk=JSON.parse(sf.trucking||'{}');}catch(e){}
+      var sops=(sf.operators||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+      var stlist=(strk.truckList&&strk.truckList.length)?strk.truckList.slice():sops.slice();
+      while(stlist.length<5)stlist.push('');
+      secondStop={jobNum:sf.jobNum||'',gc:sgc,proj:sproj,jobLocation:sloc,plant:sf.plant||'',materials:smats,trucks:strk.trucks||strk.numTrucks||'',loadTime:strk.loadTime||'',spacing:strk.spacing||'',truckList:stlist};
+    }
+  }
+  var fd={isAmrize:isAmrize,dateKey:dateKey,slot:slot,foreman:foreman,orderDate:orderDate,reqDate:reqDate,pickDate:pickDate,jobNum:f.jobNum||'',gc:gc,proj:proj,jobLocation:loc,plant:plant,materials:mats,trucks:trk.trucks||trk.numTrucks||'',loadTime:trk.loadTime||'',spacing:trk.spacing||'',truckList:tlist.slice(0,5),secondStop:secondStop};
+  if (typeof openDailyOrderModal==='function') openDailyOrderModal(fd);
+  else buildDailyOrder(dateKey,slot);
 }
 
 

@@ -2524,6 +2524,47 @@
   #bidPopupPricingWrap input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
   #pricingView input[type=number],
   #bidPopupPricingWrap input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+  /* ── Daily Order Form Modal ──────────────────────────────────────────────── */
+  #dailyOrderPrintModal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.87);flex-direction:column;align-items:center;overflow-y:auto;padding:20px 12px;}
+  .do-action-bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-shrink:0;flex-wrap:wrap;}
+  .do-action-btn{padding:10px 18px;border-radius:6px;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;}
+  .do-action-btn.do-print{background:#1a6b3c;color:#fff;}
+  .do-action-btn.do-save{background:#1a5c8a;color:#fff;}
+  .do-action-btn.do-close{background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  #doFormContent{background:#fff;color:#000;width:100%;max-width:7.5in;box-shadow:0 4px 40px rgba(0,0,0,0.5);padding:.55in .5in;box-sizing:border-box;font-family:Arial,sans-serif;font-size:9pt;}
+  .do-form{width:100%;border-collapse:collapse;table-layout:fixed;} .do-c1,.do-c2{width:47.5%;} .do-cdv{width:5%;}
+  .do-tc{vertical-align:bottom;padding:0;} .do-dv{border-left:1px dashed #ccc;}
+  .do-sh{font-size:9pt;font-weight:bold;text-decoration:underline;padding:10px 0 4px;vertical-align:bottom;}
+  .do-dmc-form .do-sh{color:#1a6b3c;}
+  .do-bl{font-size:8.5pt;font-weight:bold;padding:8px 0 4px;border-top:1px solid #ddd;vertical-align:bottom;}
+  .do-fr{display:flex;align-items:flex-end;padding-bottom:6px;gap:3px;flex-wrap:nowrap;}
+  .do-lb{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0;color:#000;}
+  .do-ml{margin-left:5px;font-size:8pt;white-space:nowrap;flex-shrink:0;color:#000;}
+  .do-inp{flex:1;border:none;border-bottom:1px solid #000;background:transparent;font-size:8.5pt;font-family:Arial,sans-serif;color:#000;padding-bottom:1px;min-width:20px;outline:none;}
+  .do-inp.do-sm{flex:0 0 46px;min-width:0;}
+  .do-chk{width:12px;height:12px;cursor:pointer;flex-shrink:0;}
+  .do-nr{display:flex;align-items:flex-end;padding-bottom:6px;gap:4px;}
+  .do-nm{font-size:8pt;font-weight:bold;width:16px;flex-shrink:0;color:#000;}
+  .do-col-hdr{text-align:center;font-size:7.5pt;font-weight:bold;letter-spacing:.5px;padding:2px 0 4px;border-bottom:1px solid #ccc;}
+  .do-dmc-hdr{text-align:center;padding-bottom:12px;margin-bottom:10px;border-bottom:2px solid #ccc;}
+  .do-cn{font-size:17pt;font-weight:900;font-family:'Arial Black',Arial,sans-serif;letter-spacing:1px;margin-top:4px;}
+  .do-cs{font-size:8pt;letter-spacing:3px;color:#666;margin-top:2px;}
+  .do-am-hdr{text-align:center;padding-bottom:8px;margin-bottom:6px;}
+  .do-an{font-size:14pt;font-weight:900;font-family:'Arial Black',Arial,sans-serif;letter-spacing:2px;color:#1a5c8a;}
+  .do-as{font-size:7.5pt;letter-spacing:1px;color:#555;margin-top:1px;}
+  .do-ft{font-size:11.5pt;font-weight:bold;text-align:center;text-decoration:underline;margin-bottom:8px;letter-spacing:.4px;}
+  .do-tbl{width:100%;border-collapse:collapse;border-bottom:1px solid #aaa;margin-bottom:8px;}
+  .do-tf{vertical-align:bottom;padding:0;} .do-tr2{display:flex;align-items:flex-end;padding-bottom:4px;gap:3px;}
+  .do-tl{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0;}
+  .do-nl{height:19px;border-bottom:1px solid #000;padding:0;}
+  .do-foot{text-align:center;font-size:7.5pt;font-weight:bold;border-top:1px solid #000;padding-top:7px;margin-top:14px;}
+  @media print{
+    body>*:not(#dailyOrderPrintModal){display:none!important;}
+    #dailyOrderPrintModal{position:static!important;background:white!important;padding:0!important;display:block!important;overflow:visible!important;}
+    .do-action-bar{display:none!important;}
+    #doFormContent{box-shadow:none!important;padding:.55in .5in!important;}
+    .do-inp{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
 </style>
 </head>
 <body>
@@ -32517,6 +32558,188 @@ loadSavedTheme();
   _poll();
 })();
 
+</script>
+
+<!-- ── Daily Order Form Modal ─────────────────────────────────────────────── -->
+<div id="dailyOrderPrintModal" style="display:none;">
+  <div class="do-action-bar">
+    <button class="do-action-btn do-print" onclick="window.print()">🖨️ Print</button>
+    <button class="do-action-btn do-save" onclick="_saveDailyOrder()">💾 Save Order</button>
+    <button class="do-action-btn do-close" onclick="_closeDailyOrder()">✕ Close</button>
+  </div>
+  <div id="doFormContent"></div>
+</div>
+
+<script>
+// ── Daily Order Modal ─────────────────────────────────────────────────────────
+function openDailyOrderModal(fd) {
+  var modal = document.getElementById('dailyOrderPrintModal');
+  var content = document.getElementById('doFormContent');
+  if (!modal || !content) return;
+  modal._fd = fd;
+  content.innerHTML = fd.isAmrize ? _buildAmrizeFormHtml(fd) : _buildDmcFormHtml(fd);
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function _closeDailyOrder() {
+  var modal = document.getElementById('dailyOrderPrintModal');
+  if (modal) { modal.style.display = 'none'; modal._fd = null; }
+  document.body.style.overflow = '';
+}
+function _saveDailyOrder() {
+  var modal = document.getElementById('dailyOrderPrintModal');
+  var fd = modal && modal._fd;
+  if (!fd) return;
+  var content = document.getElementById('doFormContent');
+  var vals = {}, cbStates = {};
+  content.querySelectorAll('input[type="text"]').forEach(function(i){ vals[i.name]=i.value; });
+  content.querySelectorAll('input[type="checkbox"]').forEach(function(i){ cbStates[i.name]=i.checked; });
+  var clone = content.cloneNode(true);
+  Array.from(clone.querySelectorAll('input[type="text"]')).forEach(function(inp) {
+    var sp = document.createElement('span');
+    sp.style.cssText = inp.classList.contains('do-sm')
+      ? 'border-bottom:1px solid #000;display:inline-block;font-size:8.5pt;padding-bottom:1px;flex:0 0 46px;min-width:0;'
+      : 'border-bottom:1px solid #000;display:inline-block;font-size:8.5pt;padding-bottom:1px;flex:1;min-width:20px;';
+    sp.textContent = vals[inp.getAttribute('name')]||'';
+    inp.parentNode.replaceChild(sp, inp);
+  });
+  Array.from(clone.querySelectorAll('input[type="checkbox"]')).forEach(function(cb) {
+    var sp = document.createElement('span');
+    sp.style.fontSize = '11pt';
+    sp.textContent = cbStates[cb.getAttribute('name')] ? '☑' : '☐';
+    cb.parentNode.replaceChild(sp, cb);
+  });
+  var snapCss = '*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:9pt;color:#000;background:#fff;padding:.55in .5in}.do-form{width:100%;border-collapse:collapse;table-layout:fixed}.do-c1,.do-c2{width:47.5%}.do-cdv{width:5%}.do-tc{vertical-align:bottom;padding:0}.do-dv{border-left:1px dashed #ccc}.do-sh{font-size:9pt;font-weight:bold;text-decoration:underline;padding:10px 0 4px;vertical-align:bottom}.do-dmc-form .do-sh{color:#1a6b3c}.do-bl{font-size:8.5pt;font-weight:bold;padding:8px 0 4px;border-top:1px solid #ddd;vertical-align:bottom}.do-fr{display:flex;align-items:flex-end;padding-bottom:6px;gap:3px}.do-lb{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0}.do-ml{margin-left:5px;font-size:8pt;white-space:nowrap;flex-shrink:0}.do-nr{display:flex;align-items:flex-end;padding-bottom:6px;gap:4px}.do-nm{font-size:8pt;font-weight:bold;width:16px;flex-shrink:0}.do-col-hdr{text-align:center;font-size:7.5pt;font-weight:bold;letter-spacing:.5px;padding:2px 0 4px;border-bottom:1px solid #ccc}.do-dmc-hdr{text-align:center;padding-bottom:12px;margin-bottom:10px;border-bottom:2px solid #ccc}.do-cn{font-size:17pt;font-weight:900;font-family:"Arial Black",Arial,sans-serif;letter-spacing:1px;margin-top:4px}.do-cs{font-size:8pt;letter-spacing:3px;color:#666;margin-top:2px}.do-am-hdr{text-align:center;padding-bottom:8px;margin-bottom:6px}.do-an{font-size:14pt;font-weight:900;font-family:"Arial Black",Arial,sans-serif;letter-spacing:2px;color:#1a5c8a}.do-as{font-size:7.5pt;letter-spacing:1px;color:#555;margin-top:1px}.do-ft{font-size:11.5pt;font-weight:bold;text-align:center;text-decoration:underline;margin-bottom:8px;letter-spacing:.4px}.do-tbl{width:100%;border-collapse:collapse;border-bottom:1px solid #aaa;margin-bottom:8px}.do-tf{vertical-align:bottom;padding:0}.do-tr2{display:flex;align-items:flex-end;padding-bottom:4px;gap:3px}.do-tl{font-size:8pt;font-weight:bold;white-space:nowrap;flex-shrink:0}.do-nl{height:19px;border-bottom:1px solid #000;padding:0}.do-foot{text-align:center;font-size:7.5pt;font-weight:bold;border-top:1px solid #000;padding-top:7px;margin-top:14px}';
+  var snapHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+(fd.isAmrize?'Amrize':'DMC')+' Daily Order</title><style>'+snapCss+'</style></head><body>'+clone.outerHTML+'</body></html>';
+  var blob = new Blob([snapHtml], { type:'text/html' });
+  var reader = new FileReader();
+  reader.onloadend = function() {
+    var mo=fd.dateKey.slice(5,7), dy=fd.dateKey.slice(8,10), yr=fd.dateKey.slice(2,4);
+    var fname = (fd.foreman+'.'+mo+'.'+dy+'.'+yr+'.'+(fd.gc||'NoGC')+' '+(fd.proj||'NoProject'))
+      .replace(/[\/\\:*?"<>|]/g,'').substring(0,100)+'.html';
+    var order = {
+      id: Date.now().toString(),
+      dateKey: fd.dateKey, dateOfWork: fd.dateKey, foreman: fd.foreman,
+      gcName: fd.gc, jobName: fd.proj, supplier: fd.plant,
+      fileName: fname, orderType: fd.isAmrize?'amrize':'dmc',
+      createdAt: new Date().toLocaleString('en-US'), blob64: reader.result
+    };
+    if (typeof dailyOrders !== 'undefined') {
+      dailyOrders.unshift(order);
+      if (dailyOrders.length>200) dailyOrders=dailyOrders.slice(0,200);
+      try { localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(dailyOrders)); _checkLocalStorageSize(); } catch(e){}
+      try { if (typeof fbSet==='function') fbSet('daily_orders', dailyOrders.map(function(o){return Object.assign({},o,{blob64:undefined});})); } catch(e){}
+      try { if (typeof activeTab!=='undefined'&&(activeTab==='reports'||activeTab==='reportsDailyOrders')&&typeof renderReports==='function') renderReports(); } catch(e){}
+      // Auto-create invoice entry
+      try {
+        var _iEntry={id:'do_'+Date.now().toString(),dateOfWork:fd.dateKey,invoiceNo:'',foreman:fd.foreman,jobNo:fd.jobNum,supplier:fd.plant,jobName:(fd.gc&&fd.proj?(fd.gc+' — '+fd.proj):fd.proj)||'',gcName:fd.gc,mixItems:[{mixType:'',mixPrice:'',itemTotal:''}],updatedAt:Date.now(),fromDailyOrder:true};
+        var _exists=typeof invoiceList!=='undefined'&&invoiceList.some(function(i){return i.dateOfWork===fd.dateKey&&i.foreman===fd.foreman&&i.jobNo===fd.jobNum;});
+        if(!_exists&&typeof invoiceList!=='undefined'){invoiceList.unshift(_iEntry);if(typeof saveInvoiceList==='function')saveInvoiceList();if(typeof renderInvoiceTracker==='function'&&typeof activeTab!=='undefined'&&activeTab==='apMix')renderInvoiceTracker();if(typeof pushNotif==='function')pushNotif('info','🧾 Invoice Entry Created','A new entry was added to the Sales Invoice & Trucking Tracker for '+fd.dateKey+'.',null);}
+      } catch(e){}
+    }
+    if (typeof showDailyOrderToast==='function') showDailyOrderToast(order.orderType, fname);
+    _closeDailyOrder();
+  };
+  reader.readAsDataURL(blob);
+}
+
+// ── DMC form HTML builder ─────────────────────────────────────────────────────
+function _buildDmcFormHtml(fd) {
+  var has2 = !!(fd.secondStop), s2 = fd.secondStop||{};
+  var e = function(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
+  var inp  = function(nm,val,cls){return '<input type="text" name="do_s1_'+nm+'" value="'+e(val)+'" class="do-inp'+(cls?' '+cls:'')+'">';};
+  var inp2 = function(nm,val,cls){return '<input type="text" name="do_s2_'+nm+'" value="'+e(has2?val:'')+'" class="do-inp'+(cls?' '+cls:'')+'">';};
+  var chk  = function(nm,on){return '<input type="checkbox" name="do_s1_'+nm+'"'+(on?' checked':'')+' class="do-chk">';};
+  var chk2 = function(nm,on){return '<input type="checkbox" name="do_s2_'+nm+'"'+(on?' checked':'')+' class="do-chk">';};
+  var R = function(l,r){return '<tr><td class="do-tc">'+l+'</td><td class="do-dv"></td><td class="do-tc">'+r+'</td></tr>';};
+  var S = function(t){return '<tr><td colspan="3" class="do-sh">'+t+'</td></tr>';};
+  var F = function(nm,lbl,v1,v2){return R('<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp(nm,v1)+'</div>','<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp2(nm,v2)+'</div>');};
+  var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">TONS:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp('mat'+i+'n',m1.name)+'</div>','<div class="do-fr"><span class="do-lb">TONS:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp2('mat'+i+'n',m2.name)+'</div>');};
+  var T = function(i){var t1=fd.truckList[i]||'',t2=has2?(s2.truckList&&s2.truckList[i]||''):'';return R('<div class="do-nr"><span class="do-nm">'+(i+1)+')</span>'+inp('truck'+i,t1)+'</div>','<div class="do-nr"><span class="do-nm">'+(i+1)+')</span>'+inp2('truck'+i,t2)+'</div>');};
+  var colHdr=has2?'<tr><td class="do-tc do-col-hdr">STOP 1</td><td class="do-dv"></td><td class="do-tc do-col-hdr">STOP 2</td></tr>':'';
+  var rows=[colHdr,
+    S('JOB INFORMATION:'),
+    F('jobDate','ORDER DATE:',fd.orderDate,fd.orderDate),
+    F('foreman','FOREMAN:',fd.foreman,fd.foreman),
+    F('jobNum','DMC JOB NUMBER:',fd.jobNum,has2?s2.jobNum:''),
+    F('gc','GENERAL CONTRACTOR:',fd.gc,has2?s2.gc:''),
+    F('proj','PROJECT NAME:',fd.proj,has2?s2.proj:''),
+    F('loc','PROJECT ADDRESS:',fd.jobLocation,has2?s2.jobLocation:''),
+    S('MATERIALS INFORMATION:'),
+    R('<div class="do-fr"><span class="do-lb">TYPE OF WORK:</span><span class="do-ml">MACHINE WORK:</span>'+chk('machWork',true)+'<span class="do-ml">HAND WORK:</span>'+chk('handWork',false)+'</div>',
+      '<div class="do-fr"><span class="do-lb">TYPE OF WORK:</span><span class="do-ml">MACHINE WORK:</span>'+chk2('machWork',has2)+'<span class="do-ml">HAND WORK:</span>'+chk2('handWork',false)+'</div>'),
+    R('<div class="do-fr"><span class="do-lb">JOB SETUP:</span><span class="do-ml">BY THE TON:</span>'+chk('byTon',true)+'<span class="do-ml">BY THE SQUARE YARD:</span>'+chk('bySqYd',false)+'</div>',
+      '<div class="do-fr"><span class="do-lb">JOB SETUP:</span><span class="do-ml">BY THE TON:</span>'+chk2('byTon',has2)+'<span class="do-ml">BY THE SQUARE YARD:</span>'+chk2('bySqYd',false)+'</div>'),
+    F('plant','PLANT:',fd.plant,has2?s2.plant:''),
+    F('superpave','SUPERPAVE TRAFFIC LEVEL/GYRATION:','',''),
+    M(0),M(1),M(2),M(3),
+    F('paveTime','ESTIMATED TIME TO PAVE:','',''),
+    S('TRUCKING:'),
+    R('<div class="do-fr"><span class="do-lb">NUMBER OF TRUCKS:</span>'+inp('trucks',fd.trucks,'do-sm')+'<span class="do-ml do-lb">LOAD TIME:</span>'+inp('loadTime',fd.loadTime,'do-sm')+'</div>',
+      '<div class="do-fr"><span class="do-lb">NUMBER OF TRUCKS:</span>'+inp2('trucks',has2?s2.trucks:'','do-sm')+'<span class="do-ml do-lb">LOAD TIME:</span>'+inp2('loadTime',has2?s2.loadTime:'','do-sm')+'</div>'),
+    F('spacing','SPACING:',fd.spacing,has2?s2.spacing:''),
+    '<tr><td colspan="3" class="do-bl">SPECIAL NOTES / DIRECTIONS &amp; TRUCK LIST</td></tr>',
+    T(0),T(1),T(2),T(3),T(4)
+  ].join('');
+  return '<div class="do-dmc-form"><div class="do-dmc-hdr">'
+    +'<svg width="52" height="44" viewBox="0 0 52 44" xmlns="http://www.w3.org/2000/svg"><polygon points="3,0 49,22 3,44" fill="none" stroke="#c00" stroke-width="3.5"/><polygon points="11,5 41,22 11,39" fill="none" stroke="#c00" stroke-width="2"/></svg>'
+    +'<div class="do-cn"><span style="color:#c00">D</span>ON<span style="color:#333">MARTIN</span><span style="color:#c00">C</span>ORP</div>'
+    +'<div class="do-cs">DON MARTIN CORPORATION &bull; PAVING CONTRACTOR &bull; 781.834.0071 &bull; Est. 1986</div>'
+    +'</div><table class="do-form"><colgroup><col class="do-c1"><col class="do-cdv"><col class="do-c2"></colgroup><tbody>'+rows+'</tbody></table></div>';
+}
+
+// ── Amrize form HTML builder ──────────────────────────────────────────────────
+function _buildAmrizeFormHtml(fd) {
+  var has2 = !!(fd.secondStop), s2 = fd.secondStop||{};
+  var e = function(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
+  var inp  = function(nm,val,cls){return '<input type="text" name="do_s1_'+nm+'" value="'+e(val)+'" class="do-inp'+(cls?' '+cls:'')+'">';};
+  var inp2 = function(nm,val,cls){return '<input type="text" name="do_s2_'+nm+'" value="'+e(has2?val:'')+'" class="do-inp'+(cls?' '+cls:'')+'">';};
+  var inpH = function(nm,val){return '<input type="text" name="do_h_'+nm+'" value="'+e(val)+'" class="do-inp">';};
+  var chk  = function(nm,on){return '<input type="checkbox" name="do_s1_'+nm+'"'+(on?' checked':'')+' class="do-chk">';};
+  var chk2 = function(nm,on){return '<input type="checkbox" name="do_s2_'+nm+'"'+(on?' checked':'')+' class="do-chk">';};
+  var R = function(l,r){return '<tr><td class="do-tc">'+l+'</td><td class="do-dv"></td><td class="do-tc">'+r+'</td></tr>';};
+  var S = function(t){return '<tr><td colspan="3" class="do-sh">'+t+'</td></tr>';};
+  var F = function(nm,lbl,v1,v2){return R('<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp(nm,v1)+'</div>','<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp2(nm,v2)+'</div>');};
+  var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">Tons:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">Mix Type:</span>'+inp('mat'+i+'n',m1.name)+'</div>','<div class="do-fr"><span class="do-lb">Tons:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">Mix Type:</span>'+inp2('mat'+i+'n',m2.name)+'</div>');};
+  var topInfo='<table class="do-tbl"><colgroup><col style="width:50%"><col style="width:50%"></colgroup><tbody>'
+    +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Date of Request:</span>'+inpH('reqDate',fd.reqDate)+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Date of Pick-Up:</span>'+inpH('pickDate',fd.pickDate)+'</div></td></tr>'
+    +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Customer Name:</span>'+inpH('custName','DON MARTIN CORPORATION')+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Customer Number:</span>'+inpH('custNum','DON MA')+'</div></td></tr>'
+    +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Ordered by:</span>'+inpH('orderedBy','DON')+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Phone Number:</span>'+inpH('phone','781.834.0071')+'</div></td></tr>'
+    +'</tbody></table>';
+  var colHdr=has2?'<tr><td class="do-tc do-col-hdr">STOP 1</td><td class="do-dv"></td><td class="do-tc do-col-hdr">STOP 2</td></tr>':'';
+  var noteRows=has2
+    ?[0,1,2,3,4].map(function(){return '<tr><td class="do-nl"></td><td class="do-dv"></td><td class="do-nl"></td></tr>';}).join('')
+    :[0,1,2,3,4].map(function(){return '<tr><td colspan="3" class="do-nl"></td></tr>';}).join('');
+  var rows=[colHdr,
+    S('A. Job Information:'),
+    F('foreman','Foreman:',fd.foreman,fd.foreman),
+    F('jobNum','Job No./Purchase Order No.:',fd.jobNum,has2?s2.jobNum:''),
+    F('gc','General Contractor:',fd.gc,has2?s2.gc:''),
+    F('proj','Job Name:',fd.proj,has2?s2.proj:''),
+    F('loc','Job City/State:',fd.jobLocation,has2?s2.jobLocation:''),
+    S('B. Materials:'),
+    R('<div class="do-fr"><span class="do-lb">Type of Work:</span><span class="do-ml">'+chk('machWork',false)+'</span><span class="do-ml">Machine</span><span class="do-ml">'+chk('handWork',false)+'</span><span class="do-ml">Hand</span></div>',
+      '<div class="do-fr"><span class="do-lb">Type of Work:</span><span class="do-ml">'+chk2('machWork',false)+'</span><span class="do-ml">Machine</span><span class="do-ml">'+chk2('handWork',false)+'</span><span class="do-ml">Hand</span></div>'),
+    F('plant','Plant:',fd.plant,has2?s2.plant:''),
+    M(0),M(1),M(2),M(3),
+    R('<div class="do-fr"><span class="do-lb">Estimated time to pave:</span>'+inp('paveTime','','do-sm')+'<span class="do-ml">hours</span></div>',
+      '<div class="do-fr"><span class="do-lb">Estimated time to pave:</span>'+inp2('paveTime','','do-sm')+'<span class="do-ml">hours</span></div>'),
+    S('C. Trucking:'),
+    R('<div class="do-fr"><span class="do-lb">No. of Trucks:</span>'+inp('trucks',fd.trucks,'do-sm')+'<span class="do-ml do-lb">Load Time:</span>'+inp('loadTime',fd.loadTime,'do-sm')+'</div>',
+      '<div class="do-fr"><span class="do-lb">No. of Trucks:</span>'+inp2('trucks',has2?s2.trucks:'','do-sm')+'<span class="do-ml do-lb">Load Time:</span>'+inp2('loadTime',has2?s2.loadTime:'','do-sm')+'</div>'),
+    F('spacing','Spacing:',fd.spacing,has2?s2.spacing:''),
+    S('Special Notes / Directions:'),
+    noteRows
+  ].join('');
+  return '<div class="do-am-hdr">'
+    +'<svg width="50" height="46" viewBox="0 0 50 46" xmlns="http://www.w3.org/2000/svg"><polygon points="25,2 48,44 2,44" fill="none" stroke="#1a5c8a" stroke-width="3"/><line x1="13" y1="32" x2="37" y2="32" stroke="#1a5c8a" stroke-width="2.5"/></svg>'
+    +'<div class="do-an">AGGREGATE</div><div class="do-an" style="font-size:10.5pt">INDUSTRIES</div>'
+    +'<div class="do-as">NORTHEAST REGION, INC.</div></div>'
+    +'<div class="do-ft">BITUMINOUS CONCRETE F.O.B. ORDER FORM</div>'
+    +topInfo
+    +'<table class="do-form"><colgroup><col class="do-c1"><col class="do-cdv"><col class="do-c2"></colgroup><tbody>'+rows+'</tbody></table>'
+    +'<div class="do-foot">FAX THIS ORDER TO THE PAVING OPERATIONS OFFICE AT (978) 486-9268 BY 12:00PM</div>';
+}
 </script>
 </body>
 </html>
