@@ -17,7 +17,6 @@ const BLOCK_FIELDS = [
   { key:'qc',        label:'QC:',     buttons:['DMC','Others'] },
   { key:'tack',      label:'Tack:',   buttons:['DMC','Others'] },
   { key:'rubber',    label:'Rubber:', buttons:['DMC','Others'] },
-  { key:'loadTime',  label:'Load Time:' },
   { key:'trucking',  label:'Trucking:', type:'trucking' },
   { key:'contact',   label:'Contact:' },
   { key:'notes',     label:'Notes:' },
@@ -2871,12 +2870,14 @@ function renderExtraBlock(key, idx, ex, isLast) {
       ].filter(Boolean).map(m => `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;padding:1px 6px;">${m}</span>`).join('');
       const hasAny = trucks || load || space;
       return `<div class="sched-field sched-field-operators">
-        <div class="sched-field-label" style="color:${fc}80;cursor:default;"
+        <button class="sched-field-label-btn" style="color:${fc}80;"
+          onclick="openTruckingModal('${key}','${slot}')"
           onmouseenter="showTruckingTooltip(event,'${key}','${slot}')"
-          onmouseleave="hideTruckingTooltip()">${f.label}</div>
+          onmouseleave="hideTruckingTooltip()"
+          title="Hover to see trucks · Click to edit">${f.label}</button>
         <div class="op-chips-wrap">
           ${metaChips}
-          ${!hasAny ? '<span style="font-size:11px;color:var(--concrete-dim);">—</span>' : ''}
+          ${!hasAny ? '<span style="font-size:11px;color:var(--concrete-dim);"></span>' : ''}
         </div>
       </div>`;
     }
