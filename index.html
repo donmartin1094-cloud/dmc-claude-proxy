@@ -27143,16 +27143,18 @@ async function fbLoadAll() {
                     var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
                     var incomingIds = new Set(val.map(function(o){ return o.id; }));
                     var lastDeleteTime = parseInt(localStorage.getItem('_doLastDelete') || '0');
+                    var _doBlob64Map1 = {};
+                    dailyOrders.forEach(function(o){ if(o.blob64) _doBlob64Map1[o.id]=o.blob64; });
                     var merged = val.filter(function(o) {
                       if (localIds.has(o.id)) return true;
                       var createdAt = parseInt(o.id) || 0;
                       return createdAt > lastDeleteTime;
-                    });
+                    }).map(function(o){ return _doBlob64Map1[o.id] ? Object.assign({},o,{blob64:_doBlob64Map1[o.id]}) : o; });
                     dailyOrders.forEach(function(o) {
                       if (!incomingIds.has(o.id)) merged.push(o);
                     });
                     dailyOrders = merged;
-                    localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })));
+                    localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged));
                     _checkLocalStorageSize();
                     if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
                   }
@@ -27696,16 +27698,18 @@ async function initApp(username) {
                   var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
                   var incomingIds = new Set(val.map(function(o){ return o.id; }));
                   var lastDeleteTime = parseInt(localStorage.getItem('_doLastDelete') || '0');
+                  var _doBlob64Map2 = {};
+                  dailyOrders.forEach(function(o){ if(o.blob64) _doBlob64Map2[o.id]=o.blob64; });
                   var merged = val.filter(function(o) {
                     if (localIds.has(o.id)) return true;
                     var createdAt = parseInt(o.id) || 0;
                     return createdAt > lastDeleteTime;
-                  });
+                  }).map(function(o){ return _doBlob64Map2[o.id] ? Object.assign({},o,{blob64:_doBlob64Map2[o.id]}) : o; });
                   dailyOrders.forEach(function(o) {
                     if (!incomingIds.has(o.id)) merged.push(o);
                   });
                   dailyOrders = merged;
-                  localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged.map(function(o){ return Object.assign({}, o, {blob64: undefined}); })));
+                  localStorage.setItem(DAILY_ORDERS_KEY, JSON.stringify(merged));
                   _checkLocalStorageSize();
                   if (activeTab === 'reports' || activeTab === 'reportsDailyOrders') renderReports();
                 }
@@ -32621,6 +32625,16 @@ function _saveDailyOrder() {
       id: Date.now().toString(),
       dateKey: fd.dateKey, dateOfWork: fd.dateKey, foreman: fd.foreman,
       gcName: fd.gc, jobName: fd.proj, supplier: fd.plant,
+      jobNum: fd.jobNum, jobLocation: fd.jobLocation,
+      materials: fd.materials, trucks: fd.trucks, loadTime: fd.loadTime,
+      spacing: fd.spacing, truckList: fd.truckList,
+      secondStop: fd.secondStop ? {
+        jobNum: fd.secondStop.jobNum, gc: fd.secondStop.gc, proj: fd.secondStop.proj,
+        jobLocation: fd.secondStop.jobLocation, plant: fd.secondStop.plant,
+        materials: fd.secondStop.materials, trucks: fd.secondStop.trucks,
+        loadTime: fd.secondStop.loadTime, spacing: fd.secondStop.spacing,
+        truckList: fd.secondStop.truckList
+      } : null,
       fileName: fname, orderType: fd.isAmrize?'amrize':'dmc',
       createdAt: new Date().toLocaleString('en-US'), blob64: reader.result
     };

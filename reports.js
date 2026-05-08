@@ -3140,6 +3140,36 @@ function previewDailyOrder(id) {
   }
 
   // Legacy fallback: reconstruct preview from schedule data
+  if (order.orderType === 'amrize' && typeof _buildAmrizeFormHtml === 'function') {
+    var _afd = {
+      isAmrize: true,
+      foreman: order.foreman || '',
+      jobNum: order.jobNum || '',
+      gc: order.gcName || '',
+      proj: order.jobName || '',
+      jobLocation: order.jobLocation || '',
+      plant: order.supplier || '',
+      orderDate: order.dateOfWork || '',
+      reqDate: order.createdAt || '',
+      pickDate: order.dateOfWork || '',
+      materials: order.materials || [{name:'',tons:''},{name:'',tons:''},{name:'',tons:''},{name:'',tons:''}],
+      trucks: order.trucks || '',
+      loadTime: order.loadTime || '',
+      spacing: order.spacing || '',
+      truckList: order.truckList || [],
+      secondStop: order.secondStop || null
+    };
+    var _aHtml = _buildAmrizeFormHtml(_afd);
+    showReportsPreview(
+      '📋 ' + (order.fileName || 'Amrize Order').replace(/\.(html|docx)$/, ''),
+      '<div style="background:#fff;min-height:100%;padding:20px;">' + _aHtml + '</div>',
+      function(){ downloadDailyOrder(id); },
+      null,
+      false
+    );
+    _injectDailyOrderBackBtn();
+    return;
+  }
   const bdata = (schedData[order.dateKey] || {})[order.foreman === 'Filipe Joaquim' ? 'top' : 'bottom'] || { type:'blank', fields:{} };
   const f = bdata.fields || {};
   const v = (k) => f[k] || '';
