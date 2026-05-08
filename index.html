@@ -32656,13 +32656,14 @@ function _buildDmcFormHtml(fd) {
   var F = function(nm,lbl,v1,v2){return R('<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp(nm,v1)+'</div>','<div class="do-fr"><span class="do-lb">'+lbl+'</span>'+inp2(nm,v2)+'</div>');};
   var M = function(i){var m1=fd.materials[i]||{name:'',tons:''},m2=has2?(s2.materials&&s2.materials[i]||{name:'',tons:''}):({name:'',tons:''});return R('<div class="do-fr"><span class="do-lb">TONS:</span>'+inp('mat'+i+'t',m1.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp('mat'+i+'n',m1.name)+'</div>','<div class="do-fr"><span class="do-lb">TONS:</span>'+inp2('mat'+i+'t',m2.tons,'do-sm')+'<span class="do-ml do-lb">MIX TYPE:</span>'+inp2('mat'+i+'n',m2.name)+'</div>');};
   var T = function(i){var t1=fd.truckList[i]||'',t2=has2?(s2.truckList&&s2.truckList[i]||''):'';return R('<div class="do-nr"><span class="do-nm">'+(i+1)+')</span>'+inp('truck'+i,t1)+'</div>','<div class="do-nr"><span class="do-nm">'+(i+1)+')</span>'+inp2('truck'+i,t2)+'</div>');};
+  var _dmcGcVal=fd.gc||(function(){var _bj=(backlogJobs||[]).find(function(j){return(j.num||'').toString().trim()===(fd.jobNum||'').toString().trim();});return(_bj&&_bj.gc)||'';})();
   var colHdr=has2?'<tr><td class="do-tc do-col-hdr">STOP 1</td><td class="do-dv"></td><td class="do-tc do-col-hdr">STOP 2</td></tr>':'';
   var rows=[colHdr,
     S('JOB INFORMATION:'),
     F('jobDate','ORDER DATE:',fd.orderDate,fd.orderDate),
     F('foreman','FOREMAN:',fd.foreman,fd.foreman),
     F('jobNum','DMC JOB NUMBER:',fd.jobNum,has2?s2.jobNum:''),
-    F('gc','GENERAL CONTRACTOR:',fd.gc,has2?s2.gc:''),
+    F('gc','GENERAL CONTRACTOR:',_dmcGcVal,has2?s2.gc:''),
     F('proj','PROJECT NAME:',fd.proj,has2?s2.proj:''),
     F('loc','PROJECT ADDRESS:',fd.jobLocation,has2?s2.jobLocation:''),
     S('MATERIALS INFORMATION:'),
@@ -32706,20 +32707,23 @@ function _buildAmrizeFormHtml(fd) {
     +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Customer Name:</span>'+inpH('custName','DON MARTIN CORPORATION')+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Customer Number:</span>'+inpH('custNum','DON MA')+'</div></td></tr>'
     +'<tr><td class="do-tf"><div class="do-tr2"><span class="do-tl">Ordered by:</span>'+inpH('orderedBy','DON')+'</div></td><td class="do-tf"><div class="do-tr2"><span class="do-tl">Phone Number:</span>'+inpH('phone','781.834.0071')+'</div></td></tr>'
     +'</tbody></table>';
+  var _amGcVal=fd.gc||(function(){var _bj=(backlogJobs||[]).find(function(j){return(j.num||'').toString().trim()===(fd.jobNum||'').toString().trim();});return(_bj&&_bj.gc)||'';})();
   var colHdr=has2?'<tr><td class="do-tc do-col-hdr">STOP 1</td><td class="do-dv"></td><td class="do-tc do-col-hdr">STOP 2</td></tr>':'';
+  var _amNoteInp1=function(i){return '<input type="text" name="do_s1_truck'+i+'" value="'+e((fd.truckList&&fd.truckList[i])||'')+'" class="do-inp" style="width:100%">';};
+  var _amNoteInp2=function(i){return '<input type="text" name="do_s2_truck'+i+'" value="'+e(has2?((s2.truckList&&s2.truckList[i])||''):'')+'" class="do-inp" style="width:100%">';};
   var noteRows=has2
-    ?[0,1,2,3,4].map(function(){return '<tr><td class="do-nl"></td><td class="do-dv"></td><td class="do-nl"></td></tr>';}).join('')
-    :[0,1,2,3,4].map(function(){return '<tr><td colspan="3" class="do-nl"></td></tr>';}).join('');
+    ?[0,1,2,3,4].map(function(i){return '<tr><td class="do-nl">'+_amNoteInp1(i)+'</td><td class="do-dv"></td><td class="do-nl">'+_amNoteInp2(i)+'</td></tr>';}).join('')
+    :[0,1,2,3,4].map(function(i){return '<tr><td colspan="3" class="do-nl">'+_amNoteInp1(i)+'</td></tr>';}).join('');
   var rows=[colHdr,
     S('A. Job Information:'),
     F('foreman','Foreman:',fd.foreman,fd.foreman),
     F('jobNum','Job No./Purchase Order No.:',fd.jobNum,has2?s2.jobNum:''),
-    F('gc','General Contractor:',fd.gc,has2?s2.gc:''),
+    F('gc','General Contractor:',_amGcVal,has2?s2.gc:''),
     F('proj','Job Name:',fd.proj,has2?s2.proj:''),
     F('loc','Job City/State:',fd.jobLocation,has2?s2.jobLocation:''),
     S('B. Materials:'),
-    R('<div class="do-fr"><span class="do-lb">Type of Work:</span><span class="do-ml">'+chk('machWork',false)+'</span><span class="do-ml">Machine</span><span class="do-ml">'+chk('handWork',false)+'</span><span class="do-ml">Hand</span></div>',
-      '<div class="do-fr"><span class="do-lb">Type of Work:</span><span class="do-ml">'+chk2('machWork',false)+'</span><span class="do-ml">Machine</span><span class="do-ml">'+chk2('handWork',false)+'</span><span class="do-ml">Hand</span></div>'),
+    R('<div class="do-fr"><span class="do-lb">Type of Work:</span><span class="do-ml">'+chk('machWork',true)+'</span><span class="do-ml">Machine</span><span class="do-ml">'+chk('handWork',false)+'</span><span class="do-ml">Hand</span></div>',
+      '<div class="do-fr"><span class="do-lb">Type of Work:</span><span class="do-ml">'+chk2('machWork',has2)+'</span><span class="do-ml">Machine</span><span class="do-ml">'+chk2('handWork',false)+'</span><span class="do-ml">Hand</span></div>'),
     F('plant','Plant:',fd.plant,has2?s2.plant:''),
     M(0),M(1),M(2),M(3),
     R('<div class="do-fr"><span class="do-lb">Estimated time to pave:</span>'+inp('paveTime','','do-sm')+'<span class="do-ml">hours</span></div>',
