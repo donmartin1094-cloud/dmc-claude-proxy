@@ -28778,6 +28778,22 @@ function _crewConfirmInit() {
 function _adminVerifyShow(dateKey) {
   if (!isAdmin()) return;
   if (localStorage.getItem('dmc_verify_prompt_' + dateKey)) return;
+
+  // Auto-draft reports for any scheduled foreman who doesn't have one yet
+  var schedBlocks = (typeof _crewConfirmGetScheduleBlocks === 'function') ? _crewConfirmGetScheduleBlocks(dateKey) : [];
+  var draftsAdded = false;
+  schedBlocks.forEach(function(block) {
+    if (!block.foreman) return;
+    var exists = (typeof foremanReports !== 'undefined' ? foremanReports : []).some(function(r) {
+      return r.date === dateKey && (r.foreman || '').toLowerCase() === (block.foreman || '').toLowerCase();
+    });
+    if (!exists && typeof _crewConfirmBuildReport === 'function') {
+      foremanReports.push(_crewConfirmBuildReport(dateKey, block, null));
+      draftsAdded = true;
+    }
+  });
+  if (draftsAdded && typeof saveForemanReports === 'function') saveForemanReports();
+
   var rpts = (typeof foremanReports !== 'undefined' ? foremanReports : []).filter(function(r){ return r.date === dateKey; });
   if (!rpts.length) return;
   if (document.getElementById('_adminVerifyOverlay')) return;
@@ -28840,7 +28856,7 @@ function _adminVerifyOne(reportId, dateKey) {
   if (typeof saveForemanReports === 'function') saveForemanReports();
   var badge = document.getElementById('_avBadge_' + reportId);
   if (badge) badge.textContent = '✅';
-  _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316');
+  _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman);
   if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
 }
 
@@ -28875,7 +28891,7 @@ function _adminVerifyAll(dateKey) {
     r.updatedAt = Date.now();
     var badge = document.getElementById('_avBadge_' + r.id);
     if (badge) badge.textContent = '✅';
-    _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316');
+    _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman);
     if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
   });
   if (typeof saveForemanReports === 'function') saveForemanReports();
@@ -28887,7 +28903,7 @@ function _adminVerifyDone(dateKey) {
   if (ov) ov.remove();
 }
 
-function _adminVerifyScheduleColor(dateKey, jobNumber, color) {
+function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman) {
   if (!dateKey || typeof schedData === 'undefined') return;
   var day = schedData[dateKey] || {};
   var slots = [['top', day.top], ['bottom', day.bottom]];
@@ -28897,7 +28913,9 @@ function _adminVerifyScheduleColor(dateKey, jobNumber, color) {
     var slotName = pair[0]; var bdata = pair[1];
     if (!bdata) return;
     var flds = bdata.fields || {};
-    if (jobNumber && (flds.jobNum || '').trim() === (jobNumber || '').trim()) {
+    var matchByJob = jobNumber && (flds.jobNum || '').trim() === (jobNumber || '').trim();
+    var matchByForeman = !matchByJob && foreman && (flds.foreman || '').toLowerCase().trim() === (foreman || '').toLowerCase().trim();
+    if (matchByJob || matchByForeman) {
       bdata._verifiedColor = color;
       changed = true;
     }

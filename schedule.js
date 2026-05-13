@@ -3202,20 +3202,21 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
     const placeholder = type === 'equipment' ? 'e.g. Paver, Roller…' : 'Name…';
 
     if (type === 'equipment') {
-      // Pull from equipmentFleet, grouped by type
+      // Pull from equipmentFleet — schedule picker shows only these four types in this order
+      const SCHED_EQ_TYPES = ['paver', 'roller', 'skid_steer', 'mtv'];
       const fleet = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : [])
-        .filter(e => e.active !== false)
+        .filter(e => e.active !== false && SCHED_EQ_TYPES.indexOf(e.type) !== -1)
         .sort((a, b) => (a.name||'').localeCompare(b.name||''));
       const isCleanOut = _getBlockCleanOut(key, slot);
 
       // Group by type key
       const typeMap = {};
       fleet.forEach(e => {
-        const tk = e.type || 'other';
+        const tk = e.type;
         if (!typeMap[tk]) typeMap[tk] = [];
         typeMap[tk].push(e);
       });
-      const typeKeys = Object.keys(typeMap);
+      const typeKeys = SCHED_EQ_TYPES.filter(tk => typeMap[tk]);
 
       const togglesHtml = typeKeys.length > 1
         ? `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--asphalt-light);">` +
