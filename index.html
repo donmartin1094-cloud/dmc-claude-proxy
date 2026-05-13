@@ -7404,12 +7404,12 @@ function _homeWeekScheduleWidget() {
           var esc = typeof escHtml === 'function' ? escHtml : function(s){ return s; };
           gridHtml += '<div style="padding:1px;">' +
             '<div onclick="openMobBlockDetail(\''+day.key+'\',\''+row.id+'\')"' +
-            ' style="height:38px;border-radius:3px;background:' + bt.color + '1a;border:1.5px solid ' + bt.color + '55;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 3px;gap:1px;cursor:pointer;"' +
+            ' style="height:38px;border-radius:3px;background:' + bt.color + '1a;border:1.5px solid ' + bt.color + '55;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 2.6px;gap:1px;cursor:pointer;"' +
             ' onmousedown="this.style.background=\''+bt.color+'33\'"' +
             ' onmouseup="this.style.background=\''+bt.color+'1a\'"' +
             ' onmouseleave="this.style.background=\''+bt.color+'1a\'">' +
-              (jobNum  ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:#ffffff;line-height:1.2;text-align:center;">' + esc(jobNum) + '</span>' : '') +
-              '<span style="font-family:\'DM Mono\',monospace;font-size:6px;color:rgba(255,255,255,0.85);line-height:1.2;text-align:center;word-break:break-all;max-width:100%;overflow:hidden;">' + esc(jobName) + '</span>' +
+              (jobNum  ? '<span style="font-family:\'DM Mono\',monospace;font-size:8.1px;font-weight:700;color:#ffffff;line-height:1.2;text-align:center;">' + esc(jobNum) + '</span>' : '') +
+              '<span style="font-family:\'DM Mono\',monospace;font-size:6.9px;color:rgba(255,255,255,0.85);line-height:1.2;text-align:center;word-break:break-all;max-width:100%;overflow:hidden;">' + esc(jobName) + '</span>' +
             '</div>' +
           '</div>';
         }
@@ -8890,7 +8890,7 @@ function widgetToday() {
       'data-stt="' + tipStr + '" ' +
       'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" ' +
       'onclick="hwSchedBlockClick(event,this)">' +
-      '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + bt.color + ';font-weight:700;text-align:center;padding:2px 3px;line-height:1.1;word-break:break-all;max-width:100%;overflow:hidden;">' +
+      '<span style="font-family:\'DM Mono\',monospace;font-size:9.2px;color:' + bt.color + ';font-weight:700;text-align:center;padding:2px 2.6px;line-height:1.1;word-break:break-all;max-width:100%;overflow:hidden;">' +
         escHtml(jobLabel) +
       '</span>' +
     '</div>';
