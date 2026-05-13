@@ -2208,6 +2208,77 @@
       padding:8px 0; border-top:1px solid var(--asphalt-light); margin-top:8px; }
   }
 
+  /* ── Invoice Tracker v3 — Calendar + List redesign ── */
+  .inv3-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--asphalt-mid); }
+  .inv3-month-tabs { display:flex; align-items:center; gap:5px; padding:10px 16px 8px; overflow-x:auto; flex-shrink:0; border-bottom:1px solid var(--asphalt-light); flex-wrap:nowrap; scrollbar-width:none; }
+  .inv3-month-tabs::-webkit-scrollbar { display:none; }
+  .inv3-year-btn { background:none; border:1px solid var(--asphalt-light); border-radius:var(--radius); padding:5px 10px; color:var(--concrete-dim); font-family:'DM Mono',monospace; font-size:10px; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all 0.15s; }
+  .inv3-year-btn:hover { border-color:#a78bfa; color:#a78bfa; }
+  .inv3-month-tab { background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:var(--radius); padding:6px 14px; color:#a78bfa; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all 0.15s; }
+  .inv3-month-tab:hover { background:rgba(167,139,250,0.18); border-color:rgba(167,139,250,0.5); }
+  .inv3-month-tab.active { background:#a78bfa; color:#111; border-color:#a78bfa; }
+  .inv3-kpi-bar { display:flex; align-items:center; gap:24px; padding:8px 20px; background:var(--asphalt); border-bottom:1px solid var(--asphalt-light); flex-shrink:0; flex-wrap:wrap; }
+  .inv3-kpi-item { display:flex; flex-direction:column; gap:1px; }
+  .inv3-kpi-lbl { font-family:'DM Mono',monospace; font-size:8px; letter-spacing:1.5px; text-transform:uppercase; color:var(--concrete-dim); }
+  .inv3-kpi-val { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:1px; line-height:1.1; }
+  .inv3-kpi-val.yellow { color:#f59e0b; }
+  .inv3-kpi-val.green  { color:#7ecb8f; }
+  .inv3-kpi-val.dim    { color:var(--concrete-dim); }
+  .inv3-view-bar { display:flex; align-items:center; gap:6px; padding:7px 16px; border-bottom:1px solid var(--asphalt-light); flex-shrink:0; }
+  .inv3-view-btn { background:none; border:1px solid var(--asphalt-light); border-radius:var(--radius); padding:5px 14px; color:var(--concrete-dim); font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:all 0.15s; }
+  .inv3-view-btn:hover { border-color:rgba(167,139,250,0.4); color:#a78bfa; }
+  .inv3-view-btn.active { background:rgba(167,139,250,0.12); border-color:#a78bfa; color:#a78bfa; font-weight:700; }
+  .inv3-scroll { flex:1; overflow-y:auto; overflow-x:hidden; padding:14px 16px 28px; }
+  /* Calendar grid */
+  .inv3-cal-month-label { font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:2px; color:var(--white); margin-bottom:8px; padding-left:2px; }
+  .inv3-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:24px; }
+  .inv3-cal-dow { background:var(--asphalt); padding:5px 4px; text-align:center; font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); }
+  .inv3-cal-dow:last-child { border-right:none; }
+  .inv3-cal-day { background:var(--asphalt-mid); padding:5px 4px; border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); min-height:72px; vertical-align:top; }
+  .inv3-cal-day:nth-child(7n+1) { border-left:none; }
+  .inv3-cal-day.outside { background:rgba(0,0,0,0.18); opacity:0.45; pointer-events:none; }
+  .inv3-cal-day.today { background:rgba(167,139,250,0.05); }
+  .inv3-cal-date { font-family:'DM Mono',monospace; font-size:9px; color:var(--concrete-dim); margin-bottom:3px; display:block; }
+  .inv3-cal-day.today .inv3-cal-date { color:#a78bfa; font-weight:700; }
+  /* Day blocks */
+  .inv3-day-block { border-radius:4px; padding:4px 6px; margin-bottom:2px; font-size:11px; cursor:pointer; transition:opacity 0.1s; line-height:1.3; }
+  .inv3-day-block:hover { opacity:0.8; }
+  .inv3-day-block.empty    { border:1px dashed rgba(255,255,255,0.2); background:rgba(255,255,255,0.03); }
+  .inv3-day-block.filled   { border:1px solid #f59e0b; background:rgba(245,158,11,0.08); }
+  .inv3-day-block.approved { border:1px solid #7ecb8f; background:rgba(126,203,143,0.08); }
+  .inv3-block-info { font-family:'DM Mono',monospace; font-size:9px; color:var(--concrete-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .inv3-block-amt { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:0.5px; line-height:1.1; }
+  .inv3-block-amt.yellow { color:#f59e0b; }
+  .inv3-block-amt.green  { color:#7ecb8f; }
+  .inv3-block-plus { color:rgba(255,255,255,0.25); font-size:10px; }
+  /* List view */
+  .inv3-list-wrap { overflow-x:auto; }
+  .inv3-list-table { width:100%; border-collapse:collapse; font-family:'DM Sans',sans-serif; font-size:12px; }
+  .inv3-list-table th { font-family:'DM Mono',monospace; font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); padding:6px 8px; text-align:left; border-bottom:2px solid var(--asphalt-light); white-space:nowrap; background:var(--asphalt); position:sticky; top:0; z-index:1; }
+  .inv3-list-row { border-left:3px solid #f59e0b; cursor:pointer; transition:background 0.1s; }
+  .inv3-list-row:hover td { background:rgba(255,255,255,0.03); }
+  .inv3-list-row.approved { border-left-color:#7ecb8f; }
+  .inv3-list-row td { padding:7px 8px; color:var(--white); border-bottom:1px solid var(--asphalt-light); vertical-align:middle; white-space:nowrap; }
+  .inv3-list-row td.dim    { color:var(--concrete-dim); }
+  .inv3-list-row td.yellow { color:#f59e0b; font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:0.5px; }
+  .inv3-list-row td.green  { color:#7ecb8f; font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:0.5px; }
+  .inv3-list-row td.amber  { color:#f59e0b; font-size:11px; font-style:italic; max-width:160px; white-space:normal; }
+  .inv3-list-row td.mix    { color:var(--concrete-dim); font-size:11px; }
+  .inv3-group-border td { border-top:1px solid rgba(167,139,250,0.15); }
+  .inv3-empty-state { padding:48px; text-align:center; color:var(--concrete-dim); font-family:'DM Sans',sans-serif; font-size:13px; }
+  @media (max-width:768px) {
+    .inv3-month-tab { font-size:10px; padding:4px 9px; }
+    .inv3-kpi-bar { padding:6px 12px; gap:14px; }
+    .inv3-kpi-val { font-size:14px; }
+    .inv3-kpi-lbl { font-size:7px; }
+    .inv3-cal-day { min-height:44px; padding:3px 2px; }
+    .inv3-day-block { font-size:10px; padding:3px 4px; }
+    .inv3-block-info { font-size:8px; }
+    .inv3-list-row td { padding:6px 5px; font-size:11px; }
+    .inv3-list-table th { font-size:7.5px; padding:5px 5px; }
+    .inv3-scroll { padding:8px 8px 20px; }
+  }
+
   /* ── Bid Main View redesign ── */
   .bid-main-toolbar { display:flex; align-items:center; gap:10px; padding:14px 24px; border-bottom:2px solid var(--asphalt-light); background:var(--asphalt-mid); flex-shrink:0; }
   .bid-main-title { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; color:var(--white); flex:1; }
@@ -28769,6 +28840,7 @@ function _adminVerifyOne(reportId, dateKey) {
   var badge = document.getElementById('_avBadge_' + reportId);
   if (badge) badge.textContent = '✅';
   _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316');
+  if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
 }
 
 function _adminVerifyShowFlag(reportId) {
@@ -28803,6 +28875,7 @@ function _adminVerifyAll(dateKey) {
     var badge = document.getElementById('_avBadge_' + r.id);
     if (badge) badge.textContent = '✅';
     _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316');
+    if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
   });
   if (typeof saveForemanReports === 'function') saveForemanReports();
 }
@@ -28911,7 +28984,7 @@ document.getElementById('passToggle').addEventListener('click', () => {
 
 function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
-  const p = document.getElementById('loginPass').value;
+  const p = document.getElementById('loginPass').value.trim();
   const err = document.getElementById('loginErr');
   err.classList.remove('show');
   if (!u || !p) { err.textContent='Please enter username and password'; err.classList.add('show'); return; }

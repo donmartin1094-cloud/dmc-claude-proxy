@@ -3611,6 +3611,9 @@ var invSearchQuery = '';
 var _invSearchDebounceTimer = null;
 var _invMixCount = 1;
 var _invEditMode = {}; // keyed by invoice ID — true when edit mode active
+// v3 redesign state
+var inv3View        = null; // 'calendar' | 'list'
+var inv3ActiveMonth = null; // 'YYYY-MM' | 'Q1-YYYY'
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 function invFmt(n) {
@@ -4639,8 +4642,384 @@ function _invSubGetBlockData(sched, dateKey, slot) {
   return (day.extras && day.extras[xi]) ? day.extras[xi].data : null;
 }
 
-// ── Main render ────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// INVOICE TRACKER v3 — Calendar + List redesign
+// ═══════════════════════════════════════════════════════
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function _inv3GetForemanOrder(name) {
+  var n = (name || '').toLowerCase();
+  if (n.indexOf('filipe') >= 0) return 0;
+  if (n.indexOf('louie')  >= 0) return 1;
+  return 2;
+}
+
+function _inv3Initials(name) {
+  var parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+  return (parts[0] || '?').slice(0,2).toUpperCase();
+}
+
+function _inv3DefaultMonth() {
+  var n = new Date();
+  var mo = n.getMonth(); // 0-11
+  var yr = n.getFullYear();
+  if (mo <= 2) return 'Q1-' + yr;
+  return yr + '-' + String(mo + 1).padStart(2,'0');
+}
+
+function _inv3MonthsForTab(tab) {
+  if (!tab) return [];
+  if (tab.indexOf('Q1-') === 0) {
+    var yr = tab.replace('Q1-','');
+    return [yr+'-01', yr+'-02', yr+'-03'];
+  }
+  return [tab];
+}
+
+function _inv3InvoicesForMonth(tab) {
+  var months = _inv3MonthsForTab(tab);
+  return (invoiceList || []).filter(function(inv) {
+    return months.indexOf((inv.dateOfWork || '').slice(0,7)) >= 0;
+  });
+}
+
+function _inv3BilledTotal(inv) {
+  return typeof invCardBilledTotal === 'function' ? invCardBilledTotal(inv) : 0;
+}
+
+function _inv3ApprovedAmt(inv) {
+  if (!inv || !inv.approvedAmount) return null;
+  var v = parseFloat((inv.approvedAmount+'').replace(/[^0-9.\-]/g,''));
+  return isNaN(v) ? null : v;
+}
+
+function _inv3IsApproved(inv) {
+  return !!(inv && inv.approved);
+}
+
+function _inv3ActiveYear() {
+  if (!inv3ActiveMonth) return new Date().getFullYear();
+  if (inv3ActiveMonth.indexOf('Q1-') === 0) return parseInt(inv3ActiveMonth.replace('Q1-',''));
+  return parseInt(inv3ActiveMonth.slice(0,4));
+}
+
+// ── Entry point ──────────────────────────────────────────────────────────────
+
 function renderInvoiceTracker() {
+  if (!_invMigrationDone) { _invMigrateBrokerRows(); _invMigrationDone = true; }
+  var wrap = document.getElementById('invoiceView');
+  if (!wrap) return;
+
+  if (!inv3View) inv3View = localStorage.getItem('dmc_inv_view') || 'calendar';
+  if (!inv3ActiveMonth) inv3ActiveMonth = _inv3DefaultMonth();
+
+  var canEdit = (typeof isAdmin === 'function' && isAdmin())
+             || (typeof canEditTab === 'function' && canEditTab('ap'));
+
+  wrap.innerHTML = '<div class="inv3-wrap">'
+    + _inv3RenderMonthTabs()
+    + _inv3KpiBar()
+    + _inv3ViewBar()
+    + (inv3View === 'list' ? _inv3ListView(canEdit) : _inv3CalendarView(canEdit))
+    + '</div>';
+
+  // Scroll active month tab into view
+  setTimeout(function() {
+    var t = wrap.querySelector('.inv3-month-tab.active');
+    if (t) t.scrollIntoView({ behavior:'smooth', inline:'center', block:'nearest' });
+  }, 40);
+}
+
+// ── Month tab strip ──────────────────────────────────────────────────────────
+
+function _inv3RenderMonthTabs() {
+  var yr = _inv3ActiveYear();
+  var tabs = [
+    { id:'Q1-'+yr, label:'Q1 Jan–Mar' },
+    { id:yr+'-04', label:'Apr' }, { id:yr+'-05', label:'May' },
+    { id:yr+'-06', label:'Jun' }, { id:yr+'-07', label:'Jul' },
+    { id:yr+'-08', label:'Aug' }, { id:yr+'-09', label:'Sep' },
+    { id:yr+'-10', label:'Oct' }, { id:yr+'-11', label:'Nov' },
+    { id:yr+'-12', label:'Dec' },
+  ];
+  var html = '<div class="inv3-month-tabs">'
+    + '<button class="inv3-year-btn" onclick="inv3SetYear('+(yr-1)+')">&#8249; '+(yr-1)+'</button>';
+  tabs.forEach(function(tab) {
+    html += '<button class="inv3-month-tab'+(inv3ActiveMonth===tab.id?' active':'')+'" onclick="inv3SetTab(\''+tab.id+'\')">'+tab.label+'</button>';
+  });
+  html += '<button class="inv3-year-btn" onclick="inv3SetYear('+(yr+1)+')">'+(yr+1)+' &#8250;</button>'
+    + '</div>';
+  return html;
+}
+
+// ── KPI summary bar ──────────────────────────────────────────────────────────
+
+function _inv3KpiBar() {
+  var invs = _inv3InvoicesForMonth(inv3ActiveMonth);
+  var totalBilled = invs.reduce(function(s,inv){ return s+_inv3BilledTotal(inv); }, 0);
+  var totalApproved = 0, pendingCount = 0;
+  invs.forEach(function(inv) {
+    var a = _inv3ApprovedAmt(inv);
+    if (a !== null) totalApproved += a;
+    if (!_inv3IsApproved(inv)) pendingCount++;
+  });
+  return '<div class="inv3-kpi-bar">'
+    + '<div class="inv3-kpi-item"><span class="inv3-kpi-lbl">Total Billed</span><span class="inv3-kpi-val yellow">'+invFmt(totalBilled)+'</span></div>'
+    + '<div class="inv3-kpi-item"><span class="inv3-kpi-lbl">Total Approved</span><span class="inv3-kpi-val green">'+invFmt(totalApproved)+'</span></div>'
+    + '<div class="inv3-kpi-item"><span class="inv3-kpi-lbl">Pending</span><span class="inv3-kpi-val dim">'+pendingCount+'</span></div>'
+    + '</div>';
+}
+
+// ── View toggle bar ──────────────────────────────────────────────────────────
+
+function _inv3ViewBar() {
+  return '<div class="inv3-view-bar">'
+    + '<button class="inv3-view-btn'+(inv3View==='calendar'?' active':'')+'" onclick="inv3SetView(\'calendar\')">&#128197; Calendar</button>'
+    + '<button class="inv3-view-btn'+(inv3View==='list'?' active':'')+'" onclick="inv3SetView(\'list\')">&#128203; List</button>'
+    + '</div>';
+}
+
+// ── Calendar view ────────────────────────────────────────────────────────────
+
+function _inv3CalendarView(canEdit) {
+  var months = _inv3MonthsForTab(inv3ActiveMonth);
+  var html = '<div class="inv3-scroll">';
+  months.forEach(function(mo) { html += _inv3RenderMonthGrid(mo, canEdit); });
+  return html + '</div>';
+}
+
+function _inv3RenderMonthGrid(monthKey, canEdit) {
+  var p = monthKey.split('-');
+  var yr = parseInt(p[0]), mo = parseInt(p[1])-1; // 0-indexed
+  var MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW    = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var daysInMonth = new Date(yr, mo+1, 0).getDate();
+  var firstDow    = new Date(yr, mo, 1).getDay();
+  var n = new Date(); n.setHours(0,0,0,0);
+  var todayKey = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+
+  var html = '<div class="inv3-cal-month-label">'+MNAMES[mo]+' '+yr+'</div>'
+    + '<div class="inv3-cal-grid">';
+
+  DOW.forEach(function(d){ html += '<div class="inv3-cal-dow">'+d+'</div>'; });
+
+  // Leading blanks
+  for (var i=0; i<firstDow; i++) html += '<div class="inv3-cal-day outside"></div>';
+
+  for (var d=1; d<=daysInMonth; d++) {
+    var dk = yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var isToday = dk===todayKey;
+
+    var dayReports = (typeof foremanReports!=='undefined' ? foremanReports : [])
+      .filter(function(r){ return r.date===dk && r.locationVerified===true; })
+      .sort(function(a,b){ return _inv3GetForemanOrder(a.foreman)-_inv3GetForemanOrder(b.foreman); });
+
+    var dayInvoices = (invoiceList||[]).filter(function(inv){ return inv.dateOfWork===dk; });
+
+    html += '<div class="inv3-cal-day'+(isToday?' today':'')+'">'
+      + '<span class="inv3-cal-date">'+d+'</span>';
+
+    dayReports.forEach(function(r) {
+      var inv = dayInvoices.find(function(i){
+        return (i.foreman||'').toLowerCase()===(r.foreman||'').toLowerCase();
+      }) || null;
+      html += _inv3DayBlock(dk, r, inv, canEdit);
+    });
+
+    html += '</div>';
+  }
+
+  // Trailing blanks
+  var total = firstDow + daysInMonth;
+  var rem = total % 7;
+  if (rem > 0) { for (var j=0; j<7-rem; j++) html += '<div class="inv3-cal-day outside"></div>'; }
+
+  return html + '</div>';
+}
+
+// ── Day block ─────────────────────────────────────────────────────────────────
+
+function _inv3DayBlock(dateKey, report, invoice, canEdit) {
+  var initials = _inv3Initials(report.foreman);
+  var jobNo    = escHtml(report.jobNumber || '—');
+  var billed   = invoice ? _inv3BilledTotal(invoice) : 0;
+  var isApp    = invoice ? _inv3IsApproved(invoice) : false;
+  var isEmpty  = !invoice || (invoice.autoGenerated && billed === 0);
+
+  if (isEmpty) {
+    var invId = invoice ? invoice.id : '';
+    var handler = invId
+      ? 'openInvoiceModal(\''+invId+'\')'
+      : 'inv3OpenFromVerify(\''+escHtml(dateKey)+'\',\''+escHtml(report.id)+'\')';
+    return '<div class="inv3-day-block empty" onclick="'+handler+'" title="'+escHtml(report.foreman)+'">'
+      + '<div class="inv3-block-info">'+initials+' \xb7 '+jobNo+'</div>'
+      + '<div class="inv3-block-plus">+</div>'
+      + '</div>';
+  }
+
+  var state  = isApp ? 'approved' : 'filled';
+  var amtCls = isApp ? 'green'    : 'yellow';
+  return '<div class="inv3-day-block '+state+'" onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(report.foreman)+'">'
+    + '<div class="inv3-block-info">'+initials+' \xb7 '+jobNo+'</div>'
+    + (billed > 0 ? '<div class="inv3-block-amt '+amtCls+'">'+invFmt(billed)+'</div>' : '')
+    + '</div>';
+}
+
+// ── List view ─────────────────────────────────────────────────────────────────
+
+function _inv3ListView(canEdit) {
+  var invs = _inv3InvoicesForMonth(inv3ActiveMonth)
+    .slice().sort(function(a,b){ return (a.dateOfWork||'').localeCompare(b.dateOfWork||''); });
+
+  if (!invs.length) {
+    return '<div class="inv3-scroll"><div class="inv3-empty-state">No invoices for this period.</div></div>';
+  }
+
+  var html = '<div class="inv3-scroll"><div class="inv3-list-wrap"><table class="inv3-list-table">'
+    + '<thead><tr><th>Date</th><th>Job #</th><th>Foreman</th><th>GC</th>'
+    + '<th>Mix Type</th><th>Tons</th><th>$/Ton</th>'
+    + '<th>Billed</th><th>Approved</th><th>Notes</th></tr></thead><tbody>';
+
+  invs.forEach(function(inv) {
+    var isApp    = _inv3IsApproved(inv);
+    var billed   = _inv3BilledTotal(inv);
+    var appAmt   = _inv3ApprovedAmt(inv);
+    var rowCls   = 'inv3-list-row'+(isApp?' approved':'');
+    var blCls    = isApp ? 'green' : 'yellow';
+    var initials = escHtml(_inv3Initials(inv.foreman));
+    var gcName   = escHtml(inv.gcName || '—');
+    var jobNo    = escHtml(inv.jobNo || '—');
+    var dateStr  = escHtml((inv.dateOfWork||'').slice(5).replace('-','/'));
+    var mixItems = inv.mixItems || [];
+
+    if (!mixItems.length) {
+      html += '<tr class="'+rowCls+'" onclick="inv3OpenInvoice(\''+escHtml(inv.id)+'\')">'
+        + '<td class="dim">'+dateStr+'</td>'
+        + '<td>'+jobNo+'</td>'
+        + '<td class="dim">'+initials+'</td>'
+        + '<td class="dim">'+gcName+'</td>'
+        + '<td class="mix">—</td><td class="dim">—</td><td class="dim">—</td>'
+        + '<td class="'+blCls+'">'+(billed>0?invFmt(billed):'—')+'</td>'
+        + '<td class="green">'+(appAmt!==null?invFmt(appAmt):'')+'</td>'
+        + '<td class="amber">'+escHtml(inv.invoiceNotes||'')+'</td>'
+        + '</tr>';
+    } else {
+      mixItems.forEach(function(m, mi) {
+        var isFirst = mi===0;
+        var rowExtra = isFirst ? '' : ' inv3-group-border';
+        html += '<tr class="'+rowCls+rowExtra+'" onclick="inv3OpenInvoice(\''+escHtml(inv.id)+'\')">'
+          + '<td class="dim">'+(isFirst?dateStr:'')+'</td>'
+          + '<td>'+(isFirst?jobNo:'')+'</td>'
+          + '<td class="dim">'+(isFirst?initials:'')+'</td>'
+          + '<td class="dim">'+(isFirst?gcName:'')+'</td>'
+          + '<td class="mix">'+escHtml(m.mixType||'—')+'</td>'
+          + '<td class="dim">'+escHtml((typeof invFmtTons==='function'?invFmtTons(m.tonQty):(m.tonQty||'—'))+'')+'</td>'
+          + '<td class="dim">'+(m.mixPrice&&parseFloat(m.mixPrice)?invFmt(parseFloat(m.mixPrice)):'—')+'</td>'
+          + '<td class="'+(isFirst?blCls:'dim')+'">'+(isFirst&&billed>0?invFmt(billed):(isFirst?'—':''))+'</td>'
+          + '<td class="green">'+(isFirst&&appAmt!==null?invFmt(appAmt):'')+'</td>'
+          + '<td class="amber">'+(isFirst?escHtml(inv.invoiceNotes||''):'')+'</td>'
+          + '</tr>';
+      });
+    }
+  });
+
+  return html + '</tbody></table></div></div>';
+}
+
+// ── Verification hook — creates stub invoice when report is verified ──────────
+
+function _inv3OnVerify(r) {
+  if (!r || !r.date || !r.foreman) return;
+  var existing = (invoiceList||[]).find(function(inv) {
+    return inv.dateOfWork===r.date
+      && (inv.foreman||'').toLowerCase()===(r.foreman||'').toLowerCase();
+  });
+  if (existing) return;
+
+  var _bj = (typeof backlogJobs!=='undefined'?backlogJobs:[]).find(function(j){
+    return (j.num||'').toString().trim()===(r.jobNumber||'').toString().trim();
+  });
+  var gcName = (_bj&&_bj.gc) ? _bj.gc : (r.gcName||'');
+
+  var stub = {
+    id: 'inv_stub_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+    dateOfWork:  r.date,
+    foreman:     r.foreman,
+    jobNo:       r.jobNumber||'',
+    jobName:     r.jobLocation||'',
+    gcName:      gcName,
+    supplier:    '',
+    invoiceNo:   '',
+    mixItems:    [],
+    actualTrucking: { dmcCount:0, dmcCost:0, brkRows:[], supCount:0, supCost:0 },
+    status:      'pending',
+    autoGenerated: true,
+    attachments: [],
+    approvedAmount: '',
+    invoiceNotes: '',
+    printed:  false,
+    approved: false,
+    updatedAt: Date.now()
+  };
+  invoiceList.push(stub);
+  if (typeof saveInvoiceList==='function') saveInvoiceList();
+
+  var wrap = document.getElementById('invoiceView');
+  if (wrap && wrap.offsetParent!==null && typeof renderInvoiceTracker==='function') {
+    renderInvoiceTracker();
+  }
+}
+
+// ── Action handlers ──────────────────────────────────────────────────────────
+
+function inv3SetTab(tab) {
+  inv3ActiveMonth = tab;
+  renderInvoiceTracker();
+}
+
+function inv3SetYear(yr) {
+  if (!inv3ActiveMonth) inv3ActiveMonth = _inv3DefaultMonth();
+  if (inv3ActiveMonth.indexOf('Q1-')===0) {
+    inv3ActiveMonth = 'Q1-'+yr;
+  } else {
+    inv3ActiveMonth = yr+'-'+inv3ActiveMonth.slice(5);
+  }
+  renderInvoiceTracker();
+}
+
+function inv3SetView(v) {
+  inv3View = v;
+  localStorage.setItem('dmc_inv_view', v);
+  renderInvoiceTracker();
+}
+
+function inv3OpenInvoice(invId) {
+  if (typeof openInvoiceModal==='function') openInvoiceModal(invId);
+}
+
+function inv3OpenFromVerify(dateKey, reportId) {
+  var r = (typeof foremanReports!=='undefined'?foremanReports:[]).find(function(x){ return x.id===reportId; });
+
+  // Create stub if missing (handles backfill of pre-existing verified reports)
+  var existing = (invoiceList||[]).find(function(inv) {
+    return inv.dateOfWork===dateKey
+      && (inv.foreman||'').toLowerCase()===(r?r.foreman||'':'').toLowerCase();
+  });
+  if (!existing && r) {
+    _inv3OnVerify(r);
+    existing = (invoiceList||[]).find(function(inv) {
+      return inv.dateOfWork===dateKey
+        && (inv.foreman||'').toLowerCase()===(r.foreman||'').toLowerCase();
+    });
+  }
+
+  if (typeof openInvoiceModal==='function') openInvoiceModal(existing ? existing.id : null);
+}
+
+// ── Main render ────────────────────────────────────────────────────────────────
+function _invLegacyRenderTracker() {
   if (!_invMigrationDone) { _invMigrateBrokerRows(); _invMigrationDone = true; }
   var wrap = document.getElementById('invoiceView');
   if (!wrap) return;
