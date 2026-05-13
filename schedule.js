@@ -1639,8 +1639,9 @@ function canSeeTab(tabId) {
     if (_foremanHiddenTabs.includes(tabId)) return false;
     return true;
   }
-  // All other hardcoded accounts get full view access
-  if (isHardcodedUser()) return true;
+  // qc_manager follows tabPerms so configured restrictions are applied;
+  // all other hardcoded accounts (staff, etc.) retain their existing full access.
+  if (isHardcodedUser() && role !== 'qc_manager') return true;
   const p = (tabPerms[role] || tabPerms.staff || {})[tabId];
   return p === 'edit' || p === 'view' || p === true;
 }
@@ -6484,6 +6485,17 @@ function longestQueueItem() {
   return schedQueue.reduce((oldest, item) => item.addedAt < oldest.addedAt ? item : oldest, schedQueue[0]);
 }
 
+// ── Format a date range string from an array of YYYY-MM-DD keys ──────
+function _fmtShiftRange(shiftDates) {
+  if (!shiftDates || shiftDates.length < 2) return '';
+  const fmt = function(key) {
+    const p = key.split('-');
+    const d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  return fmt(shiftDates[0]) + ' – ' + fmt(shiftDates[shiftDates.length - 1]);
+}
+
 // ── Build one queue card HTML — horizontal strip design ──────────────────────
 function _buildQueueMiniCard(item) {
   const btype = (typeof getBlockType === 'function' && item.blockData?.type)
@@ -6494,9 +6506,11 @@ function _buildQueueMiniCard(item) {
   const hasEm    = fullName.includes(' \u2014 ');
   const gcName   = hasEm ? escHtml(fullName.split(' \u2014 ')[0]) : '';
   const projName = hasEm ? escHtml(fullName.split(' \u2014 ').slice(1).join(' \u2014 ')) : escHtml(fullName);
-  const jobNum   = escHtml(item.jobNum || '');
-  const dateStr  = item.addedAt ? new Date(item.addedAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'}) : '';
+  const jobNum      = escHtml(item.jobNum || '');
+  const dateStr     = item.addedAt ? new Date(item.addedAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'}) : '';
   const displayName = projName || gcName || jobNum || '—';
+  const shiftCount  = item.shiftCount || 1;
+  const shiftRange  = shiftCount > 1 ? _fmtShiftRange(item.shiftDates) : '';
   return `<div class="qmc-wrap" draggable="true"
       ondragstart="queueCardDragStart(event,'${item.id}')"
       ondragend="queueCardDragEnd(event)"
@@ -6507,6 +6521,7 @@ function _buildQueueMiniCard(item) {
     <div class="qmc-jobname">${displayName}</div>
     ${jobNum ? `<div class="qmc-jobnum">#${jobNum}</div>` : ''}
     ${gcName ? `<div class="qmc-gc">${gcName}</div>` : ''}
+    ${shiftCount > 1 ? `<div class="qmc-shifts" style="font-size:10px;color:var(--concrete-dim);margin-top:2px;">&#128197; ${shiftCount} Shifts${shiftRange ? '&nbsp;&nbsp;' + shiftRange : ''}</div>` : ''}
     <div class="qmc-date">${dateStr}</div>
   </div>`;
 }
@@ -6638,11 +6653,28 @@ function queueDrop(e) {
   if (blockData.type === 'blank') return; // nothing to queue
   const jobName = blockData.fields?.jobName || '';
   const jobNum  = blockData.fields?.jobNum  || '';
-  // Add to queue
-  schedQueue.push({ id: Date.now().toString(), addedAt: Date.now(), jobName, jobNum, blockData });
+
+  // Find all consecutive business-day shifts for this job in this slot
+  const shifts      = _findConsecutiveShifts(key, slot, jobNum);
+  const shiftDates  = shifts.map(s => s.key);
+  const shiftFields = shifts.map(s => s.fields);
+
+  schedQueue.push({
+    id: Date.now().toString(),
+    addedAt: Date.now(),
+    jobName,
+    jobNum,
+    blockData,
+    shiftCount: shifts.length,
+    shiftDates,
+    shiftFields
+  });
   saveSchedQueue();
-  // Clear the block from schedule
-  clearBlockData(key, slot);
+
+  // Clear all matching shifts from the schedule (suppress queue suggestion prompts)
+  _suppressQueuePrompt = true;
+  shiftDates.forEach(shiftKey => clearBlockData(shiftKey, slot));
+  _suppressQueuePrompt = false;
   saveSchedData();
   renderSchedule(); // also calls renderQueueList via schedScrollOuter re-render
   renderQueueList();
@@ -6695,7 +6727,33 @@ schedBlockDrop = function(e, toKey, toSlot, toType) {
     const item = schedQueue.find(i => i.id === queueDragItemId);
     queueDragItemId = null;
     if (!item) return;
-    setBlockData(toKey, toSlot, item.blockData);
+
+    const shiftCount = item.shiftCount || 1;
+    if (shiftCount > 1) {
+      // Place each shift on consecutive business days starting from drop date;
+      // skip dates already occupied by another job.
+      let cur       = toKey;
+      let placed    = 0;
+      let fieldIdx  = 0;
+      const MAX_SCAN = shiftCount * 5; // safety limit against infinite loop
+      let scanned   = 0;
+      while (placed < shiftCount && scanned < MAX_SCAN) {
+        scanned++;
+        const existing = getBlockData(cur, toSlot);
+        if (existing.type === 'blank') {
+          const fields = (item.shiftFields && item.shiftFields[fieldIdx])
+            ? item.shiftFields[fieldIdx]
+            : item.blockData.fields;
+          setBlockData(cur, toSlot, { type: item.blockData.type, fields: fields });
+          placed++;
+          fieldIdx++;
+        }
+        if (placed < shiftCount) cur = _nextBizDay(cur);
+      }
+    } else {
+      setBlockData(toKey, toSlot, item.blockData);
+    }
+
     schedQueue = schedQueue.filter(i => i.id !== item.id);
     saveSchedQueue();
     saveSchedData();
@@ -6815,6 +6873,46 @@ function detectRun(startKey, startSlot) {
     } else break;
   }
   return run;
+}
+
+// ── Business-day advance (skip Sat/Sun only, no holiday check) ────────
+function _nextBizDay(dk) {
+  var d = new Date(dk + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+// ── Find all consecutive business-day shifts of the same job in the same slot ─
+// Uses nextWorkday/prevWorkday (skips weekends + holidays) so a Fri + Mon job
+// is treated as consecutive.  Returns [{key, fields}, …] in chronological order.
+function _findConsecutiveShifts(dateKey, slot, jobNum) {
+  if (!jobNum) return [{ key: dateKey, fields: getBlockData(dateKey, slot).fields || {} }];
+  const jn = jobNum.trim();
+
+  // Walk backward to find true run start
+  let runStart = dateKey;
+  while (true) {
+    const prev = prevWorkday(runStart);
+    const prevData = getBlockData(prev, slot);
+    if ((prevData.fields?.jobNum?.trim() || '') === jn) {
+      runStart = prev;
+    } else break;
+  }
+
+  // Walk forward to collect all matching shifts
+  const shifts = [];
+  let cur = runStart;
+  while (true) {
+    const d = getBlockData(cur, slot);
+    if ((d.fields?.jobNum?.trim() || '') === jn) {
+      shifts.push({ key: cur, fields: d.fields || {} });
+      cur = nextWorkday(cur);
+    } else break;
+  }
+  return shifts;
 }
 
 // ── Collect contacts from a block (comma-sep contact field) ───────────
