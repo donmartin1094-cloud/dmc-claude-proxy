@@ -719,13 +719,13 @@ function renderReports() {
           { icon:'📄', label:'Daily Orders',       sub:'Generated from schedule',   count:_doCnt,  tab:'reportsDailyOrders', color:'#5ab4f5',       prev:'daily'      },
           { icon:'📊', label:'2 Week Look Aheads', sub:'Lookahead planning sheets', count:_laCnt,  tab:'reportsTwoWeek',     color:'#7ecb8f',       prev:'lookahead'  },
           { icon:'👷', label:"Foremen's Reports",  sub:'Job completion reports',    count:_qcCnt,  tab:'reportsForemens',    color:'var(--orange)', prev:'foreman'    },
-          { icon:'🔬', label:'QC Reports',         sub:'Quality control files',     count:_qcCnt,  tab:'reportsQC',          color:'var(--orange)', prev:'qc'         },
+          ...(typeof canManageQC === 'function' && canManageQC() ? [{ icon:'🔬', label:'QC Reports', sub:'Quality control files', count:_qcCnt, tab:'reportsQC', color:'var(--orange)', prev:'qc' }] : []),
           { icon:'🧪', label:'Job Mix Formula',    sub:'Supplier formula docs',     count:_jmCnt,  tab:'reportsJobMix',      color:'#7ecb8f',       prev:'jobmix'     },
           { icon:'📋', label:'AIA Requisitions',   sub:'Payment applications',      count:_aiaCnt, tab:'apAia',              color:'#f5c518',       prev:'tack'       },
           { icon:'💬', label:'Chat History',       sub:'Team message archive',      count:_chatCnt,tab:'chat',               color:'#c084f5',       prev:null         },
           { icon:'📋', label:'Order Templates',    sub:'Blank DMC & Amrize forms',  count:2,       tab:'reportsBlankForms',  color:'#ff8c42',       prev:'dmc-order'  },
           { icon:'📋', label:'Certifieds',         sub:'MassDOT certified payroll', count:certifiedReports.length, tab:'reportsCertif', color:'#f5c518', prev:'certified' },
-          ...(typeof isAdmin === 'function' && isAdmin() ? [
+          ...(typeof isAdmin === 'function' && (isAdmin() || (typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager')) ? [
             { icon:'⏱', label:'Time Reports', sub:'Employee hours by date range', count:(function(){var _r=[];try{_r=JSON.parse(localStorage.getItem('dmc_foreman_reports')||'[]');}catch(e){}return _r.length;})(), tab:'reportsTimeReports', color:'#c084f5', prev:null },
           ] : []),
         ].map(cat => `
@@ -5841,6 +5841,21 @@ function _trLoadEntries() {
       });
     });
 
+  // Helio Monteiro (qc_manager) self-reported hours
+  var _hHours = {};
+  try { _hHours = JSON.parse(localStorage.getItem('dmc_hmonteiro_daily_hours') || '{}'); } catch(e) {}
+  Object.keys(_hHours).forEach(function(date) {
+    var h = parseFloat(_hHours[date]) || 0;
+    if (h > 0) {
+      entries.push({
+        employeeName: 'Helio Monteiro', username: 'hmonteiro',
+        date: date, hours: h,
+        jobLocation: '—', jobNum: '—', gcName: '—',
+        source: 'self', foremanName: '—'
+      });
+    }
+  });
+
   // Sort all entries by date descending
   entries.sort(function(a, b) { return a.date > b.date ? -1 : a.date < b.date ? 1 : 0; });
   return entries;
@@ -5854,6 +5869,12 @@ function renderTimeReports(container) {
   }
 
   var allEntries = _trLoadEntries();
+
+  var _isQCMgr = typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager' && !(typeof isAdmin === 'function' && isAdmin());
+  var _currentUser = (localStorage.getItem('dmc_u') || '').toLowerCase();
+  if (_isQCMgr) {
+    allEntries = allEntries.filter(function(e) { return (e.username || '').toLowerCase() === _currentUser; });
+  }
 
   var empNames = [];
   allEntries.forEach(function(e) { if (empNames.indexOf(e.employeeName) === -1) empNames.push(e.employeeName); });
@@ -5930,7 +5951,7 @@ function renderTimeReports(container) {
 
   var grandTotalBar = empList.length > 0
     ? '<div style="margin-top:16px;padding:12px 16px;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;">'
-    + '<span style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">All Employees Total</span>'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">' + (_isQCMgr ? 'My Total' : 'All Employees Total') + '</span>'
     + '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:' + accentColor + ';font-weight:700;">' + grandTotal.toFixed(1) + ' hours</span>'
     + '</div>'
     : '';
@@ -5952,9 +5973,9 @@ function renderTimeReports(container) {
     +   '<label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">To</label>'
     +   '<input type="date" value="' + _trFilterEnd + '" onchange="window._trSetFilter(\'end\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
     +   '<button onclick="window._trShiftWeek(1)" style="' + btnStyle + '">Next Week →</button>'
-    +   '<select onchange="window._trSetFilter(\'emp\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
-    +     empDropdown
-    +   '</select>'
+    +   (!_isQCMgr
+          ? '<select onchange="window._trSetFilter(\'emp\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">' + empDropdown + '</select>'
+          : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(167,139,250,0.7);">My Hours Only</span>')
     + '</div>'
     + '<div style="flex:1;overflow-y:auto;padding:12px 16px;min-height:0;">'
     +   empSections

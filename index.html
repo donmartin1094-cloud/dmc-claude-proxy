@@ -1742,6 +1742,14 @@
     /* ── 6. uspm pickers — bottom sheet on mobile ─────────────────── */
     .uspm-overlay { padding: 0 !important; align-items: flex-end !important; }
     .uspm-box     { max-width: 100% !important; border-radius: 18px 18px 0 0 !important; max-height: 85vh !important; }
+    /* four-col material rows: stack mix type on row 1, inputs on row 2 */
+    .uspm-mat4-header { display: none !important; }
+    .uspm-mat4-row { grid-template-columns: 1fr 1fr 1fr 24px; grid-template-rows: auto auto; row-gap: 6px; min-height: auto; padding: 10px 14px; }
+    .uspm-mat4-select { grid-column: 1 / 4; grid-row: 1; min-height: 44px; }
+    .uspm-mat4-del    { grid-column: 4;     grid-row: 1; }
+    .uspm-mat4-tons   { grid-column: 1;     grid-row: 2; min-height: 44px; }
+    .uspm-mat4-gyr    { grid-column: 2;     grid-row: 2; min-height: 44px; }
+    .uspm-mat4-rap    { grid-column: 3 / 5; grid-row: 2; min-height: 44px; }
 
     /* ── 7. General content fixes ────────────────────────────────── */
     /* Mobile schedule: hide desktop grid, show calendar view */
@@ -2399,6 +2407,7 @@
   /* ── Unified Schedule Picker Modal ── */
   .uspm-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:7800;display:flex;align-items:center;justify-content:center;padding:20px; }
   .uspm-box { background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);width:100%;max-width:420px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.8);overflow:hidden; }
+  .uspm-box--wide { max-width:560px; }
   .uspm-header { padding:16px 18px 12px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--asphalt); }
   .uspm-title { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--white); }
   .uspm-close { background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);cursor:pointer;font-size:14px;padding:3px 8px;line-height:1;transition:all 0.15s; }
@@ -2435,6 +2444,18 @@
   .uspm-mat-tons:focus { border-color:var(--stripe); }
   .uspm-mat-unit { font-size:11px;font-weight:700;color:var(--concrete-dim); }
   .uspm-footer { display:flex;gap:8px;justify-content:flex-end;padding:12px 14px;border-top:1px solid var(--asphalt-light);flex-shrink:0; }
+
+  /* ── Material four-column picker rows ── */
+  .uspm-mat4-header { display:grid;grid-template-columns:minmax(0,1fr) 60px 58px 58px 24px;gap:5px;padding:5px 14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);border-bottom:1px solid var(--asphalt-light);background:rgba(0,0,0,0.15); }
+  .uspm-mat4-row { display:grid;grid-template-columns:minmax(0,1fr) 60px 58px 58px 24px;gap:5px;align-items:center;padding:7px 14px;border-bottom:1px solid rgba(255,255,255,0.04);min-height:44px;box-sizing:border-box; }
+  .uspm-mat4-select,.uspm-mat4-gyr { width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 6px;outline:none;min-height:36px;cursor:pointer;box-sizing:border-box;min-width:0; }
+  .uspm-mat4-select { overflow:hidden;text-overflow:ellipsis; }
+  .uspm-mat4-select:focus,.uspm-mat4-gyr:focus { border-color:var(--stripe); }
+  .uspm-mat4-tons,.uspm-mat4-rap { width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-size:12px;font-weight:700;padding:5px 6px;outline:none;min-height:36px;box-sizing:border-box;text-align:center; }
+  .uspm-mat4-tons { text-align:right; }
+  .uspm-mat4-tons:focus,.uspm-mat4-rap:focus { border-color:var(--stripe); }
+  .uspm-mat4-del { background:none;border:none;color:var(--concrete-dim);font-size:13px;cursor:pointer;padding:4px 2px;line-height:1;border-radius:var(--radius);transition:color 0.1s;justify-self:center; }
+  .uspm-mat4-del:hover { color:#e05050; }
 
   /* ── Special Actions ── */
   .sched-notes-wrap { position:relative; }
@@ -3284,7 +3305,10 @@
       </div>
       <div class="form-group">
         <label class="form-label">General Contractor</label>
-        <input class="form-input" id="blGC" placeholder="e.g. Gilbane" />
+        <div style="position:relative;">
+          <input class="form-input" id="blGC" placeholder="e.g. Gilbane" autocomplete="off" oninput="blGCAutoInput(this)" onblur="blGCAutoBlur()" onkeydown="blGCAutoKey(event)" />
+          <div id="blGCDropdown" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:9999;background:var(--card);border:1px solid rgba(167,139,250,0.3);border-radius:0 0 6px 6px;max-height:240px;overflow-y:auto;"></div>
+        </div>
       </div>
       <div class="form-group" style="grid-column:1/3;">
         <label class="form-label">GC Address</label>
@@ -6509,6 +6533,204 @@ function _homeDJDaySave(dateKey) {
   _homeDJHoursRerender();
 }
 
+// ── Helio (qc_manager) home: hours widget ─────────────────────────────────────
+var _homeHHDayEditing = null;
+
+function _homeHHoursWidget() {
+  var today = new Date();
+  var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  var dow = today.getDay();
+  var sunday = new Date(today); sunday.setDate(today.getDate() - dow);
+  var DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MONTHS    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var days = [];
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(sunday); d.setDate(sunday.getDate() + i);
+    var k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    days.push({ key:k, name:DAY_NAMES[i], date:d.getDate(), month:MONTHS[d.getMonth()], isToday:k===todayKey });
+  }
+  var dailyHours = {};
+  try { dailyHours = JSON.parse(localStorage.getItem('dmc_hmonteiro_daily_hours') || '{}'); } catch(e) {}
+  var weeklyTotal = Math.round(days.reduce(function(s,d){ return s+(dailyHours[d.key]||0); }, 0) * 10) / 10;
+  var pastTotals = [];
+  for (var w = 1; w <= 4; w++) {
+    var wStart = new Date(sunday); wStart.setDate(sunday.getDate() - w * 7);
+    var wSum = 0;
+    for (var di = 0; di < 7; di++) {
+      var wd = new Date(wStart); wd.setDate(wStart.getDate() + di);
+      var wk = wd.getFullYear() + '-' + String(wd.getMonth()+1).padStart(2,'0') + '-' + String(wd.getDate()).padStart(2,'0');
+      wSum += dailyHours[wk] || 0;
+    }
+    if (wSum > 0) pastTotals.push(wSum);
+  }
+  var avg4 = pastTotals.length ? Math.round(pastTotals.reduce(function(s,v){ return s+v; },0) / pastTotals.length * 10) / 10 : null;
+  var hdrHtml = days.map(function(d) {
+    return '<div style="text-align:center;padding-bottom:3px;border-bottom:1px solid ' + (d.isToday ? '#a78bfa' : 'rgba(255,255,255,0.08)') + ';margin-bottom:2px;">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:.5px;color:' + (d.isToday ? '#a78bfa' : 'var(--concrete-dim)') + ';">' + d.name + '</div>' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;line-height:1.1;color:' + (d.isToday ? '#a78bfa' : 'var(--white)') + ';">' + d.date + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:6px;color:rgba(155,148,136,0.5);">' + d.month + '</div>' +
+    '</div>';
+  }).join('');
+  var rowHtml = days.map(function(d) {
+    var hrs = dailyHours[d.key] || 0;
+    var isEditing = _homeHHDayEditing === d.key;
+    var cellBase = 'height:38px;border-radius:3px;border:1px solid ' +
+      (d.isToday ? 'rgba(167,139,250,0.3)' : 'rgba(255,255,255,0.08)') +
+      ';background:' + (d.isToday ? 'rgba(167,139,250,0.06)' : 'rgba(255,255,255,0.02)') +
+      ';display:flex;align-items:center;justify-content:center;';
+    if (isEditing) {
+      return '<div style="padding:1px;">' +
+        '<div style="' + cellBase + 'padding:0 3px;">' +
+          '<input type="number" id="_hhDayInp_' + d.key + '" value="' + hrs + '" min="0" max="24" step="0.5" ' +
+            'style="width:100%;background:none;border:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;text-align:center;outline:none;" ' +
+            'onkeydown="if(event.key===\'Enter\'||event.key===\'Tab\'){event.preventDefault();_homeHHDaySave(\'' + d.key + '\');}" ' +
+            'onblur="_homeHHDaySave(\'' + d.key + '\')">' +
+        '</div></div>';
+    }
+    return '<div style="padding:1px;cursor:pointer;" onclick="_homeHHDayEdit(\'' + d.key + '\')">' +
+      '<div style="' + cellBase + '">' +
+        (hrs > 0
+          ? '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:' + (d.isToday ? '#a78bfa' : 'var(--white)') + ';">' + hrs + '</span>'
+          : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:rgba(155,148,136,0.2);">—</span>') +
+      '</div></div>';
+  }).join('');
+  return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;flex-shrink:0;">' +
+    '<div style="padding:9px 12px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;">' +
+      '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:2px;color:var(--white);">⏱ MY HOURS</span>' +
+      '<span style="display:flex;align-items:center;gap:10px;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">' + weeklyTotal + ' hrs</span>' +
+        (avg4 !== null ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">4-wk avg: ' + avg4 + '</span>' : '') +
+      '</span>' +
+    '</div>' +
+    '<div style="padding:8px 8px 10px;">' +
+      '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">' +
+        hdrHtml + rowHtml +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function _homeHHoursRerender() {
+  var panel = document.getElementById('homeHHoursPanel');
+  if (panel) { panel.innerHTML = _homeHHoursWidget(); }
+}
+
+function _homeHHDayEdit(dateKey) {
+  _homeHHDayEditing = dateKey;
+  _homeHHoursRerender();
+  setTimeout(function() { var inp = document.getElementById('_hhDayInp_' + dateKey); if (inp) { inp.focus(); inp.select(); } }, 30);
+}
+
+function _homeHHDaySave(dateKey) {
+  if (_homeHHDayEditing !== dateKey) return;
+  var inp = document.getElementById('_hhDayInp_' + dateKey);
+  if (!inp) { _homeHHDayEditing = null; return; }
+  var val = Math.round(Math.max(0, parseFloat(inp.value) || 0) * 2) / 2;
+  var dailyHours = {};
+  try { dailyHours = JSON.parse(localStorage.getItem('dmc_hmonteiro_daily_hours') || '{}'); } catch(e) {}
+  if (val === 0) delete dailyHours[dateKey]; else dailyHours[dateKey] = val;
+  localStorage.setItem('dmc_hmonteiro_daily_hours', JSON.stringify(dailyHours));
+  _checkLocalStorageSize();
+  try { fbSet('dmc_hmonteiro_daily_hours', dailyHours); } catch(e) {}
+  _homeHHDayEditing = null;
+  _homeHHoursRerender();
+}
+
+// ── Helio (qc_manager) home: QC This Week widget ──────────────────────────────
+function _qcMgrThisWeekHtml() {
+  var today = new Date();
+  var todayKey = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var dow = today.getDay();
+  var thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  var DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var ACCENT = '#a78bfa';
+
+  var days = [];
+  for (var _i = 0; _i < 7; _i++) {
+    var _d = new Date(thisMonday); _d.setDate(thisMonday.getDate() + _i);
+    var _dk = _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    var _sd = (typeof schedData !== 'undefined') ? (schedData[_dk] || {}) : {};
+    var _qcBlocks = [];
+    var _chkQC = function(b, slot) {
+      if (!b || b.type === 'blank') return;
+      var _f = b.fields || {};
+      if (_f.qc === 'DMC' || (_f.qc && typeof _f.qc === 'object' && _f.qc.type === 'DMC')) {
+        _qcBlocks.push({ block: b, slot: slot });
+      }
+    };
+    _chkQC(_sd.top, 'top');
+    _chkQC(_sd.bottom, 'bottom');
+    (_sd.extras||[]).forEach(function(ex, _exi) { if (ex && ex.data) _chkQC(ex.data, 'extra_'+_exi); });
+    if (_i >= 5 && !_qcBlocks.length) continue;
+    days.push({ key:_dk, name:DAY_NAMES[_i], date:_d.getDate(), isToday:_dk===todayKey, qcBlocks:_qcBlocks });
+  }
+
+  if (!days.length) {
+    return '<div class="home-widget">' +
+      '<div class="home-widget-header"><div class="home-widget-title">🔬 QC This Week</div></div>' +
+      '<div class="home-widget-body home-widget-empty">No DMC QC jobs this week</div>' +
+    '</div>';
+  }
+
+  function qcBlockCell(entry, dayKey) {
+    if (!entry) return '<div style="min-height:44px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
+    var bd = entry.block, slot = entry.slot;
+    var _f = bd.fields || {};
+    var bt = (typeof getBlockType === 'function') ? getBlockType(bd.type) : { color:ACCENT, label:bd.type };
+    var jn = _f.jobName || '';
+    if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
+    var shiftLabel = (bt.label || bd.type || '').replace(' Work','');
+    var gcName = '';
+    if (_f.jobNum && typeof backlogJobs !== 'undefined') {
+      var blj = backlogJobs.find(function(j) { return j.num === _f.jobNum; });
+      if (blj) gcName = blj.gc || '';
+    }
+    var tipObj = { type:'QC', color:ACCENT, jobName:jn||_f.jobName||'', jobNum:_f.jobNum||'', crew:'DMC QC', loc:_f.plant||'', notes:(_f.notes||'').substring(0,60), day:dayKey };
+    var tipStr = encodeURIComponent(JSON.stringify(tipObj));
+    return '<div class="hw-sched-block" style="background:'+ACCENT+'22;border:1.5px solid '+ACCENT+'66;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:3px 5px;gap:2px;cursor:pointer;" ' +
+      'data-stt="'+tipStr+'" ' +
+      'onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()" ' +
+      'onclick="openMobBlockDetail(\''+dayKey+'\',\''+slot+'\')">'+
+      (_f.jobNum ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:800;color:'+ACCENT+';line-height:1.1;">#'+escHtml(_f.jobNum)+'</span>' : '')+
+      (jn ? '<span style="font-family:\'DM Sans\',sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,0.9);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+escHtml(jn.substring(0,14))+'</span>' : '')+
+      (gcName ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+ACCENT+';line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+escHtml(gcName.substring(0,16))+'</span>' : '')+
+      (shiftLabel ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+ACCENT+';background:'+ACCENT+'1a;border-radius:3px;padding:1px 4px;align-self:flex-start;line-height:1.2;">'+escHtml(shiftLabel)+'</span>' : '')+
+    '</div>';
+  }
+
+  var N = days.length;
+  var maxBlocks = days.reduce(function(m, d) { return Math.max(m, d.qcBlocks.length || 1); }, 1);
+  var cells = [];
+  cells.push('<div></div>');
+  days.forEach(function(d) {
+    var isT = d.isToday;
+    cells.push('<div style="text-align:center;padding-bottom:3px;border-bottom:'+(isT?'2px solid '+ACCENT:'1px solid rgba(255,255,255,0.08)')+';">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:'+(isT?ACCENT:'var(--concrete-dim)')+';letter-spacing:.5px;">'+d.name+'</div>' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:'+(isT?ACCENT:'var(--white)')+';line-height:1.1;">'+d.date+'</div>' +
+    '</div>');
+  });
+  for (var _ri = 0; _ri < maxBlocks; _ri++) {
+    var _rl = _ri === 0 ? 'QC' : '';
+    cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;">'+_rl+'</div>');
+    days.forEach(function(day) {
+      var entry = day.qcBlocks[_ri] || null;
+      var cellHtml = entry
+        ? qcBlockCell(entry, day.key)
+        : (day.qcBlocks.length === 0 ? '<div style="min-height:44px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>' : '');
+      cells.push('<div style="padding:1px;">'+cellHtml+'</div>');
+    });
+  }
+  return '<div class="home-widget">' +
+    '<div class="home-widget-header"><div class="home-widget-title">🔬 QC This Week</div></div>' +
+    '<div class="home-widget-body" style="padding:10px 12px;overflow-x:auto;">' +
+      '<div style="display:grid;grid-template-columns:38px repeat('+N+',1fr);gap:4px;min-width:0;">' +
+        cells.join('') +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
 // ── DJ admin home: lowbed moves card (toggleable) ────────────────────────────
 var _homeLowbedOpen = true;
 
@@ -7981,6 +8203,7 @@ function renderHomeView(el) {
     const _isForeman = _role === 'foreman';
     const _isCrewRole = ['operator','laborer','mechanic'].includes(_role);
     const _isOperator = _role === 'operator';
+    const _isQCMgr = _role === 'qc_manager';
     const _isRestrictedRole = ['operator','laborer','driver','lowbed_driver'].includes(_role);
 
     const _driverWidgets = new Set(['today', 'jobphotos', 'fleet']);
@@ -8042,6 +8265,8 @@ function renderHomeView(el) {
       widgetsHtml = widget7DaySched();
     } else if (_isForeman) {
       widgetsHtml = activeWidgets.filter(w => w.id !== 'today' && w.id !== 'myhours').map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
+    } else if (_isQCMgr) {
+      widgetsHtml = ''; // qc_manager home rendered in top section
     } else {
       widgetsHtml = activeWidgets.map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
     }
@@ -8103,6 +8328,26 @@ function renderHomeView(el) {
         '</div>';
     }
 
+    var _qcMgrTopSectionHtml = '';
+    if (_isQCMgr) {
+      var _qcMgrMyHoursHtml = '';
+      try { _qcMgrMyHoursHtml = _homeHHoursWidget(); } catch(e) {}
+      var _qcMgrWeekHtml = '';
+      try { _qcMgrWeekHtml = _qcMgrThisWeekHtml(); } catch(e) {}
+      _qcMgrTopSectionHtml =
+        '<div style="display:flex;gap:16px;align-items:flex-start;width:100%;flex-wrap:wrap;padding:0 0 8px;">' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' +
+            '<div class="home-greeting-text">' +
+              '<div class="home-greeting-sub">' + greeting + ',</div>' +
+              '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+              '<div class="home-greeting-date">' + dateStr + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div id="homeHHoursPanel" style="flex:1;min-width:180px;box-sizing:border-box;">' + _qcMgrMyHoursHtml + '</div>' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _qcMgrWeekHtml + '</div>' +
+        '</div>';
+    }
+
     const _showGpsPanel = _homeIsAdmin();
     const _isMobAdmin   = _showGpsPanel && window.innerWidth <= 600;
     const adminWidgetBarHtml = (_showGpsPanel && !_isMobAdmin)
@@ -8135,7 +8380,9 @@ function renderHomeView(el) {
           ? _operatorTopSectionHtml
           : _isForeman
             ? _topSectionHtml
-            : '<div class="home-greeting">' +
+            : _isQCMgr
+              ? _qcMgrTopSectionHtml
+              : '<div class="home-greeting">' +
               (_homeIsAdmin() && !_isMobAdmin
                 ? '<div style="min-width:0;">' + _homeWeekScheduleWidget() + '</div>' +
                   '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0;">' +
@@ -15260,6 +15507,61 @@ function initBLAAPicker(currentId) {
 function blAAScroll(dir) {
   const wrap = document.getElementById('blAAScrollWrap');
   if (wrap?._aaSnapTo) wrap._aaSnapTo(blAASelectedIdx + dir);
+}
+
+function blGCAutoInput(inp) {
+  var val = inp.value.trim();
+  var drop = document.getElementById('blGCDropdown');
+  if (!val) { drop.style.display='none'; drop.innerHTML=''; drop._hlIdx=-1; return; }
+  var _gcNames = [];
+  (backlogJobs||[]).forEach(function(j){ if(j.gc && _gcNames.indexOf(j.gc)===-1) _gcNames.push(j.gc); });
+  (invoiceList||[]).forEach(function(i){ if(i.gcName && _gcNames.indexOf(i.gcName)===-1) _gcNames.push(i.gcName); });
+  _gcNames.sort();
+  var lower = val.toLowerCase();
+  var matches = _gcNames.filter(function(n){ return n.toLowerCase().indexOf(lower)!==-1; });
+  if (!matches.length) { drop.style.display='none'; drop.innerHTML=''; drop._hlIdx=-1; return; }
+  drop.innerHTML = matches.map(function(n,idx){
+    var esc = n.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return '<div class="bl-gc-item" data-idx="'+idx+'" data-name="'+esc+'" style="padding:8px 12px;cursor:pointer;font-size:13px;min-height:44px;display:flex;align-items:center;" onmousedown="blGCAutoSelect(this);event.preventDefault();" onmouseover="blGCAutoHover(this)">'+esc+'</div>';
+  }).join('');
+  drop.style.display='block';
+  drop._hlIdx=-1;
+}
+function blGCAutoSelect(el) {
+  document.getElementById('blGC').value = el.getAttribute('data-name');
+  var drop = document.getElementById('blGCDropdown');
+  drop.style.display='none'; drop.innerHTML=''; drop._hlIdx=-1;
+}
+function blGCAutoHover(el) {
+  var drop = document.getElementById('blGCDropdown');
+  drop._hlIdx = parseInt(el.getAttribute('data-idx'));
+  Array.from(drop.children).forEach(function(c,i){
+    c.style.background = i===drop._hlIdx ? 'rgba(167,139,250,0.2)' : '';
+    c.style.color = i===drop._hlIdx ? '#a78bfa' : '';
+  });
+}
+function blGCAutoKey(e) {
+  var drop = document.getElementById('blGCDropdown');
+  if (!drop || drop.style.display==='none') return;
+  var items = drop.children;
+  var idx = typeof drop._hlIdx==='number' ? drop._hlIdx : -1;
+  if (e.key==='ArrowDown') { e.preventDefault(); idx=Math.min(idx+1,items.length-1); }
+  else if (e.key==='ArrowUp') { e.preventDefault(); idx=Math.max(idx-1,0); }
+  else if (e.key==='Enter' && idx>=0) { e.preventDefault(); blGCAutoSelect(items[idx]); return; }
+  else if (e.key==='Escape') { drop.style.display='none'; drop.innerHTML=''; drop._hlIdx=-1; return; }
+  else return;
+  drop._hlIdx=idx;
+  Array.from(items).forEach(function(c,i){
+    c.style.background=i===idx?'rgba(167,139,250,0.2)':'';
+    c.style.color=i===idx?'#a78bfa':'';
+  });
+  if (items[idx]) items[idx].scrollIntoView({block:'nearest'});
+}
+function blGCAutoBlur() {
+  setTimeout(function(){
+    var drop = document.getElementById('blGCDropdown');
+    if (drop) { drop.style.display='none'; drop.innerHTML=''; drop._hlIdx=-1; }
+  }, 150);
 }
 
 function openBacklogModal(id) {
@@ -26724,6 +27026,8 @@ const DEFAULT_TEAM_ACCOUNTS = [
   { username:'asilva',    password:'DMC2024!', role:'operator', displayName:'Aaron Silva',      active:true, driverTypes:[] },
   { username:'csilva',    password:'DMC2024!', role:'operator', displayName:'Corey Silva',      active:true, driverTypes:[] },
   { username:'dcardoso',  password:'DMC2024!', role:'operator', displayName:'Djalo Cardoso',   active:true, driverTypes:[] },
+  // ── QC ───────────────────────────────────────────────────────────────────────
+  { username:'hmonteiro', email:'hmonteiro@donmartincorp.com', password:'DMC2024!', role:'qc_manager', displayName:'Helio Monteiro', active:true, driverTypes:[] },
 ];
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog
@@ -27168,6 +27472,7 @@ async function fbLoadAll() {
         else if (key === 'fleet')      { console.log('FLEET LISTENER: firing, will replace equipmentFleet'); var _inProgress = Object.keys(_fleetPhotoUploadInProgress).filter(function(k){ return _fleetPhotoUploadInProgress[k]; }); console.log('FLEET LISTENER: uploads in progress:', _inProgress); equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (_fleetPhotoUploadInProgress[eq.id]) { var _mem = equipmentFleet.find(function(e){ return e.id===eq.id; }); if (_mem) { eq.profilePhoto = _mem.profilePhoto; eq.profilePhotoPath = _mem.profilePhotoPath; eq.photos = (_mem.photos||[]).slice(); } } if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot();  _checkLocalStorageSize();}
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
         else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
+        else if (key === 'dmc_hmonteiro_daily_hours') { localStorage.setItem('dmc_hmonteiro_daily_hours', JSON.stringify(val)); if (typeof _homeHHoursRerender === 'function') _homeHHoursRerender(); _checkLocalStorageSize(); }
         else if (key === 'notifications') {
           var incoming = Array.isArray(val) ? val : [];
           var localIds = new Set(notifications.map(function(n){ return n.id; }));
@@ -27227,7 +27532,7 @@ function isQC() {
   return false;
 }
 
-function canManageQC() { return isAdmin() || isQC(); }
+function canManageQC() { return isAdmin() || isQC() || (typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager'); }
 
 function isAdmin() {
   const u = (localStorage.getItem('dmc_u') || '').trim();
@@ -27294,7 +27599,8 @@ async function initApp(username) {
         { username:'ebenfeito', displayName:'Eddy Benfeito',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
         { username:'asilva',    displayName:'Aaron Silva',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
         { username:'csilva',    displayName:'Corey Silva',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
-        { username:'dcardoso',  displayName:'Djalo Cardoso',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] }
+        { username:'dcardoso',  displayName:'Djalo Cardoso',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
+        { username:'hmonteiro', displayName:'Helio Monteiro', email:'hmonteiro@donmartincorp.com', password:'DMC2024!', role:'qc_manager', active:true, driverTypes:[] }
       ];
       var _changed = false;
       _foremanDefaults.forEach(function(fd) {
@@ -27693,6 +27999,7 @@ async function initApp(username) {
               else if (key === 'paving_slips')       { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {}  _checkLocalStorageSize();}
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
               else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
+              else if (key === 'dmc_hmonteiro_daily_hours') { localStorage.setItem('dmc_hmonteiro_daily_hours', JSON.stringify(val)); if (typeof _homeHHoursRerender === 'function') _homeHHoursRerender(); _checkLocalStorageSize(); }
               else if (key === 'daily_orders') {
                 if (Array.isArray(val)) {
                   var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));

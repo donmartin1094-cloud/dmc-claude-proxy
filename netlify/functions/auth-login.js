@@ -32,6 +32,7 @@ exports.handler = async (event) => {
       'DSouza':      'Pestario86!!',
       'fjoaquim':    'DMC2024!',
       'marruda':     'DMC2024!',
+      'hmonteiro':   'DMC2024!',
     };
 
     const uLower = login.toLowerCase();

@@ -1186,6 +1186,7 @@ const DEFAULT_TAB_PERMS = {
   operator:   { ap:false,  backlog:false,  bids:false,  chat:false,  schedule:false,  reports:false,  equipment:'view', heimdall:false  },
   laborer:    { ap:false,  backlog:false,  bids:false,  chat:false,  schedule:false,  reports:false,  equipment:false,  heimdall:false  },
   foreman:    { ap:false,  backlog:'view', bids:false,  chat:false,  schedule:'view', reports:'view', equipment:'view', heimdall:'view' },
+  qc_manager: { ap:false,  backlog:false,  bids:false,  chat:'edit', schedule:'view', reports:'edit', equipment:false,  heimdall:false  },
 };
 
 function cloneDefaultTabPerms() {
@@ -1195,7 +1196,7 @@ function cloneDefaultTabPerms() {
 function hydrateTabPerms(raw) {
   const base = cloneDefaultTabPerms();
   const src = (raw && typeof raw === 'object') ? raw : {};
-  ['admin','controller','qc','staff','driver','lowbed_driver','foreman'].forEach(role => {
+  ['admin','controller','qc','qc_manager','staff','driver','lowbed_driver','foreman'].forEach(role => {
     const roleSrc = (src[role] && typeof src[role] === 'object') ? src[role] : {};
     base[role] = { ...base[role], ...roleSrc };
   });
@@ -3157,6 +3158,9 @@ function openAddForemanModal(key) {
 // A single consistent modal used by every + button on the schedule.
 // type: 'foreman' | 'operators' | 'equipment' | 'material' | 'mixtype' | 'plant'
 // ─────────────────────────────────────────────────────────────────────────────
+var _uspmMat4Pool = [];  // sorted mixTypes for the four-col material picker
+var _uspmMat4Ctr  = 0;  // row ID counter
+
 function openUnifiedSchedPicker({ type, title, key, slot, field }) {
   document.getElementById('unifiedSchedPicker')?.remove();
 
@@ -3277,30 +3281,23 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
       return ((schedData[key]||{})[slot]||{}).fields?.material||'';
     })();
     const current = parseMaterialField(rawVal);
-    const currentMap = {};
-    current.forEach(it => { currentMap[it.name] = it.tons||''; });
-    // Use mixTypesList as the single source — fall back to materialList for legacy
-    const pool = mixTypesList.length ? mixTypesList : materialList.map(d => ({ desc: d, displayName: '', itemNo: '' }));
-    listHtml = pool.length
-      ? pool.map((entry, i) => {
-          const desc = typeof entry === 'string' ? entry : entry.desc;
-          const label = (typeof entry === 'object' && entry.displayName) ? entry.displayName : desc;
-          const sub   = (typeof entry === 'object' && entry.itemNo) ? `#${entry.itemNo}` : '';
-          const checked = currentMap.hasOwnProperty(desc);
-          const tons = checked ? (currentMap[desc]||'') : '';
-          return `<div class="uspm-mat-row${checked?' checked':''}" id="uspm-mat-row-${i}">
-            <input type="checkbox" id="uspm-mat-chk-${i}" ${checked?'checked':''} onchange="uspmMatToggle(${i})" />
-            <label class="uspm-mat-label" for="uspm-mat-chk-${i}">${label}${sub?`<span class="uspm-mat-sub" style="margin-left:8px;">${sub}</span>`:''}${label!==desc?`<span class="uspm-mat-sub" style="margin-left:6px;">${desc}</span>`:''}</label>
-            <input type="number" class="uspm-mat-tons" id="uspm-mat-tons-${i}" value="${tons}" placeholder="tons" min="0" step="0.1" ${checked?'':'disabled'} oninput="uspmMatTonsInput(${i})" />
-            <span class="uspm-mat-unit">T</span>
-          </div>`;
-        }).join('')
-      : `<div class="uspm-empty">No mix types defined yet.<br><span style="font-size:11px;"><a href="#" onclick="openSettings('rosters');document.getElementById('unifiedSchedPicker')?.remove();" style="color:var(--blue);">Add them in ⚙️ Settings → Mix &amp; Materials</a></span></div>`;
+    // Build sorted pool by displayName
+    _uspmMat4Pool = mixTypesList
+      .filter(m => m.desc)
+      .sort((a, b) => (a.displayName||a.desc).localeCompare(b.displayName||b.desc));
+    _uspmMat4Ctr = 0;
+    if (_uspmMat4Pool.length) {
+      const rowsArr = current.length ? current : [null];
+      const colHeader = `<div class="uspm-mat4-header"><span>Mix Type</span><span>Tons</span><span>Gyr</span><span>RAP%</span><span></span></div>`;
+      const rowsHtml = rowsArr.map(item => _uspmBuildMat4Row(_uspmMat4Ctr++, item)).join('');
+      listHtml = `<datalist id="uspmRapOpts"><option value="10"><option value="15"><option value="20"><option value="25"><option value="30"></datalist>${colHeader}<div id="uspmMatRows">${rowsHtml}</div>`;
+    } else {
+      listHtml = `<div class="uspm-empty">No mix types defined yet.<br><span style="font-size:11px;"><a href="#" onclick="openSettings('rosters');document.getElementById('unifiedSchedPicker')?.remove();" style="color:var(--blue);">Add them in ⚙️ Settings → Mix &amp; Materials</a></span></div>`;
+    }
     addSectionHtml = `
       <div class="uspm-add-section">
-        <div class="uspm-add-label">Add New Mix Type</div>
         <div class="uspm-add-row">
-          <button class="uspm-add-btn" style="width:100%;justify-content:center;" onclick="document.getElementById('unifiedSchedPicker')?.remove();openSettings('rosters');stngOpenAddMixType()">+ Open Mix Type Form</button>
+          <button class="uspm-add-btn" style="width:100%;justify-content:center;" onclick="uspmAddMatRow4('${key}','${slot}')">+ Add Row</button>
         </div>
       </div>`;
     footerHtml = `<div class="uspm-footer">
@@ -3373,7 +3370,7 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
     </div>` : '';
 
   overlay.innerHTML = `
-    <div class="uspm-box">
+    <div class="uspm-box${type === 'material' ? ' uspm-box--wide' : ''}">
       <div class="uspm-header">
         <div class="uspm-title">${title}</div>
         <button class="uspm-close" onclick="document.getElementById('unifiedSchedPicker').remove()">✕</button>
@@ -3628,21 +3625,24 @@ function uspmAddNewMat(key, slot) {
 }
 
 function uspmSaveMaterial(key, slot) {
-  const list = document.getElementById('uspmList');
-  if (!list) return;
-  // Resolve the pool the same way the picker built it
-  const pool = mixTypesList.length ? mixTypesList : materialList.map(d => ({ desc: d }));
-  const rows = list.querySelectorAll('.uspm-mat-row');
+  const container = document.getElementById('uspmMatRows');
+  if (!container) return;
   const items = [];
-  rows.forEach((row, i) => {
-    const chk = document.getElementById(`uspm-mat-chk-${i}`);
-    const tonsEl = document.getElementById(`uspm-mat-tons-${i}`);
-    if (chk?.checked) {
-      const entry = pool[i];
-      const name = (typeof entry === 'object' ? entry.desc : entry) || '';
-      const tons = tonsEl?.value?.trim() || '';
-      if (name) items.push({ name, tons });
-    }
+  container.querySelectorAll('.uspm-mat4-row').forEach(row => {
+    const selectedDn = (row.querySelector('.uspm-mat4-select')?.value || '').trim();
+    if (!selectedDn) return;
+    const tons      = (row.querySelector('.uspm-mat4-tons')?.value   || '').trim();
+    const gyrEl     = row.querySelector('.uspm-mat4-gyr');
+    const gyrations = (gyrEl?.value && gyrEl.value !== '—') ? gyrEl.value : '';
+    const rapRaw    = (row.querySelector('.uspm-mat4-rap')?.value     || '').trim();
+    const rapPct    = (rapRaw && rapRaw !== '—') ? rapRaw : '';
+    items.push({
+      name:        selectedDn + (rapPct ? ' ' + rapPct + '%RAP' : ''),
+      displayName: selectedDn,
+      tons,
+      gyrations,
+      rapPct
+    });
   });
   const serialized = serializeMaterialField(items);
   if (slot.startsWith('extra_')) {
@@ -3661,6 +3661,53 @@ function uspmSaveMaterial(key, slot) {
   saveSchedData();
   document.getElementById('unifiedSchedPicker')?.remove();
   renderSchedule();
+}
+
+function _uspmBuildMat4Row(idx, item) {
+  var selDn = '', tons = '', gyrations = '', rapPct = '';
+  if (item) {
+    selDn = item.displayName || '';
+    if (!selDn && item.name) {
+      // Strip %RAP suffix to recover clean displayName from legacy name
+      const m = item.name.match(/^(.*?)\s+\d+%RAP$/);
+      selDn = m ? m[1] : (matDisplayName(item.name) || item.name);
+    }
+    tons      = item.tons      || '';
+    gyrations = item.gyrations || '';
+    rapPct    = item.rapPct    || '';
+    if (!rapPct && item.name) {
+      const m2 = item.name.match(/(\d+)%RAP$/);
+      if (m2) rapPct = m2[1];
+    }
+  }
+  const optsHtml = '<option value="">— Select Mix Type —</option>' +
+    _uspmMat4Pool.map(m => {
+      const dn = m.displayName || m.desc;
+      return `<option value="${escHtml(dn)}"${dn === selDn ? ' selected' : ''}>${escHtml(dn)}</option>`;
+    }).join('');
+  const gyrOpts = ['—','50','75','100'].map(v =>
+    `<option value="${v}"${(gyrations||'—') === v ? ' selected' : ''}>${v}</option>`
+  ).join('');
+  return `<div class="uspm-mat4-row" id="uspm-mat4-row-${idx}">
+    <select class="uspm-mat4-select">${optsHtml}</select>
+    <input type="number" class="uspm-mat4-tons" placeholder="T" min="0" step="0.1" value="${escHtml(tons)}" />
+    <select class="uspm-mat4-gyr">${gyrOpts}</select>
+    <input type="text" class="uspm-mat4-rap" placeholder="—" list="uspmRapOpts" value="${escHtml(rapPct)}" />
+    <button class="uspm-mat4-del" onclick="uspmRemoveMatRow4(${idx})" title="Remove">✕</button>
+  </div>`;
+}
+
+function uspmAddMatRow4(key, slot) {
+  const container = document.getElementById('uspmMatRows');
+  if (!container) return;
+  const idx = _uspmMat4Ctr++;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _uspmBuildMat4Row(idx, null);
+  container.appendChild(tmp.firstElementChild);
+}
+
+function uspmRemoveMatRow4(idx) {
+  document.getElementById('uspm-mat4-row-' + idx)?.remove();
 }
 
 function uspmSelectMixType(key, slot, desc, displayName) {
