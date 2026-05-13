@@ -5470,18 +5470,14 @@ function openInvoiceModal(id, prefill) {
 
   var selStyle = "width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:'DM Mono',monospace;font-size:12px;padding:5px 8px;";
 
-  // ── Mix type widget: hidden input + select + fallback text input ───────────
+  // ── Mix type widget: combo input (text + datalist) ────────────────────────
   function _invMixTypeHtml(idx, currentVal) {
-    var inList = !currentVal || _mxTypes.some(function(m) { return (m.displayName || m.desc) === currentVal; });
-    var mxOpts = '<option value="">— Select mix type —</option>'
-      + _mxTypes.map(function(m) {
-          var v = m.displayName || m.desc;
-          return '<option value="' + escHtml(v) + '"' + (currentVal === v ? ' selected' : '') + '>' + escHtml(v) + '</option>';
-        }).join('')
-      + '<option value="__other__">Other...</option>';
-    return '<input type="hidden" id="invMixType-' + idx + '" value="' + escHtml(currentVal || '') + '" />'
-      + '<select id="invMixTypeSel-' + idx + '" style="' + selStyle + (inList ? '' : 'display:none;') + '" onchange="window._invMixPick(' + idx + ',this)">' + mxOpts + '</select>'
-      + '<input id="invMixTypeText-' + idx + '" class="inv-input" placeholder="e.g. 12.5mm Surface" value="' + escHtml(inList ? '' : currentVal || '') + '" style="width:100%;' + (inList ? 'display:none;' : '') + '" oninput="document.getElementById(\'invMixType-' + idx + '\').value=this.value" />';
+    var dlId = 'invMixTypeList-' + idx;
+    var opts = _mxTypes.map(function(m) {
+      return '<option value="' + escHtml(m.displayName || m.desc) + '">';
+    }).join('');
+    return '<datalist id="' + dlId + '">' + opts + '</datalist>'
+      + '<input id="invMixType-' + idx + '" class="inv-input" list="' + dlId + '" placeholder="Mix type or custom item..." value="' + escHtml(currentVal || '') + '" style="width:100%;" />';
   }
 
   function mixRowHtml(m, i) {
