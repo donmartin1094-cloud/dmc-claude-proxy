@@ -8582,7 +8582,7 @@ function buildWidget(id, displayName, pos) {
       case 'fleet':         html = widgetEquipment(); break;
       case 'lowbedmoves':    html = widgetLowbedMoves(); break;
       case 'foremanreport':  html = widgetForemanReport(); break;
-      case 'myhours':        html = widgetMyHours(); break;
+      case 'myhours':        { var _showMyHours = (localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj'; html = _showMyHours ? widgetMyHours() : ''; } break;
       case 'atowbills':      html = widgetATowBills(); break;
       case 'fleetstatus':    html = widgetFleetStatus(); break;
       case 'equipalerts':    html = widgetEquipAlerts(); break;
