@@ -4893,7 +4893,7 @@ function _inv3ListView(canEdit) {
   }
 
   var html = '<div class="inv3-scroll"><div class="inv3-list-wrap"><table class="inv3-list-table">'
-    + '<thead><tr><th>Date</th><th>Job #</th><th>Foreman</th><th>GC</th>'
+    + '<thead><tr><th>Date</th><th>Job #</th><th>Invoice #</th><th>Foreman</th><th>GC</th>'
     + '<th>Mix Type</th><th>Tons</th><th>$/Ton</th>'
     + '<th>Billed</th><th>Approved</th><th>Notes</th></tr></thead><tbody>';
 
@@ -4913,6 +4913,7 @@ function _inv3ListView(canEdit) {
       html += '<tr class="'+rowCls+'" onclick="inv3OpenInvoice(\''+escHtml(inv.id)+'\')">'
         + '<td class="dim">'+dateStr+'</td>'
         + '<td>'+jobNo+'</td>'
+        + '<td class="dim">'+escHtml(inv.invoiceNo||'—')+'</td>'
         + '<td class="dim">'+initials+'</td>'
         + '<td class="dim">'+gcName+'</td>'
         + '<td class="mix">—</td><td class="dim">—</td><td class="dim">—</td>'
@@ -4927,6 +4928,7 @@ function _inv3ListView(canEdit) {
         html += '<tr class="'+rowCls+rowExtra+'" onclick="inv3OpenInvoice(\''+escHtml(inv.id)+'\')">'
           + '<td class="dim">'+(isFirst?dateStr:'')+'</td>'
           + '<td>'+(isFirst?jobNo:'')+'</td>'
+          + '<td class="dim">'+(isFirst?escHtml(inv.invoiceNo||'—'):'')+'</td>'
           + '<td class="dim">'+(isFirst?initials:'')+'</td>'
           + '<td class="dim">'+(isFirst?gcName:'')+'</td>'
           + '<td class="mix">'+escHtml(m.mixType||'—')+'</td>'
