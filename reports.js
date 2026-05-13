@@ -4903,7 +4903,7 @@ function _inv3ListView(canEdit) {
     var appAmt   = _inv3ApprovedAmt(inv);
     var rowCls   = 'inv3-list-row'+(isApp?' approved':'');
     var blCls    = isApp ? 'green' : 'yellow';
-    var initials = escHtml(_inv3Initials(inv.foreman));
+    var initials = escHtml(inv.foreman || '—');
     var gcName   = escHtml(inv.gcName || '—');
     var jobNo    = escHtml(inv.jobNo || '—');
     var dateStr  = escHtml((inv.dateOfWork||'').slice(5).replace('-','/'));
