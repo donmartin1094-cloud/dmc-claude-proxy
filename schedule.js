@@ -2972,7 +2972,8 @@ function renderExtraBlock(key, idx, ex, isLast) {
           const chipLabel1 = (_saIsVacationAction(sa) && fields._vacationPerson)
             ? fields._vacationPerson + ' on vacation'
             : (fields._saLocations?.[sid] ? sa.label + ' — ' + _saLocDisplay(fields._saLocations[sid]) : sa.label);
-          return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
+          return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};cursor:pointer;"
+            onclick="event.stopPropagation();_saEditModal('${sid}','${key}','${slot}')">
             ${chipLabel1}
             <button style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:10px;padding:0;line-height:1;"
               onclick="event.stopPropagation();removeSchedSpecialAction('${key}','${slot}','${sid}')">✕</button>
@@ -4774,7 +4775,8 @@ function renderSchedule() {
                 const chipLabel2 = (_saIsVacationAction(sa) && fields._vacationPerson)
                   ? fields._vacationPerson + ' on vacation'
                   : (fields._saLocations?.[sid] ? sa.label + ' — ' + _saLocDisplay(fields._saLocations[sid]) : sa.label);
-                return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};">
+                return `<span class="sa-chip" style="color:#fff;border-color:${sa.color};background:${sa.color};${canEdit?'cursor:pointer;':''}"
+                  ${canEdit?`onclick="event.stopPropagation();_saEditModal('${sid}','${key}','${slot}')"`:''}>
                   ${chipLabel2}
                   ${canEdit ? `<button style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.7);font-size:10px;padding:0;line-height:1;"
                     onclick="event.stopPropagation();removeSchedSpecialAction('${key}','${slot}','` + sid + `')">✕</button>` : ''}
@@ -4935,7 +4937,8 @@ function renderSchedule() {
               const xColor      = _graderChip ? 'rgba(0,0,0,0.55)'    : 'rgba(255,255,255,0.7)';
               const saLoc       = dn.dayNoteSALocations?.[sid];
               const chipLabel   = (saLoc && _saIsVacationAction(sa)) ? _saLocString(saLoc) + ' on vacation' : (saLoc ? sa.label + ' — ' + _saLocDisplay(saLoc) : sa.label);
-              return `<span class="sched-day-note-sa-chip" style="background:${chipBg};border:${chipBorder};color:${chipColor};">
+              return `<span class="sched-day-note-sa-chip" style="background:${chipBg};border:${chipBorder};color:${chipColor};${canEditSched?'cursor:pointer;':''}"
+                ${canEditSched?`onclick="event.stopPropagation();_saEditModal('${sid}','${key}',null)"`:''}>
                 ${chipLabel}
                 ${canEditSched?`<button style="background:none;border:none;cursor:pointer;font-size:9px;padding:0 0 0 2px;line-height:1;color:${xColor};"
                   onclick="event.stopPropagation();removeDayNoteSA('${key}','${sid}')">✕</button>`:''}
@@ -11861,6 +11864,168 @@ Return ONLY valid JSON (no markdown fences, no explanation):
   })();
 })();
 });
+
+// ── Special action edit/delete modal ─────────────────────────────────────────
+function _saEditModal(saId, dateKey, slot) {
+  var sa = specialActions.find(function(s) { return s.id === saId; });
+  if (!sa) return;
+
+  document.getElementById('saEditModal')?.remove();
+
+  var isDayNote = (slot === null || slot === undefined);
+  var isVac = _saIsVacationAction(sa);
+  var isLoc = _saIsLocationAction(sa);
+  var isMilling = _saIsMillingAction(sa);
+
+  // Read current stored values
+  var currentPerson = '';
+  var currentLocRaw = null;
+  if (isDayNote) {
+    var dn = schedData[dateKey] || {};
+    currentLocRaw = dn.dayNoteSALocations ? dn.dayNoteSALocations[saId] : null;
+    if (isVac) currentPerson = _saLocString(currentLocRaw) || '';
+  } else {
+    var bdata = getSlotData(dateKey, slot);
+    var fields = bdata ? (bdata.fields || {}) : {};
+    if (isVac) {
+      currentPerson = fields._vacationPerson || '';
+    } else if (isLoc) {
+      currentLocRaw = (fields._saLocations || {})[saId] || null;
+    }
+  }
+  var currentLocStr = isLoc ? (_saLocDisplay(currentLocRaw) || '') : '';
+  var currentSubCo  = (isMilling && currentLocRaw && typeof currentLocRaw === 'object') ? (currentLocRaw.subCompany || '') : '';
+
+  // Build editable fields
+  var millingSubHtml = '';
+  if (isMilling && typeof millingSubsList !== 'undefined' && millingSubsList.length > 0) {
+    millingSubHtml =
+      '<div style="margin-top:10px;">' +
+        '<label style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Subcontractor (optional)</label>' +
+        '<select id="saEditSubSel" style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;box-sizing:border-box;">' +
+          '<option value="">— DMC (internal) —</option>' +
+          millingSubsList.map(function(s) { return '<option value="' + escHtml(s) + '"' + (s === currentSubCo ? ' selected' : '') + '>' + escHtml(s) + '</option>'; }).join('') +
+        '</select>' +
+      '</div>';
+  }
+
+  var extraHtml = '';
+  if (isVac) {
+    extraHtml =
+      '<div style="margin-top:14px;">' +
+        '<label style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Person on vacation</label>' +
+        '<input id="saEditPerson" type="text" value="' + escHtml(currentPerson) + '" placeholder="Name…"' +
+          ' style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;box-sizing:border-box;outline:none;" />' +
+      '</div>';
+  } else if (isLoc) {
+    extraHtml =
+      '<div style="margin-top:14px;">' +
+        '<label style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Location</label>' +
+        '<input id="saEditLoc" type="text" value="' + escHtml(currentLocStr) + '" placeholder="Location, street, or job name…"' +
+          ' style="width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;box-sizing:border-box;outline:none;" />' +
+      '</div>' +
+      millingSubHtml;
+  }
+
+  var hasSave = isVac || isLoc;
+  var btnRow =
+    '<div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;">' +
+      '<button id="saEditDel" style="min-height:48px;flex:1;background:#3a0a0a;border:1px solid rgba(255,100,100,0.4);border-radius:var(--radius);padding:10px 14px;color:#ff8080;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">🗑️ Delete</button>' +
+      '<button onclick="document.getElementById(\'saEditModal\').remove()" style="min-height:48px;flex:1;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:10px 14px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>' +
+      (hasSave ? '<button id="saEditSave" style="min-height:48px;flex:2;background:#1a3000;border:1px solid rgba(134,239,172,0.5);border-radius:var(--radius);padding:10px 14px;color:#86efac;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:800;cursor:pointer;">💾 Save Changes</button>' : '') +
+    '</div>';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'saEditModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:22px;width:90vw;max-width:400px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.6);box-sizing:border-box;">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
+        '<div style="width:11px;height:11px;border-radius:50%;background:' + escHtml(sa.color) + ';flex-shrink:0;"></div>' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--stripe);">Edit Special Action</div>' +
+      '</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;color:var(--white);margin-bottom:2px;">' + escHtml(sa.label) + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-bottom:4px;">' + escHtml(dateKey) + (slot ? ' · ' + escHtml(slot) : '') + '</div>' +
+      extraHtml +
+      btnRow +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  setTimeout(function() {
+    var inp = overlay.querySelector('input');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 60);
+
+  // Delete with confirm
+  document.getElementById('saEditDel').onclick = function() {
+    if (!confirm('Remove "' + sa.label + '" from this day?')) return;
+    overlay.remove();
+    if (isDayNote) {
+      removeDayNoteSA(dateKey, saId);
+    } else {
+      removeSchedSpecialAction(dateKey, slot, saId);
+    }
+  };
+
+  // Save changes (location / vacation SAs only)
+  var saveBtn = document.getElementById('saEditSave');
+  if (saveBtn) {
+    saveBtn.onclick = function() {
+      if (isVac) {
+        var personEl = document.getElementById('saEditPerson');
+        var person = personEl ? (personEl.value || '').trim() : '';
+        if (!person) { alert('Please enter a name.'); return; }
+        if (isDayNote) {
+          if (!schedData[dateKey]) schedData[dateKey] = {};
+          schedData[dateKey].dayNoteSALocations = Object.assign({}, schedData[dateKey].dayNoteSALocations || {});
+          schedData[dateKey].dayNoteSALocations[saId] = person;
+        } else {
+          var bd = getSlotData(dateKey, slot);
+          if (!bd.fields) bd.fields = {};
+          bd.fields._vacationPerson = person;
+          _saWriteSlot(dateKey, slot, bd);
+        }
+      } else if (isLoc) {
+        var locEl = document.getElementById('saEditLoc');
+        var locVal = locEl ? (locEl.value || '').trim() : '';
+        var subEl = document.getElementById('saEditSubSel');
+        var subCo = subEl ? (subEl.value || '') : '';
+        var locObj = isMilling ? { location: locVal, subCompany: subCo } : locVal;
+        if (isDayNote) {
+          if (!schedData[dateKey]) schedData[dateKey] = {};
+          schedData[dateKey].dayNoteSALocations = Object.assign({}, schedData[dateKey].dayNoteSALocations || {});
+          schedData[dateKey].dayNoteSALocations[saId] = locObj;
+        } else {
+          var bd2 = getSlotData(dateKey, slot);
+          if (!bd2.fields) bd2.fields = {};
+          bd2.fields._saLocations = Object.assign({}, bd2.fields._saLocations || {});
+          bd2.fields._saLocations[saId] = locObj;
+          _saWriteSlot(dateKey, slot, bd2);
+        }
+      }
+      saveSchedDataDirect();
+      renderSchedule();
+      overlay.remove();
+    };
+  }
+
+  overlay.addEventListener('mousedown', function(e) { if (e.target === overlay) overlay.remove(); });
+}
+
+// Writes updated block data back to schedData for the given slot
+function _saWriteSlot(dateKey, slot, bdata) {
+  if (!schedData[dateKey]) schedData[dateKey] = {};
+  if (slot === 'top' || slot === 'bottom') {
+    schedData[dateKey][slot] = bdata;
+  } else {
+    var idx = parseInt(slot.replace('extra_', ''));
+    if (schedData[dateKey].extras && schedData[dateKey].extras[idx]) {
+      schedData[dateKey].extras[idx].data = bdata;
+    }
+  }
+}
 
 // ── Employee roster panel for Settings → Roster → Employees ──────────────────
 function renderSettingsEmployees(el) {
