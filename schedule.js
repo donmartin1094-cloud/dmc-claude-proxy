@@ -4876,7 +4876,7 @@ function renderSchedule() {
             <div class="sched-block-header" style="${isAfterNight ? 'background:#4a4a4a;border-bottom:2px solid #666;' : ''}">
               <div class="sched-block-header-row1">
                 <span class="sched-foreman-name">${slot==='top'?(foremanRoster[0]||'Filipe Joaquim'):(foremanRoster[1]||'Louie Medeiros')}</span>
-                ${((schedData[key]?.extras)||[]).some(x=>x.parentSlot===slot) ? `<span style="font-family:'DM Mono',monospace;font-size:7px;font-weight:700;color:var(--stripe);letter-spacing:.4px;white-space:nowrap;margin-left:4px;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;padding:0 4px;" onclick="event.stopPropagation();_toggleSecondStop('${key}','${slot}',event)">${_schedSecondStopOpen[key+'_'+slot] === false ? '▶' : '▼'} 2nd Stop Today</span>` : ''}
+                ${((schedData[key]?.extras)||[]).some(x=>x.parentSlot===slot) ? `<span style="background:#f59e0b;color:#000;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;min-height:24px;white-space:nowrap;margin-left:4px;" onclick="event.stopPropagation();_toggleSecondStop('${key}','${slot}',event)">${_schedSecondStopOpen[key+'_'+slot] === false ? '▶' : '▼'} 2nd Stop Today</span>` : ''}
                 <span style="flex:1;"></span>
                 ${!lookaheadBlockout && isAdmin() ? `<button class="sched-rainout-btn${isRainedOut?' is-rained-out':''}" onclick="rainOutModal('${key}','${slot}')" title="${isRainedOut?'Remove rain-out flag':'Mark as rained out'}">🌧${isRainedOut?' Rained Out':''}</button>` : ''}
                 ${!lookaheadBlockout ? `<button onclick="generateDailyOrder('${key}','${slot}',event)" title="Generate Daily Order"
