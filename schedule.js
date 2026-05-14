@@ -10735,17 +10735,10 @@ function previewJobMixFormula(id) {
   const jm = jobMixFormulas.find(x => x.id === id);
   if (!jm) return;
 
-  var supplierPlant = escHtml((jm.supplier || '') + (jm.plant ? ' ' + jm.plant : ''));
+  var rawSupplierPlant = (jm.supplier || '') + (jm.plant ? ' ' + jm.plant : '');
+  var supplierPlant = escHtml(rawSupplierPlant);
   const infoHtml = `
     <div style="padding:20px;display:flex;flex-direction:column;gap:12px;">
-      <button onclick="_populateReportsMainList('reportsJobMix')" style="background:none;border:none;color:#a78bfa;font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;padding:8px 0;min-height:44px;text-align:left;">← Back</button>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:26px;">🧪</span>
-        <div>
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--white);">${escHtml(jm.mixName || 'Job Mix Formula')}</div>
-          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);">${escHtml(jm.mixCode || '')}</div>
-        </div>
-      </div>
       <div style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:12px 14px;display:grid;grid-template-columns:130px 1fr;gap:8px;font-family:'DM Sans',sans-serif;font-size:12px;">
         <div style="color:var(--concrete-dim);">Supplier</div><div style="color:var(--white);font-weight:700;">${supplierPlant}</div>
         <div style="color:var(--concrete-dim);">Mix Name</div><div style="color:var(--white);font-weight:700;">${escHtml(jm.mixName || '')}</div>
@@ -10756,7 +10749,7 @@ function previewJobMixFormula(id) {
     </div>`;
 
   showReportsPreview(
-    '🧪 ' + (jm.mixName || 'Job Mix Formula'),
+    '🧪 Job Mix Formula — ' + rawSupplierPlant + (jm.mixCode ? ' · ' + jm.mixCode : ''),
     infoHtml,
     () => downloadJobMixFormula(id),
     null,
@@ -10764,6 +10757,15 @@ function previewJobMixFormula(id) {
     false,
     { folder:'Job Mix Formula › ' + (jm.supplier||''), title: (jm.mixName||'') + (jm.mixCode ? ' (' + jm.mixCode + ')' : ''), badge:'Mix Formula', badgeColor:'#7ecb8f' }
   );
+
+  var _jmToolbar = document.querySelector('#reportsPreviewPane .reports-preview-toolbar');
+  if (_jmToolbar) {
+    var _jmBackBtn = document.createElement('button');
+    _jmBackBtn.style.cssText = 'background:none;border:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;padding:8px 10px;min-height:44px;white-space:nowrap;';
+    _jmBackBtn.textContent = '← Back';
+    _jmBackBtn.onclick = function() { switchTab('reportsJobMix'); };
+    _jmToolbar.appendChild(_jmBackBtn);
+  }
 }
 
 function downloadJobMixFormula(id) {
