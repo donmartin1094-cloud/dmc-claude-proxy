@@ -975,6 +975,7 @@ var schedZoom = parseFloat(localStorage.getItem('pavescope_sched_zoom') || '1.0'
 
 // ── Edit / Publish mode ──
 var schedEditMode = true;           // always true for admins — edits are local until Publish
+var _schedSecondStopOpen = {};      // keyed by dateKey+'_'+slot; undefined/true=expanded, false=collapsed
 var schedDraft = null;              // unused — kept for compat
 var schedPublishedData = null;      // snapshot before publish for conflict detection
 
@@ -2794,6 +2795,13 @@ async function fbSetDoc(docName, value) {
   }
 }
 function saveBlockTypes() { localStorage.setItem('pavescope_blocktypes', JSON.stringify(blockTypes)); _checkLocalStorageSize(); try { if(db) fbSet('blocktypes', blockTypes); } catch(e){} }
+
+function _toggleSecondStop(dateKey, slot, event) {
+  if (event) event.stopPropagation();
+  var stateKey = dateKey + '_' + slot;
+  _schedSecondStopOpen[stateKey] = (_schedSecondStopOpen[stateKey] === false) ? true : false;
+  renderSchedule();
+}
 
 // ── Extra (additional foreman) block rendering ──
 function renderExtraBlock(key, idx, ex, isLast) {
@@ -4868,7 +4876,7 @@ function renderSchedule() {
             <div class="sched-block-header" style="${isAfterNight ? 'background:#4a4a4a;border-bottom:2px solid #666;' : ''}">
               <div class="sched-block-header-row1">
                 <span class="sched-foreman-name">${slot==='top'?(foremanRoster[0]||'Filipe Joaquim'):(foremanRoster[1]||'Louie Medeiros')}</span>
-                ${((schedData[key]?.extras)||[]).some(x=>x.parentSlot===slot) ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;font-weight:700;color:var(--stripe);letter-spacing:.4px;white-space:nowrap;margin-left:4px;">· 2nd Stop Today</span>' : ''}
+                ${((schedData[key]?.extras)||[]).some(x=>x.parentSlot===slot) ? `<span style="font-family:'DM Mono',monospace;font-size:7px;font-weight:700;color:var(--stripe);letter-spacing:.4px;white-space:nowrap;margin-left:4px;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;padding:0 4px;" onclick="event.stopPropagation();_toggleSecondStop('${key}','${slot}',event)">${_schedSecondStopOpen[key+'_'+slot] === false ? '▶' : '▼'} 2nd Stop Today</span>` : ''}
                 <span style="flex:1;"></span>
                 ${!lookaheadBlockout && isAdmin() ? `<button class="sched-rainout-btn${isRainedOut?' is-rained-out':''}" onclick="rainOutModal('${key}','${slot}')" title="${isRainedOut?'Remove rain-out flag':'Mark as rained out'}">🌧${isRainedOut?' Rained Out':''}</button>` : ''}
                 ${!lookaheadBlockout ? `<button onclick="generateDailyOrder('${key}','${slot}',event)" title="Generate Daily Order"
@@ -4923,7 +4931,7 @@ function renderSchedule() {
             <button class="sched-day-add-btn" onclick="openAddForemanModal('${key}')" title="Add foreman crew for this day">+</button>
           </div>
           ${renderBlock('top')}
-          <div class="sched-second-stops-wrap" data-stop-slot="top" style="order:2;width:100%;box-sizing:border-box;align-self:stretch;">${_topStops.map(({ex,i}) => renderExtraBlock(key, i, ex, false)).join('')}</div>
+          <div class="sched-second-stops-wrap" data-stop-slot="top" style="order:2;width:100%;box-sizing:border-box;align-self:stretch;${_schedSecondStopOpen[key+'_top'] === false ? 'display:none;' : ''}">${_topStops.map(({ex,i}) => renderExtraBlock(key, i, ex, false)).join('')}</div>
           ${(()=>{
             const dn = schedData[key]||{};
             const dayNoteSA = dn.dayNoteSA||[];
@@ -4956,7 +4964,7 @@ function renderSchedule() {
             </div>`;
           })()}
           ${renderBlock('bottom')}
-          <div class="sched-second-stops-wrap" data-stop-slot="bottom" style="order:4;width:100%;box-sizing:border-box;align-self:stretch;">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}</div>
+          <div class="sched-second-stops-wrap" data-stop-slot="bottom" style="order:4;width:100%;box-sizing:border-box;align-self:stretch;${_schedSecondStopOpen[key+'_bottom'] === false ? 'display:none;' : ''}">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}</div>
           ${_otherExtras.map(({ex,i}) => renderExtraBlock(key, i, ex, i===_lastExtraI)).join('')}
         </div>`;
     }).join('');
