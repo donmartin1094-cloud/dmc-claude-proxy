@@ -728,7 +728,13 @@ function renderReports() {
           ...(typeof isAdmin === 'function' && (isAdmin() || (typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager')) ? [
             { icon:'⏱', label:'Time Reports', sub:'Employee hours by date range', count:(function(){var _r=[];try{_r=JSON.parse(localStorage.getItem('dmc_foreman_reports')||'[]');}catch(e){}return _r.length;})(), tab:'reportsTimeReports', color:'#c084f5', prev:null },
           ] : []),
-        ].map(cat => `
+        ].filter(function(cat) {
+          var _qcMgrAllowedCards = ['reportsJobMix', 'reportsQC', 'reportsTimeReports'];
+          if (typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager') {
+            return _qcMgrAllowedCards.indexOf(cat.tab) !== -1;
+          }
+          return true;
+        }).map(cat => `
           <div class="_rpGallCard" style="width:148px;display:flex;flex-direction:column;gap:0;position:relative;">
             <!-- "Folder" tab top -->
             <div style="background:${cat.color}22;border:2px solid ${cat.color}55;border-radius:10px 10px 0 0;height:10px;width:60%;"></div>
@@ -764,6 +770,12 @@ function renderReports() {
 
 
 function _populateReportsMainList(tabId) {
+  var _qcMgrAllowedCards = ['reportsJobMix', 'reportsQC', 'reportsTimeReports'];
+  if (typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager' && _qcMgrAllowedCards.indexOf(tabId) === -1) {
+    window._activeReportsSubTab = null;
+    renderReports();
+    return;
+  }
   const gallery = document.getElementById('reportsGallery');
   const pane    = document.getElementById('reportsPreviewPane');
   if (!pane) return;
