@@ -10753,9 +10753,7 @@ function previewJobMixFormula(id) {
         <div style="color:var(--concrete-dim);">Uploaded</div><div style="color:var(--white);">${escHtml(uploaded)}</div>
         <div style="color:var(--concrete-dim);">Uploaded By</div><div style="color:var(--white);">${escHtml(jm.uploadedBy || '')}</div>
       </div>
-      ${(_isPdfFile(jm)
-        ? '<iframe src="' + escHtml(jm.fileUrl) + '" style="width:100%;height:60vh;border:1px solid var(--asphalt-light);border-radius:var(--radius);background:#fff;"></iframe>'
-        : '<div style="font-size:11px;color:var(--concrete-dim);line-height:1.6;">Word documents cannot be fully rendered in-browser. Use Download to open the source formula document.</div>')}
+      <button onclick="window.open('${escHtml(jm.fileUrl)}','_blank')" style="width:100%;min-height:48px;background:#a78bfa;border:none;border-radius:6px;color:#fff;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;padding:12px 24px;cursor:pointer;letter-spacing:.5px;">${_isPdfFile(jm) ? '📄 Open Document' : '📄 Download Document'}</button>
     </div>`;
 
   showReportsPreview(
