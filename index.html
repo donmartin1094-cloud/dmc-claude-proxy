@@ -5915,8 +5915,6 @@ function _homeDailyOverviewSectionHtml() {
   var today = new Date();
   var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
   var todayData = (typeof schedData !== 'undefined') ? (schedData[todayKey] || {}) : {};
-  var hasRealData = todayData.top && todayData.top.type && todayData.top.type !== 'blank';
-  if (!hasRealData) todayData = _homeDailyFakeData();
 
   var EQ_ICONS = { paver:'🟡', roller:'🔵', excavator:'🟠', dozer:'🟤', grader:'🟣', milling_machine:'⬛', loader:'🟢' };
 
