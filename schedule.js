@@ -8701,6 +8701,36 @@ var jobMixFormulas = (function(){ try { const p = JSON.parse(localStorage.getIte
 var jobMixViewMode = 'cards'; // 'cards' | 'supplier'
 var jobMixSupplierCollapsed = {};
 
+const JOB_MIX_FOLDERS_KEY = 'pavescope_job_mix_folders';
+var jobMixFolders = (function(){ try { var p = JSON.parse(localStorage.getItem(JOB_MIX_FOLDERS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+var _jmNavSupplier = null;
+var _jmNavPlant    = null;
+
+function saveJobMixFolders() {
+  localStorage.setItem(JOB_MIX_FOLDERS_KEY, JSON.stringify(jobMixFolders));
+  try { if (db) fbSet('job_mix_folders', jobMixFolders); } catch(e) { _logFbError('saveJobMixFolders', e); }
+}
+function _jmGetSuppliers() {
+  var seen = {};
+  (jobMixFolders||[]).filter(function(f){ return f.type === 'supplier'; }).forEach(function(f){ seen[f.name] = true; });
+  (jobMixFormulas||[]).forEach(function(jm){ if (jm.supplier) seen[jm.supplier] = true; });
+  return Object.keys(seen).sort(function(a,b){ return a.localeCompare(b); });
+}
+function _jmGetPlants(supplier) {
+  var seen = {};
+  (jobMixFolders||[]).filter(function(f){ return f.type === 'plant' && f.supplier === supplier; }).forEach(function(f){ seen[f.name] = true; });
+  (jobMixFormulas||[]).filter(function(jm){ return jm.supplier === supplier; }).forEach(function(jm){ seen[jm.plant || ''] = true; });
+  return Object.keys(seen).sort(function(a,b){ if (!a) return 1; if (!b) return -1; return a.localeCompare(b); });
+}
+function _jmGetFormulas(supplier, plant) {
+  return (jobMixFormulas||[]).filter(function(jm){ return jm.supplier === supplier && (jm.plant||'') === (plant||''); });
+}
+function _jmNavigate(supplier, plant) {
+  _jmNavSupplier = (supplier !== undefined ? supplier : null);
+  _jmNavPlant    = (plant    !== undefined ? plant    : null);
+  if (window._activeReportsSubTab === 'reportsJobMix') _populateReportsMainList('reportsJobMix');
+}
+
 function saveJobMixFormulas() {
   const slim = jobMixFormulas.map(j => {
     const { fileData, ...rest } = j;
@@ -10500,11 +10530,15 @@ function downloadLookahead(id) {
   downloadBlob(blob, la.fileName);
 }
 
-function openJobMixFormulaModal() {
+function openJobMixFormulaModal(preSupplier, prePlant) {
   document.getElementById('jobMixModal')?.remove();
   const modal = document.createElement('div');
   modal.id = 'jobMixModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const supVal  = preSupplier || '';
+  const supRO   = preSupplier ? ' readonly style="width:100%;opacity:0.7;"' : ' style="width:100%;"';
+  const pntVal  = prePlant  != null ? prePlant  : '';
+  const pntRO   = prePlant  != null ? ' readonly style="width:100%;opacity:0.7;"' : ' style="width:100%;"';
   modal.innerHTML = `
     <div class="modal" style="max-width:540px;width:100%;max-height:90vh;overflow-y:auto;">
       <div class="modal-title" style="margin-bottom:6px;">🧪 Add Job Mix Formula</div>
@@ -10512,7 +10546,11 @@ function openJobMixFormulaModal() {
 
       <div class="form-group" style="margin-bottom:10px;">
         <label class="form-label">Supplier *</label>
-        <input id="jmSupplier" class="form-input" placeholder="e.g. Aggregate Industries" style="width:100%;" />
+        <input id="jmSupplier" class="form-input" placeholder="e.g. Aggregate Industries" value="${escHtml(supVal)}"${supRO} />
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label class="form-label">Plant *</label>
+        <input id="jmPlant" class="form-input" placeholder="e.g. Randolph Plant" value="${escHtml(pntVal)}"${pntRO} />
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="form-group" style="margin-bottom:10px;">
@@ -10543,7 +10581,10 @@ function openJobMixFormulaModal() {
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) closeJobMixFormulaModal(); });
   document.body.appendChild(modal);
-  setTimeout(() => document.getElementById('jmSupplier')?.focus(), 60);
+  setTimeout(() => {
+    const f = preSupplier ? (prePlant != null ? document.getElementById('jmMixName') : document.getElementById('jmPlant')) : document.getElementById('jmSupplier');
+    if (f) f.focus();
+  }, 60);
 }
 
 function closeJobMixFormulaModal() {
@@ -10552,17 +10593,19 @@ function closeJobMixFormulaModal() {
 
 async function saveJobMixFormulaFromModal() {
   const supplier = document.getElementById('jmSupplier')?.value.trim() || '';
-  const mixName = document.getElementById('jmMixName')?.value.trim() || '';
-  const mixCode = document.getElementById('jmMixCode')?.value.trim() || '';
+  const plant    = document.getElementById('jmPlant')?.value.trim() || '';
+  const mixName  = document.getElementById('jmMixName')?.value.trim() || '';
+  const mixCode  = document.getElementById('jmMixCode')?.value.trim() || '';
   const fileInput = document.getElementById('jmFile');
   const file = fileInput?.files?.[0];
 
   if (!supplier) { document.getElementById('jmSupplier')?.focus(); return; }
-  if (!mixName) { document.getElementById('jmMixName')?.focus(); return; }
-  if (!mixCode) { document.getElementById('jmMixCode')?.focus(); return; }
+  if (!plant)    { document.getElementById('jmPlant')?.focus();    return; }
+  if (!mixName)  { document.getElementById('jmMixName')?.focus();  return; }
+  if (!mixCode)  { document.getElementById('jmMixCode')?.focus();  return; }
   if (!file) { alert('Please select a document to upload.'); fileInput?.focus(); return; }
 
-  const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+  const isPdf  = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
   const isWord = /\.(doc|docx)$/i.test(file.name) ||
     file.type === 'application/msword' ||
     file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -10571,15 +10614,17 @@ async function saveJobMixFormulaFromModal() {
     return;
   }
 
-  const btn = document.getElementById('jmSaveBtn');
+  const btn     = document.getElementById('jmSaveBtn');
   const progWrap = document.getElementById('jmUploadProgressWrap');
-  const progBar = document.getElementById('jmUploadProgressBar');
-  const progTxt = document.getElementById('jmUploadProgressText');
+  const progBar  = document.getElementById('jmUploadProgressBar');
+  const progTxt  = document.getElementById('jmUploadProgressText');
   if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
   if (progWrap) progWrap.style.display = '';
 
   try {
-    const folder = 'job_mix_formulas/' + supplier.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const folder = 'job_mix_formulas/' +
+      supplier.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '/' +
+      plant.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     console.log('[JobMix] Starting upload:', file.name, file.type, file.size, 'bytes → folder:', folder, 'storage:', !!storage);
     const { url, path } = await uploadFileToStorage(file, folder, pct => {
       const n = Math.max(0, Math.min(100, Math.round((pct || 0) * 100)));
@@ -10590,15 +10635,16 @@ async function saveJobMixFormulaFromModal() {
     const entry = {
       id: 'jmf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       supplier,
+      plant,
       mixName,
       mixCode,
-      fileName: file.name,
-      fileType: file.type,
+      fileName:   file.name,
+      fileType:   file.type,
       fileSizeKB: Math.round(file.size / 1024),
-      fileUrl: url,
+      fileUrl:    url,
       storagePath: path,
-      uploadedAt: Date.now(),
-      uploadedBy: localStorage.getItem('dmc_u') || 'Unknown'
+      uploadedAt:  Date.now(),
+      uploadedBy:  localStorage.getItem('dmc_u') || 'Unknown'
     };
 
     jobMixFormulas.unshift(entry);
@@ -10606,7 +10652,7 @@ async function saveJobMixFormulaFromModal() {
     closeJobMixFormulaModal();
     if (activeTab === 'reports' || activeTab === 'reportsJobMix') renderReports();
     if (typeof pushNotif === 'function') {
-      pushNotif('success', '🧪 Job Mix Formula Saved', `${supplier} · ${mixName} (${mixCode}) uploaded to Reports.`, null);
+      pushNotif('success', '🧪 Job Mix Formula Saved', `${supplier} › ${plant} › ${mixName} (${mixCode}) uploaded to Reports.`, null);
     }
   } catch (e) {
     _logFbError('saveJobMixFormulaFromModal', e);
@@ -10700,6 +10746,103 @@ async function deleteJobMixFormula(id) {
 
 // Keep old stub name for safety
 function scheduleDrop() {}
+
+function openJobMixAddSupplierModal() {
+  document.getElementById('_jmSupModal')?.remove();
+  const m = document.createElement('div');
+  m.id = '_jmSupModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = `
+    <div class="modal" style="max-width:400px;width:100%;">
+      <div class="modal-title">🏭 New Supplier Folder</div>
+      <div class="form-group" style="margin-top:16px;">
+        <label class="form-label">Supplier Name *</label>
+        <input id="_jmSupName" class="form-input" placeholder="e.g. Aggregate Industries" style="width:100%;" />
+      </div>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('_jmSupModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="_jmSaveSupplier()">Create Folder</button>
+      </div>
+    </div>`;
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  setTimeout(() => document.getElementById('_jmSupName')?.focus(), 60);
+}
+
+function _jmSaveSupplier() {
+  const name = (document.getElementById('_jmSupName')?.value || '').trim();
+  if (!name) { document.getElementById('_jmSupName')?.focus(); return; }
+  if (_jmGetSuppliers().some(s => s.toLowerCase() === name.toLowerCase())) {
+    alert('A supplier folder with that name already exists.'); return;
+  }
+  jobMixFolders.push({ type: 'supplier', name: name, createdAt: Date.now() });
+  saveJobMixFolders();
+  document.getElementById('_jmSupModal')?.remove();
+  _jmNavigate(null);
+}
+
+function openJobMixAddPlantModal(supplier) {
+  document.getElementById('_jmPlantModal')?.remove();
+  const m = document.createElement('div');
+  m.id = '_jmPlantModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const safeS = supplier.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  m.innerHTML = `
+    <div class="modal" style="max-width:400px;width:100%;">
+      <div class="modal-title">🌿 New Plant Folder</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:14px;">Supplier: ${escHtml(supplier)}</div>
+      <div class="form-group">
+        <label class="form-label">Plant Name *</label>
+        <input id="_jmPlantName" class="form-input" placeholder="e.g. Randolph Plant" style="width:100%;" />
+      </div>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('_jmPlantModal').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="_jmSavePlant('${safeS}')">Create Plant Folder</button>
+      </div>
+    </div>`;
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+  document.body.appendChild(m);
+  setTimeout(() => document.getElementById('_jmPlantName')?.focus(), 60);
+}
+
+function _jmSavePlant(supplier) {
+  const name = (document.getElementById('_jmPlantName')?.value || '').trim();
+  if (!name) { document.getElementById('_jmPlantName')?.focus(); return; }
+  if (_jmGetPlants(supplier).some(p => p.toLowerCase() === name.toLowerCase())) {
+    alert('A plant folder with that name already exists for this supplier.'); return;
+  }
+  jobMixFolders.push({ type: 'plant', supplier: supplier, name: name, createdAt: Date.now() });
+  saveJobMixFolders();
+  document.getElementById('_jmPlantModal')?.remove();
+  _jmNavigate(supplier);
+}
+
+async function deleteJobMixSupplier(supplierName) {
+  if (!confirm('Delete supplier "' + supplierName + '" and ALL its plant folders and formulas? This cannot be undone.')) return;
+  const toDelete = (jobMixFormulas||[]).filter(jm => jm.supplier === supplierName);
+  for (const jm of toDelete) {
+    try { if (jm.storagePath) await deleteFileFromStorage(jm.storagePath); } catch(e) { _logFbError('deleteJobMixSupplier.storage', e); }
+  }
+  jobMixFormulas = (jobMixFormulas||[]).filter(jm => jm.supplier !== supplierName);
+  jobMixFolders  = (jobMixFolders||[]).filter(f => !((f.type === 'supplier' && f.name === supplierName) || (f.type === 'plant' && f.supplier === supplierName)));
+  saveJobMixFormulas();
+  saveJobMixFolders();
+  _jmNavigate(null);
+}
+
+async function deleteJobMixPlant(supplierName, plantName) {
+  const label = plantName || '(Unassigned)';
+  if (!confirm('Delete plant folder "' + label + '" and ALL its formulas? This cannot be undone.')) return;
+  const toDelete = _jmGetFormulas(supplierName, plantName);
+  for (const jm of toDelete) {
+    try { if (jm.storagePath) await deleteFileFromStorage(jm.storagePath); } catch(e) { _logFbError('deleteJobMixPlant.storage', e); }
+  }
+  jobMixFormulas = (jobMixFormulas||[]).filter(jm => !(jm.supplier === supplierName && (jm.plant||'') === (plantName||'')));
+  jobMixFolders  = (jobMixFolders||[]).filter(f => !(f.type === 'plant' && f.supplier === supplierName && f.name === plantName));
+  saveJobMixFormulas();
+  saveJobMixFolders();
+  _jmNavigate(supplierName);
+}
 
 // ════════════════════════════════════════
 //  BACKLOG SYSTEM

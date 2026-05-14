@@ -817,26 +817,12 @@ function _populateReportsMainList(tabId) {
     pane.appendChild(certWrap);
     return; // skip generic item renderer
   } else if (tabId === 'reportsJobMix') {
-    title = 'Job Mix Formula'; icon = '🧪';
-    items = (jobMixFormulas||[]).sort((a,b)=>(b.uploadedAt||0)-(a.uploadedAt||0))
-      .map(jm=>({
-        id:jm.id,
-        name:jm.mixName || 'Job Mix Formula',
-        icon:'🧪',
-        supplier: jm.supplier || 'Unknown Supplier',
-        mixCode: jm.mixCode || '',
-        fileName: jm.fileName || '',
-        uploadedBy: jm.uploadedBy || '',
-        uploadedAt: jm.uploadedAt || 0,
-        meta:(jm.supplier||'') + (jm.mixCode ? ' · ' + jm.mixCode : ''),
-        action:"previewJobMixFormula('"+jm.id+"')",
-        dl:"downloadJobMixFormula('"+jm.id+"')",
-        del:"deleteJobMixFormula('"+jm.id+"')"
-      }));
-    headerExtra =
-      '<button onclick="setJobMixViewMode(\'cards\')" style="background:'+ (jobMixViewMode==='cards'?'rgba(245,197,24,0.12)':'none') +';border:1px solid '+ (jobMixViewMode==='cards'?'rgba(245,197,24,0.5)':'var(--asphalt-light)') +';border-radius:3px;color:'+ (jobMixViewMode==='cards'?'var(--stripe)':'var(--concrete-dim)') +';font-size:10px;padding:3px 8px;cursor:pointer;">▦ Cards</button>'+
-      '<button onclick="setJobMixViewMode(\'supplier\')" style="background:'+ (jobMixViewMode==='supplier'?'rgba(245,197,24,0.12)':'none') +';border:1px solid '+ (jobMixViewMode==='supplier'?'rgba(245,197,24,0.5)':'var(--asphalt-light)') +';border-radius:3px;color:'+ (jobMixViewMode==='supplier'?'var(--stripe)':'var(--concrete-dim)') +';font-size:10px;padding:3px 8px;cursor:pointer;">▤ Supplier Stacks</button>'+
-      '<button onclick="openJobMixFormulaModal()" style="background:var(--stripe);border:1px solid rgba(245,197,24,0.5);border-radius:3px;color:var(--asphalt);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;">+ Add New</button>';
+    const jmWrap = document.createElement('div');
+    jmWrap.id = '_jmBrowserWrap';
+    jmWrap.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;';
+    pane.appendChild(jmWrap);
+    _renderJobMixBrowser(jmWrap);
+    return;
   } else if (tabId === 'reportsTimeReports') {
     var trWrap = document.createElement('div');
     trWrap.id = 'trListWrap';
@@ -861,58 +847,6 @@ function _populateReportsMainList(tabId) {
   ).join('') : '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-size:12px;">No '+escHtml(title)+' yet.</div>';
 
   if (_doGroupedRows) rows = _doGroupedRows;
-
-  if (tabId === 'reportsJobMix' && items.length) {
-    if (jobMixViewMode === 'cards') {
-      rows = '<div style="padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">' + items.map(it =>
-        '<div data-preview-id="'+escHtml(it.id)+'" onclick="'+it.action+'" style="cursor:pointer;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px;">'+
-          '<div style="display:flex;align-items:center;gap:8px;">'+
-            '<span style="font-size:18px;">🧪</span>'+
-            '<div style="flex:1;min-width:0;">'+
-              '<div style="font-size:12px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(it.name)+'</div>'+
-              '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+escHtml(it.mixCode||'')+'</div>'+
-            '</div>'+
-          '</div>'+
-          '<div style="font-size:11px;color:var(--concrete-dim);">🏭 '+escHtml(it.supplier)+'</div>'+
-          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(it.fileName)+'</div>'+
-          '<div style="display:flex;gap:6px;margin-top:4px;">'+
-            '<button class="reports-file-dl" onclick="event.stopPropagation();'+it.action+'" style="flex:1;">👁 Preview</button>'+
-            '<button class="reports-file-dl" onclick="event.stopPropagation();'+it.dl+'" style="flex:1;">⬇ Download</button>'+
-            '<button class="reports-file-del" onclick="event.stopPropagation();'+it.del+'">✕</button>'+
-          '</div>'+
-        '</div>'
-      ).join('') + '</div>';
-    } else {
-      const grouped = {};
-      items.forEach(it => {
-        if (!grouped[it.supplier]) grouped[it.supplier] = [];
-        grouped[it.supplier].push(it);
-      });
-      rows = '<div style="padding:10px 12px;">' + Object.keys(grouped).sort((a,b)=>a.localeCompare(b)).map(supplier => {
-        const sKey = '__jm_sup__' + supplier;
-        const sOpen = jobMixSupplierCollapsed[sKey] !== true;
-        const files = grouped[supplier];
-        const inner = sOpen ? files.map(it =>
-          '<div class="reports-file-row" data-preview-id="'+escHtml(it.id)+'" tabindex="0" onclick="'+it.action+'" style="margin:0 0 0 10px;">'+
-            '<span style="font-size:13px;">🧪</span>'+
-            '<div class="reports-file-name" style="flex:1;">'+escHtml(it.name)+'</div>'+
-            '<div class="reports-file-date">'+escHtml(it.mixCode)+'</div>'+
-            '<button class="reports-file-dl" onclick="event.stopPropagation();'+it.action+'">👁</button>'+
-            '<button class="reports-file-dl" onclick="event.stopPropagation();'+it.dl+'">⬇</button>'+
-            '<button class="reports-file-del" onclick="event.stopPropagation();'+it.del+'">✕</button>'+
-          '</div>'
-        ).join('') : '';
-        return '<div class="reports-folder" style="margin-bottom:8px;">'+
-          '<div class="reports-folder-header" onclick="toggleJobMixSupplierStack(\''+supplier.replace(/'/g,"\\'")+'\')">'+
-            '<span style="font-size:14px;">🏭</span>'+
-            '<div class="reports-folder-name">'+escHtml(supplier)+'</div>'+
-            '<div class="reports-folder-count">'+files.length+'</div>'+
-            '<span style="color:var(--concrete-dim);font-size:12px;">'+(sOpen?'▲':'▼')+'</span>'+
-          '</div>'+inner+
-        '</div>';
-      }).join('') + '</div>';
-    }
-  }
 
   _injectReportsPrintStyles();
   var _rplPrintBtn = '<button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;white-space:nowrap;">🖨 Print / Save PDF</button>';
@@ -1558,6 +1492,8 @@ function _rpBackToGallery() {
   document.getElementById('_doCardView')?.remove();
   document.getElementById('frListWrap')?.remove();
   document.getElementById('trListWrap')?.remove();
+  document.getElementById('_jmBrowserWrap')?.remove();
+  if (typeof _jmNavSupplier !== 'undefined') { _jmNavSupplier = null; _jmNavPlant = null; }
   const bc = document.getElementById('reportsPreviewBreadcrumb');
   if (bc) bc.style.display = 'none';
   const g = document.getElementById('reportsGallery');
@@ -1569,6 +1505,134 @@ function _rpBackToGallery() {
   });
 }
 
+
+function _renderJobMixBrowser(wrap) {
+  var supplier = (typeof _jmNavSupplier !== 'undefined') ? _jmNavSupplier : null;
+  var plant    = (typeof _jmNavPlant    !== 'undefined') ? _jmNavPlant    : null;
+  var btnGhost   = 'background:none;border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-size:11px;padding:3px 10px;cursor:pointer;white-space:nowrap;';
+  var btnPrimary = 'background:var(--stripe);border:1px solid rgba(245,197,24,0.5);border-radius:3px;color:var(--asphalt);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap;';
+  var btnGreen   = 'background:rgba(126,203,143,0.12);border:1px solid rgba(126,203,143,0.4);border-radius:3px;color:#7ecb8f;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap;';
+  var btnRed     = 'background:rgba(217,79,61,0.08);border:1px solid rgba(217,79,61,0.35);border-radius:3px;color:#d94f3d;font-size:10px;padding:3px 8px;cursor:pointer;white-space:nowrap;';
+  var hdrStyle   = 'padding:12px 18px 10px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;display:flex;align-items:center;gap:10px;';
+  var bodyStyle  = 'flex:1;overflow-y:auto;padding:10px 12px;';
+  var html = '';
+
+  if (supplier === null) {
+    // ── Level 1: Supplier list ─────────────────────────────────────────────
+    var suppliers = (typeof _jmGetSuppliers === 'function') ? _jmGetSuppliers() : [];
+    html =
+      '<div style="'+hdrStyle+'">'+
+        '<span style="font-size:18px;">🧪</span>'+
+        '<div>'+
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--white);">Job Mix Formulas</div>'+
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+suppliers.length+' SUPPLIER'+(suppliers.length!==1?'S':'')+'</div>'+
+        '</div>'+
+        '<div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          '<button style="'+btnPrimary+'" onclick="openJobMixAddSupplierModal()">+ New Supplier</button>'+
+          '<button style="'+btnGhost+'" onclick="_rpBackToGallery()">← All Reports</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="'+bodyStyle+'">'+(suppliers.length
+        ? suppliers.map(function(sup) {
+            var plants    = (typeof _jmGetPlants === 'function') ? _jmGetPlants(sup) : [];
+            var totalFmls = (typeof jobMixFormulas !== 'undefined' ? jobMixFormulas : []).filter(function(jm){ return jm.supplier === sup; }).length;
+            var safeS = sup.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            return '<div class="reports-folder" style="margin-bottom:8px;">'+
+              '<div class="reports-folder-header" onclick="_jmNavigate(\''+safeS+'\')" style="cursor:pointer;">'+
+                '<span style="font-size:14px;">🏭</span>'+
+                '<div class="reports-folder-name">'+escHtml(sup)+'</div>'+
+                '<div class="reports-folder-count">'+plants.length+' plant'+(plants.length!==1?'s':'')+' · '+totalFmls+' file'+(totalFmls!==1?'s':'')+'</div>'+
+                '<span style="color:var(--concrete-dim);font-size:12px;">▶</span>'+
+              '</div>'+
+            '</div>';
+          }).join('')
+        : '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;line-height:2;">No supplier folders yet.<br>'+
+            '<button style="'+btnPrimary+'" onclick="openJobMixAddSupplierModal()">+ Create First Supplier</button></div>'
+      )+'</div>';
+
+  } else if (plant === null) {
+    // ── Level 2: Plant list ────────────────────────────────────────────────
+    var plants = (typeof _jmGetPlants === 'function') ? _jmGetPlants(supplier) : [];
+    var safeS2 = supplier.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html =
+      '<div style="'+hdrStyle+'">'+
+        '<span style="font-size:18px;">🏭</span>'+
+        '<div>'+
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--white);">'+escHtml(supplier)+'</div>'+
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+plants.length+' PLANT'+(plants.length!==1?'S':'')+'</div>'+
+        '</div>'+
+        '<div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          '<button style="'+btnGreen+'" onclick="openJobMixAddPlantModal(\''+safeS2+'\')">+ New Plant</button>'+
+          '<button style="'+btnRed+'" onclick="deleteJobMixSupplier(\''+safeS2+'\')">✕ Delete Supplier</button>'+
+          '<button style="'+btnGhost+'" onclick="_jmNavigate(null)">← Suppliers</button>'+
+          '<button style="'+btnGhost+'" onclick="_rpBackToGallery()">← All Reports</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="'+bodyStyle+'">'+(plants.length
+        ? plants.map(function(pnt) {
+            var formulas = (typeof _jmGetFormulas === 'function') ? _jmGetFormulas(supplier, pnt) : [];
+            var pLabel   = pnt || '(Unassigned)';
+            var safeP    = pnt.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            return '<div class="reports-folder" style="margin-bottom:8px;">'+
+              '<div class="reports-folder-header" onclick="_jmNavigate(\''+safeS2+'\',\''+safeP+'\')" style="cursor:pointer;">'+
+                '<span style="font-size:14px;">🌿</span>'+
+                '<div class="reports-folder-name">'+escHtml(pLabel)+'</div>'+
+                '<div class="reports-folder-count">'+formulas.length+' file'+(formulas.length!==1?'s':'')+'</div>'+
+                '<span style="color:var(--concrete-dim);font-size:12px;">▶</span>'+
+              '</div>'+
+            '</div>';
+          }).join('')
+        : '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;line-height:2;">No plant folders yet.<br>'+
+            '<button style="'+btnGreen+'" onclick="openJobMixAddPlantModal(\''+safeS2+'\')">+ Create First Plant</button></div>'
+      )+'</div>';
+
+  } else {
+    // ── Level 3: Formula list ──────────────────────────────────────────────
+    var plantLabel = plant || '(Unassigned)';
+    var formulas   = (typeof _jmGetFormulas === 'function') ? _jmGetFormulas(supplier, plant) : [];
+    var safeS3     = supplier.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var safeP3     = plant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html =
+      '<div style="'+hdrStyle+'">'+
+        '<span style="font-size:18px;">🌿</span>'+
+        '<div>'+
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--white);">'+escHtml(plantLabel)+'</div>'+
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+escHtml(supplier)+' · '+formulas.length+' FORMULA'+(formulas.length!==1?'S':'')+'</div>'+
+        '</div>'+
+        '<div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          '<button style="'+btnPrimary+'" onclick="openJobMixFormulaModal(\''+safeS3+'\',\''+safeP3+'\')">+ Upload Formula</button>'+
+          '<button style="'+btnRed+'" onclick="deleteJobMixPlant(\''+safeS3+'\',\''+safeP3+'\')">✕ Delete Plant</button>'+
+          '<button style="'+btnGhost+'" onclick="_jmNavigate(\''+safeS3+'\')">← '+escHtml(supplier)+'</button>'+
+          '<button style="'+btnGhost+'" onclick="_rpBackToGallery()">← All Reports</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="'+bodyStyle+'">'+(formulas.length
+        ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:4px;">'+
+            formulas.map(function(jm) {
+              var safeId = jm.id.replace(/'/g,"\\'");
+              return '<div data-preview-id="'+escHtml(jm.id)+'" onclick="previewJobMixFormula(\''+safeId+'\')" style="cursor:pointer;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px;">'+
+                '<div style="display:flex;align-items:center;gap:8px;">'+
+                  '<span style="font-size:18px;">🧪</span>'+
+                  '<div style="flex:1;min-width:0;">'+
+                    '<div style="font-size:12px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(jm.mixName||'Formula')+'</div>'+
+                    '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">'+escHtml(jm.mixCode||'')+'</div>'+
+                  '</div>'+
+                '</div>'+
+                '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(jm.fileName||'')+'</div>'+
+                '<div style="display:flex;gap:6px;margin-top:4px;">'+
+                  '<button class="reports-file-dl" onclick="event.stopPropagation();previewJobMixFormula(\''+safeId+'\')" style="flex:1;">👁 Preview</button>'+
+                  '<button class="reports-file-dl" onclick="event.stopPropagation();downloadJobMixFormula(\''+safeId+'\')" style="flex:1;">⬇ Download</button>'+
+                  '<button class="reports-file-del" onclick="event.stopPropagation();deleteJobMixFormula(\''+safeId+'\')">✕</button>'+
+                '</div>'+
+              '</div>';
+            }).join('')+
+          '</div>'
+        : '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;line-height:2;">No formulas in this plant yet.<br>'+
+            '<button style="'+btnPrimary+'" onclick="openJobMixFormulaModal(\''+safeS3+'\',\''+safeP3+'\')">+ Upload First Formula</button></div>'
+      )+'</div>';
+  }
+  wrap.innerHTML = html;
+}
 
 // ── Reports gallery: blank document preview HTML (GLOBAL scope) ──────────────
 function _makeBlankDocPreview(type) {
