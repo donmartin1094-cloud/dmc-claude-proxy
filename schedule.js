@@ -2813,9 +2813,9 @@ function renderExtraBlock(key, idx, ex, isLast) {
         const matItems = parseMaterialField(fields[f.key] || '');
         chips = matItems.map(item => {
           const label = materialChipLabel(item);
-          return `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;">
+          return `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;cursor:pointer;" onclick="openMixTypeChipMenu('${key}','${slot}','${item.name.replace(/'/g,"\\'")}',this)" title="Edit or remove">
             🪨 ${label}
-            <button class="op-chip-del" style="color:#888;" onclick="removeMaterialItem('${key}','${slot}','${item.name.replace(/'/g,"\\'")}',this)" title="Remove">✕</button>
+            <button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();removeMaterialItem('${key}','${slot}','${item.name.replace(/'/g,"\\'")}',this)" title="Remove">✕</button>
           </span>`;
         }).join('');
       } else {
@@ -4097,7 +4097,7 @@ function openMatSearchFromInline(inputEl, key, slot) {
 }
 
 function openMixTypeChipMenu(key, slot, itemName, chipEl) {
-  openUnifiedSchedPicker({ type:'material', title:'🪨 Material & Tonnage', key, slot, field:'material' });
+  openUnifiedSchedPicker({ type:'material', title:'🪨 Material & Tonnage', key:key, slot:slot, field:'material' });
 }
 
 function openPickerDropdown(key, slot, field, type) {
