@@ -590,7 +590,7 @@ function renderReports() {
         byUploader[u].push(r);
       });
       if (!Object.keys(byUploader).length) {
-        frInnerHtml = '<div style="padding:16px 20px;font-size:12px;color:var(--concrete-dim);">No foremen reports yet. Upload QC Reports from the QC tab.</div>';
+        frInnerHtml = '<div style="padding:16px 20px;font-size:12px;color:var(--concrete-dim);">No foremen reports yet. Upload QC Reports from the QC section.</div>';
       } else {
         frInnerHtml = Object.keys(byUploader).sort().map(uploader => {
           const rpts = byUploader[uploader].sort((a,b) => (b.uploadedAt||0) - (a.uploadedAt||0));
@@ -719,7 +719,7 @@ function renderReports() {
           { icon:'📄', label:'Daily Orders',       sub:'Generated from schedule',   count:_doCnt,  tab:'reportsDailyOrders', color:'#5ab4f5',       prev:'daily'      },
           { icon:'📊', label:'2 Week Look Aheads', sub:'Lookahead planning sheets', count:_laCnt,  tab:'reportsTwoWeek',     color:'#7ecb8f',       prev:'lookahead'  },
           { icon:'👷', label:"Foremen's Reports",  sub:'Job completion reports',    count:_qcCnt,  tab:'reportsForemens',    color:'var(--orange)', prev:'foreman'    },
-          ...(typeof canManageQC === 'function' && canManageQC() ? [{ icon:'🔬', label:'QC Reports', sub:'Quality control files', count:_qcCnt, tab:'reportsQC', color:'var(--orange)', prev:'qc' }] : []),
+          ...(typeof canManageQC === 'function' && canManageQC() ? [{ icon:'🔬', label:'QC', sub:'Quality control files', count:_qcCnt, tab:'reportsQC', color:'var(--orange)', prev:'qc' }] : []),
           { icon:'🧪', label:'Job Mix Formula',    sub:'Supplier formula docs',     count:_jmCnt,  tab:'reportsJobMix',      color:'#7ecb8f',       prev:'jobmix'     },
           { icon:'📋', label:'AIA Requisitions',   sub:'Payment applications',      count:_aiaCnt, tab:'apAia',              color:'#f5c518',       prev:'tack'       },
           { icon:'💬', label:'Chat History',       sub:'Team message archive',      count:_chatCnt,tab:'chat',               color:'#c084f5',       prev:null         },
@@ -1856,8 +1856,7 @@ function openBlankReportPreview(previewType) {
 var QC_REPORTS_KEY = 'pavescope_qc_reports';
 // Shape: [{ id, jobName, jobNo, gcName, fileName, fileType, fileData(base64), uploadedBy, uploadedAt, note }]
 var qcReports = JSON.parse(localStorage.getItem(QC_REPORTS_KEY) || '[]');
-var qcView = 'list'; // 'list' or 'gc'
-var qcFolderState = {}; // { key: bool collapsed }
+var _qcSelectedJobNum = null;
 
 function saveQCReports() {
   // Strip any legacy base64 fileData — files now in Firebase Storage
@@ -1871,392 +1870,234 @@ function saveQCReports() {
 }
 
 function renderQCReports() {
-  const wrap = document.getElementById('qcReportsView');
+  var wrap = document.getElementById('qcReportsView');
   if (!wrap) return;
   _injectReportsPrintStyles();
-  const canManage = canManageQC();
-
-  const content = qcView === 'gc' ? renderQCByGC() : renderQCList();
-
-  wrap.innerHTML = `
-    <div class="qc-wrap">
-      <div class="qc-header">
-        <div class="qc-title">🔬 QC Reports</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;white-space:nowrap;">🖨 Print / Save PDF</button>
-          ${canManage ? `<button class="btn btn-primary btn-sm" onclick="openQCJobModal()" style="white-space:nowrap;">+ New QC Job</button>` : ''}
-          <div class="qc-view-toggle">
-            <button class="qc-toggle-btn ${qcView==='list'?'active':''}" onclick="setQCView('list')">≡ List</button>
-            <button class="qc-toggle-btn ${qcView==='gc'?'active':''}" onclick="setQCView('gc')">🏢 By GC</button>
-          </div>
-        </div>
-      </div>
-      <div class="qc-scroll">
-        ${content}
-      </div>
-    </div>`;
+  var div = document.createElement('div');
+  div.className = 'qc-wrap';
+  div.innerHTML = _qcSelectedJobNum ? _buildQCJobFolderHtml(_qcSelectedJobNum) : _buildQCJobGridHtml();
+  wrap.innerHTML = '';
+  wrap.appendChild(div);
 }
 
-function setQCView(v) { qcView = v; renderQCReports(); }
+function _buildQCJobGridHtml() {
+  var jobs = (typeof backlogJobs !== 'undefined' ? backlogJobs : [])
+    .filter(function(j) { return j.num || j.name; })
+    .slice()
+    .sort(function(a, b) {
+      return (a.num || '').toString().localeCompare((b.num || '').toString(), undefined, { numeric: true });
+    });
 
-function renderQCList() {
-  if (!qcReports.length) return '<div style="padding:24px;text-align:center;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">No QC Reports uploaded yet.</div>';
-  // Group by job
-  const byJob = {};
-  [...qcReports].sort((a,b) => b.uploadedAt - a.uploadedAt).forEach(r => {
-    const k = r.jobName || r.jobNo || 'Unassigned';
-    if (!byJob[k]) byJob[k] = [];
-    byJob[k].push(r);
-  });
-  return Object.keys(byJob).sort().map(job => {
-    const files = byJob[job];
-    const isOpen = qcFolderState[job] !== true;
-    const rows = isOpen ? files.map(r => qcFileRow(r)).join('') : '';
-    return `<div class="qc-job-section">
-      <div class="qc-job-header" onclick="qcToggleFolder('${escHtml(job)}')">
-        <span style="font-size:15px;">📁</span>
-        <div class="qc-job-name">${escHtml(job)}</div>
-        <div class="qc-job-count">${files.length} file${files.length!==1?'s':''}</div>
-        <span style="color:var(--concrete-dim);font-size:11px;">${isOpen?'▲':'▼'}</span>
-      </div>
-      ${rows}
-    </div>`;
-  }).join('');
+  var cards = jobs.length ? jobs.map(function(j) {
+    var jnSafe = (j.num || '').replace(/'/g, "\\'");
+    var rptCnt = qcReports.filter(function(r) { return (r.jobNum || r.jobNo || '') === (j.num || ''); }).length;
+    return '<div class="qc-folder-card" onclick="_qcOpenJobFolder(\'' + jnSafe + '\')">' +
+      '<div style="font-size:48px;line-height:1.1;">📁</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#a78bfa;margin-top:6px;">' + escHtml(j.num || '') + '</div>' +
+      '<div style="font-size:11px;color:var(--concrete-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(j.gc || '') + '</div>' +
+      '<div style="font-size:11px;color:var(--concrete-dim);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(j.name || '') + '</div>' +
+      (rptCnt ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#a78bfa;margin-top:4px;">' + rptCnt + ' file' + (rptCnt !== 1 ? 's' : '') + '</div>' : '') +
+      '</div>';
+  }).join('') : '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-size:13px;">No jobs in backlog yet.</div>';
+
+  return '<div class="qc-header"><div class="qc-title">🔬 QC</div></div>' +
+    '<div class="qc-scroll"><div class="qc-job-grid">' + cards + '</div></div>';
 }
 
-function renderQCByGC() {
-  if (!qcReports.length) return '<div style="padding:24px;text-align:center;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">No QC Reports uploaded yet.</div>';
-  const byGC = {};
-  qcReports.forEach(r => {
-    const gc = r.gcName || (r.jobName ? r.jobName.split(' — ')[0] : 'Unknown GC');
-    if (!byGC[gc]) byGC[gc] = {};
-    const job = r.jobName || r.jobNo || 'Unassigned';
-    if (!byGC[gc][job]) byGC[gc][job] = [];
-    byGC[gc][job].push(r);
-  });
-  return Object.keys(byGC).sort().map(gc => {
-    const gcKey = '__gc__' + gc;
-    const isOpen = qcFolderState[gcKey] !== true;
-    const jobSections = isOpen ? Object.keys(byGC[gc]).sort().map(job => {
-      const jobKey = '__gc_job__' + gc + job;
-      const isJobOpen = qcFolderState[jobKey] !== true;
-      const files = byGC[gc][job];
-      const rows = isJobOpen ? files.map(r => qcFileRow(r)).join('') : '';
-      return `<div class="qc-job-section" style="margin:0 0 0 20px;border-radius:0;border-left:none;border-right:none;border-top:none;">
-        <div class="qc-job-header" style="padding:8px 14px 8px 30px;" onclick="qcToggleFolder('${escHtml(jobKey)}')">
-          <span style="font-size:13px;">📂</span>
-          <div class="qc-job-name" style="font-size:12px;">${escHtml(job)}</div>
-          <div class="qc-job-count">${files.length} file${files.length!==1?'s':''}</div>
-          <span style="color:var(--concrete-dim);font-size:11px;">${isJobOpen?'▲':'▼'}</span>
-        </div>${rows}
-      </div>`;
-    }).join('') : '';
-    const total = Object.values(byGC[gc]).reduce((s,a)=>s+a.length,0);
-    return `<div class="qc-gc-card">
-      <div class="qc-gc-header" onclick="qcToggleFolder('${escHtml(gcKey)}')">
-        <span style="font-size:16px;">🏢</span>
-        <div class="qc-gc-name">${escHtml(gc)}</div>
-        <div class="qc-job-count" style="margin-right:4px;">${total} file${total!==1?'s':''}</div>
-        <span style="color:var(--concrete-dim);font-size:11px;">${isOpen?'▲':'▼'}</span>
-      </div>${jobSections}
-    </div>`;
-  }).join('');
-}
-
-function qcFileRow(r) {
-  const canManage = canManageQC();
-  const icon = r.fileType?.startsWith('image') ? '🖼️' : '📄';
-  return `<div class="qc-file-row">
-    <span style="font-size:13px;">${icon}</span>
-    <div class="qc-file-name" onclick="previewQCReport('${r.id}')" title="${escHtml(r.fileName)}">${escHtml(r.fileName)}</div>
-    ${r.note ? `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;" title="${escHtml(r.note)}">${escHtml(r.note)}</div>` : ''}
-    <div class="qc-file-date">${new Date(r.uploadedAt).toLocaleDateString()}</div>
-    <button class="qc-file-btn" onclick="previewQCReport('${r.id}')">👁 Preview</button>
-    <button class="qc-file-btn" onclick="downloadQCReport('${r.id}')">⬇ DL</button>
-    ${canManage ? `<button class="qc-file-del" onclick="deleteQCReport('${r.id}')" title="Delete">✕</button>` : ''}
-  </div>`;
-}
-
-function qcToggleFolder(key) {
-  qcFolderState[key] = !qcFolderState[key];
+function _qcOpenJobFolder(jobNum) {
+  _qcSelectedJobNum = jobNum;
   renderQCReports();
 }
 
-// ── Upload handling ──────────────────────────────────────────────────────────
-function qcHandleDrop(e) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  qcHandleFiles(e.dataTransfer.files);
+function _qcGoBack() {
+  _qcSelectedJobNum = null;
+  renderQCReports();
 }
 
-function qcHandleFiles(files) {
-  if (!canManageQC()) return;
-  const arr = Array.from(files);
-  if (!arr.length) return;
-  // If no job info drafted yet, go through step 1 first, carrying files through
-  if (!_qcJobDraft.jobName) {
-    _qcJobDraft._pendingFiles = arr;
-    openQCJobModal();
-  } else {
-    openQCUploadModal(arr);
-  }
-}
+function _buildQCJobFolderHtml(jobNum) {
+  var job = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) { return (j.num || '') === jobNum; }) || {};
+  var canManage = canManageQC();
+  var allFiles = qcReports.filter(function(r) { return (r.jobNum || r.jobNo || '') === jobNum; });
+  var plans   = allFiles.filter(function(r) { return r.type === 'plan'; });
+  var reports = allFiles.filter(function(r) { return r.type !== 'plan'; });
 
-// ── QC Job modal — Step 1: Job Info ─────────────────────────────────────────
-// Shared state for the two-step flow
-var _qcJobDraft = { jobName:'', jobNo:'', gcName:'', location:'', notes:'' };
+  var planRows = plans.length
+    ? plans.map(function(r) { return _qcFileRowHtml(r, canManage); }).join('')
+    : '<div style="padding:12px 0;font-size:12px;color:var(--concrete-dim);">No QC plans uploaded yet.</div>';
+  var rptRows = reports.length
+    ? reports.map(function(r) { return _qcFileRowHtml(r, canManage); }).join('')
+    : '<div style="padding:12px 0;font-size:12px;color:var(--concrete-dim);">No QC reports uploaded yet.</div>';
 
-function openQCJobModal(prefillJobId) {
-  document.getElementById('qcJobModal')?.remove();
-  // Build backlog job picker options
-  const blOpts = backlogJobs.length
-    ? backlogJobs.map((j,i) => `<option value="${i}">${escHtml(j.num ? j.num+' — '+j.name : j.name)}${j.gc?' ('+escHtml(j.gc)+')':''}</option>`).join('')
+  var jnSafe = (jobNum || '').replace(/'/g, "\\'");
+  var uploadBtns = canManage
+    ? '<button onclick="_openQCPlanModal(\'' + jnSafe + '\')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.4);border-radius:var(--radius);color:#a78bfa;font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer;min-height:48px;">+ Upload QC Plan</button>' +
+      '<button onclick="_openQCReportModal(\'' + jnSafe + '\')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.4);border-radius:var(--radius);color:#a78bfa;font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer;min-height:48px;">+ Upload QC Report</button>'
     : '';
 
-  // Prefill from prefill job if provided
-  let pf = _qcJobDraft;
-  if (prefillJobId) {
-    const blj = backlogJobs.find(j => j.id === prefillJobId);
-    if (blj) pf = { jobName: (blj.gc && blj.name ? blj.gc + ' — ' + blj.name : blj.name||''), jobNo: blj.num||'', gcName: blj.gc||'', location: blj.location||'', notes: '' };
-  }
+  return '<div class="qc-header" style="gap:10px;flex-wrap:wrap;">' +
+    '<button onclick="_qcGoBack()" style="background:none;border:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;padding:4px 8px;white-space:nowrap;">← Back</button>' +
+    '<div style="flex:1;min-width:0;">' +
+    '<div class="qc-title" style="font-size:18px;">🔬 Job #' + escHtml(jobNum) + '</div>' +
+    '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);">' + escHtml([job.gc, job.name].filter(Boolean).join(' — ')) + '</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + uploadBtns + '</div>' +
+    '</div>' +
+    '<div class="qc-scroll">' +
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;min-width:0;padding:16px 0;">' +
+    '<div style="flex:1;min-width:260px;">' +
+    '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">📋 QC Plans</div>' +
+    planRows + '</div>' +
+    '<div style="flex:1;min-width:260px;">' +
+    '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:700;color:var(--white);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">🔬 QC Reports</div>' +
+    rptRows + '</div>' +
+    '</div></div>';
+}
 
-  const overlay = document.createElement('div');
-  overlay.id = 'qcJobModal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML = `
-    <div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--white);margin-bottom:4px;">🔬 New QC Job</div>
-      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:18px;">Step 1 of 2 — Job Information</div>
+function _qcFileRowHtml(r, canManage) {
+  var icon = (r.fileType && r.fileType.startsWith('image')) ? '🖼️' : '📄';
+  var uploadDate = r.uploadedAt ? new Date(r.uploadedAt).toLocaleDateString() : '';
+  var meta = '';
+  if (r.qcPerformedBy) meta += 'QC: ' + escHtml(r.qcPerformedBy);
+  if (r.datePerformed) meta += (meta ? ' · ' : '') + escHtml(r.datePerformed);
+  if (r.note && !r.qcPerformedBy) meta = escHtml(r.note);
+  return '<div class="qc-file-row">' +
+    '<span style="font-size:13px;flex-shrink:0;">' + icon + '</span>' +
+    '<div style="flex:1;min-width:0;">' +
+    '<div class="qc-file-name" title="' + escHtml(r.fileName || '') + '">' + escHtml(r.fileName || '') + '</div>' +
+    (meta ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:2px;">' + meta + '</div>' : '') +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:1px;">' + uploadDate + (r.uploadedBy ? ' · ' + escHtml(r.uploadedBy) : '') + '</div>' +
+    '</div>' +
+    '<a href="' + escHtml(r.fileUrl || '') + '" target="_blank" class="qc-file-btn" style="text-decoration:none;flex-shrink:0;">⬇ DL</a>' +
+    (canManage ? '<button class="qc-file-del" onclick="deleteQCReport(\'' + escHtml(r.id) + '\')" title="Delete">✕</button>' : '') +
+    '</div>';
+}
 
-      ${blOpts ? `
-      <div style="margin-bottom:16px;padding:12px 14px;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.2);border-radius:var(--radius);">
-        <label style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);display:block;margin-bottom:6px;">📋 Populate from Backlog Job</label>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <select id="qcBlPicker" class="form-input" style="flex:1;cursor:pointer;" onchange="qcFillFromBacklog(this)">
-            <option value="">— Select a backlog job —</option>
-            ${blOpts}
-          </select>
-          <button onclick="qcFillFromBacklog(document.getElementById('qcBlPicker'))" class="btn btn-ghost btn-sm">Fill</button>
-        </div>
-      </div>` : ''}
+function qcToggleFolder(key) {
+  renderQCReports();
+}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-        <div style="grid-column:1/-1;">
-          <label class="form-label">Job Name *</label>
-          <input class="form-input" id="qcModalJobName" placeholder="e.g. Granite State — Route 3" value="${escHtml(pf.jobName)}" style="width:100%;" />
-        </div>
-        <div>
-          <label class="form-label">Job #</label>
-          <input class="form-input" id="qcModalJobNo" placeholder="e.g. 2025-042" value="${escHtml(pf.jobNo)}" style="width:100%;" />
-        </div>
-        <div>
-          <label class="form-label">GC / Client</label>
-          <input class="form-input" id="qcModalGcName" placeholder="e.g. Granite State Paving" value="${escHtml(pf.gcName)}" style="width:100%;" />
-        </div>
-        <div style="grid-column:1/-1;">
-          <label class="form-label">Location / Address</label>
-          <input class="form-input" id="qcModalLocation" placeholder="e.g. Route 3, Concord NH" value="${escHtml(pf.location||'')}" style="width:100%;" />
-        </div>
-        <div style="grid-column:1/-1;">
-          <label class="form-label">Notes</label>
-          <textarea class="form-input" id="qcModalNotes" rows="2" placeholder="Additional notes…" style="width:100%;resize:vertical;">${escHtml(pf.notes||'')}</textarea>
-        </div>
-      </div>
 
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-        <button onclick="document.getElementById('qcJobModal').remove()" class="btn btn-ghost btn-sm">Cancel</button>
-        <button onclick="qcJobModalNext()" class="btn btn-primary btn-sm">Next — Upload Files →</button>
-      </div>
-    </div>`;
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+function _openQCReportModal(jobNum) {
+  if (!canManageQC()) return;
+  var job = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) { return (j.num || '') === jobNum; }) || {};
+  var displayName = escHtml([job.gc, job.name].filter(Boolean).join(' — ') || ('Job #' + jobNum));
+  var currentUser = localStorage.getItem('dmc_u') || '';
+  var performerDefault = currentUser.toLowerCase() === 'hmonteiro' ? 'Helio Monteiro' : '';
+  var today = new Date().toISOString().slice(0, 10);
+
+  document.getElementById('_qcReportModal')?.remove();
+  var overlay = document.createElement('div');
+  overlay.id = '_qcReportModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:24px;max-width:480px;width:90vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);display:flex;flex-direction:column;gap:14px;">' +
+    '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--white);">📋 Upload QC Report</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#a78bfa;">' + displayName + '</div>' +
+    '<div><label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);display:block;margin-bottom:5px;">QC Performed By *</label>' +
+    '<input class="form-input" id="_qcRptPerformer" value="' + escHtml(performerDefault) + '" placeholder="Name of QC inspector" style="width:100%;" /></div>' +
+    '<div><label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);display:block;margin-bottom:5px;">Date Performed *</label>' +
+    '<input class="form-input" id="_qcRptDate" type="date" value="' + today + '" style="width:100%;" /></div>' +
+    '<div><label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);display:block;margin-bottom:5px;">File (PDF or image) *</label>' +
+    '<input type="file" id="_qcRptFile" accept=".pdf,image/*" style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--white);width:100%;" /></div>' +
+    '<div style="display:flex;gap:10px;margin-top:4px;">' +
+    '<button onclick="document.getElementById(\'_qcReportModal\').remove()" style="flex:1;min-height:48px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>' +
+    '<button id="_qcRptUploadBtn" onclick="_qcDoUploadReport(\'' + (jobNum || '').replace(/'/g, "\\'") + '\')" style="flex:2;min-height:48px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:var(--radius);color:#a78bfa;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">💾 Upload</button>' +
+    '</div></div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 }
 
-function qcFillFromBacklog(sel) {
-  const idx = parseInt(sel.value);
-  if (isNaN(idx) || idx < 0 || idx >= backlogJobs.length) return;
-  const blj = backlogJobs[idx];
-  const jobName = (blj.gc && blj.name) ? blj.gc + ' — ' + blj.name : (blj.name||'');
-  const inp = n => document.getElementById(n);
-  if (inp('qcModalJobName')) inp('qcModalJobName').value = jobName;
-  if (inp('qcModalJobNo'))   inp('qcModalJobNo').value   = blj.num||'';
-  if (inp('qcModalGcName'))  inp('qcModalGcName').value  = blj.gc||'';
-  if (inp('qcModalLocation'))inp('qcModalLocation').value = blj.location||'';
-  // Flash confirmation
-  sel.style.borderColor = 'var(--stripe)';
-  setTimeout(() => sel.style.borderColor = '', 600);
+function _openQCPlanModal(jobNum) {
+  if (!canManageQC()) return;
+  var job = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) { return (j.num || '') === jobNum; }) || {};
+  var displayName = escHtml([job.gc, job.name].filter(Boolean).join(' — ') || ('Job #' + jobNum));
+
+  document.getElementById('_qcPlanModal')?.remove();
+  var overlay = document.createElement('div');
+  overlay.id = '_qcPlanModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:24px;max-width:480px;width:90vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);display:flex;flex-direction:column;gap:14px;">' +
+    '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--white);">📋 Upload QC Plan</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#a78bfa;">' + displayName + '</div>' +
+    '<div><label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);display:block;margin-bottom:5px;">File (PDF) *</label>' +
+    '<input type="file" id="_qcPlanFile" accept=".pdf,image/*" style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--white);width:100%;" /></div>' +
+    '<div style="display:flex;gap:10px;margin-top:4px;">' +
+    '<button onclick="document.getElementById(\'_qcPlanModal\').remove()" style="flex:1;min-height:48px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>' +
+    '<button id="_qcPlanUploadBtn" onclick="_qcDoUploadPlan(\'' + (jobNum || '').replace(/'/g, "\\'") + '\')" style="flex:2;min-height:48px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:var(--radius);color:#a78bfa;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">💾 Upload</button>' +
+    '</div></div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
-function qcJobModalNext() {
-  const jobName = document.getElementById('qcModalJobName')?.value.trim();
-  if (!jobName) { document.getElementById('qcModalJobName')?.focus(); return; }
-  // Save draft
-  _qcJobDraft = {
-    jobName,
-    jobNo:    document.getElementById('qcModalJobNo')?.value.trim()    || '',
-    gcName:   document.getElementById('qcModalGcName')?.value.trim()   || '',
-    location: document.getElementById('qcModalLocation')?.value.trim() || '',
-    notes:    document.getElementById('qcModalNotes')?.value.trim()    || '',
-  };
-  document.getElementById('qcJobModal')?.remove();
-  openQCUploadModal([]);  // open step 2 with no pre-selected files
-}
-
-// ── QC Job modal — Step 2: File Upload ───────────────────────────────────────
-function openQCUploadModal(files) {
-  document.getElementById('qcUploadModal')?.remove();
-  const hasFiles = files && files.length > 0;
-  const d = _qcJobDraft;
-
-  const modal = document.createElement('div');
-  modal.id = 'qcUploadModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  modal.innerHTML = `
-    <div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--white);margin-bottom:4px;">📎 Upload QC Report</div>
-      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:14px;">Step 2 of 2 — Attach Files</div>
-
-      <!-- Job summary card -->
-      <div style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-        <div>
-          <div style="font-weight:700;font-size:13px;color:var(--white);">${escHtml(d.jobName)}</div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);margin-top:2px;">${[d.jobNo, d.gcName, d.location].filter(Boolean).join(' · ')}</div>
-          ${d.notes ? `<div style="font-size:10px;color:var(--concrete-dim);margin-top:3px;">${escHtml(d.notes)}</div>` : ''}
-        </div>
-        <button onclick="document.getElementById('qcUploadModal').remove();openQCJobModal()" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:10px;">✎ Edit</button>
-      </div>
-
-      <!-- File drop zone -->
-      <div id="qcStep2DropZone" style="border:2px dashed var(--asphalt-light);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:all 0.15s;margin-bottom:10px;position:relative;"
-        ondragover="event.preventDefault();this.style.borderColor='var(--stripe)';this.style.background='rgba(245,197,24,0.04)'"
-        ondragleave="this.style.borderColor='var(--asphalt-light)';this.style.background=''"
-        ondrop="event.preventDefault();this.style.borderColor='var(--asphalt-light)';this.style.background='';qcStep2HandleDrop(event)">
-        <input type="file" id="qcStep2FileInput" multiple accept=".pdf,.doc,.docx,image/*"
-          style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;"
-          onchange="qcStep2HandleFiles(this.files)" />
-        <div style="font-size:28px;margin-bottom:6px;">📎</div>
-        <div style="font-size:12px;color:var(--concrete-dim);">Drop files here or <strong style="color:var(--stripe);">click to browse</strong></div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);margin-top:4px;">PDF · Word · Images</div>
-      </div>
-
-      <!-- Per-file note input list -->
-      <div id="qcStep2FileList" style="margin-bottom:12px;"></div>
-
-      <div style="margin-bottom:14px;">
-        <label class="form-label">Report Note (applies to all files)</label>
-        <input class="form-input" id="qcStep2Note" placeholder="e.g. Day 1 surface cores, Station 0+00 to 5+00" style="width:100%;" />
-      </div>
-
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button onclick="document.getElementById('qcUploadModal').remove()" class="btn btn-ghost btn-sm">Cancel</button>
-        <button onclick="qcDoUpload()" class="btn btn-primary btn-sm" id="qcStep2UploadBtn" disabled style="opacity:0.4;">⬆ Upload</button>
-      </div>
-    </div>`;
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  modal._files = [];
-  document.body.appendChild(modal);
-
-  // If files were passed in (from drag-drop on old zone), load them
-  if (hasFiles) qcStep2HandleFiles(files);
-}
-
-function qcStep2HandleDrop(e) {
-  qcStep2HandleFiles(e.dataTransfer.files);
-}
-
-function qcStep2HandleFiles(fileList) {
-  const modal = document.getElementById('qcUploadModal');
-  if (!modal) return;
-  const arr = Array.from(fileList);
-  if (!arr.length) return;
-  // Append to existing
-  modal._files = [...(modal._files||[]), ...arr];
-  _renderQcStep2FileList(modal._files);
-  const btn = document.getElementById('qcStep2UploadBtn');
-  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-  // Reset input
-  const inp = document.getElementById('qcStep2FileInput');
-  if (inp) inp.value = '';
-}
-
-function _renderQcStep2FileList(files) {
-  const el = document.getElementById('qcStep2FileList');
-  if (!el) return;
-  if (!files.length) { el.innerHTML = ''; return; }
-  el.innerHTML = files.map((f, i) => {
-    const isPdf  = f.type === 'application/pdf';
-    const isImg  = f.type && f.type.startsWith('image/');
-    const isDocx = /\.docx?$/i.test(f.name);
-    const icon   = isPdf ? '📄' : isImg ? '🖼️' : isDocx ? '📝' : '📎';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);margin-bottom:6px;">
-      <span style="font-size:16px;flex-shrink:0;">${icon}</span>
-      <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--white);" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
-      <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">${Math.round(f.size/1024)}KB</span>
-      <button onclick="qcStep2RemoveFile(${i})" style="background:none;border:none;color:var(--concrete-dim);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0;" title="Remove">✕</button>
-    </div>`;
-  }).join('');
-}
-
-function qcStep2RemoveFile(idx) {
-  const modal = document.getElementById('qcUploadModal');
-  if (!modal) return;
-  modal._files.splice(idx, 1);
-  _renderQcStep2FileList(modal._files);
-  const btn = document.getElementById('qcStep2UploadBtn');
-  if (btn) { btn.disabled = !modal._files.length; btn.style.opacity = modal._files.length ? '' : '0.4'; }
-}
-
-async function qcDoUpload() {
-  const modal = document.getElementById('qcUploadModal');
-  if (!modal) return;
-  const files = modal._files || [];
-  if (!files.length) { alert('Please select at least one file to upload.'); return; }
-  const d = _qcJobDraft;
-  const jobName = d.jobName || '';
-  const jobNo   = d.jobNo   || '';
-  const gcName  = d.gcName  || (jobName.includes(' — ') ? jobName.split(' — ')[0].trim() : '');
-  const note    = document.getElementById('qcStep2Note')?.value.trim() || d.notes || '';
-  const location= d.location || '';
-  const uploader = localStorage.getItem('dmc_u') || 'Unknown';
-  // Show uploading state
-  const uploadBtn = document.getElementById('qcStep2UploadBtn');
-  if (uploadBtn) { uploadBtn.disabled = true; uploadBtn.textContent = '⬆ Uploading…'; }
-
-  let completed = 0;
-  const results = [];
-  for (const file of files) {
-    try {
-      const { url, path } = await uploadFileToStorage(
-        file, `qc_reports/${jobName.replace(/[^a-z0-9]/gi,'_')}`,
-        pct => { if (uploadBtn) uploadBtn.textContent = `⬆ ${Math.round(pct*100)}%`; }
-      );
-      results.push({
-        id: Date.now().toString() + Math.random().toString(36).slice(2,6),
-        jobName, jobNo, gcName, note, location,
-        fileName: file.name,
-        fileType: file.type,
-        sizeKB: Math.round(file.size/1024),
-        fileUrl: url,
-        storagePath: path,
-        uploadedBy: uploader,
-        uploadedAt: Date.now()
-      });
-    } catch(e) {
-      _logFbError('qcDoUpload', e);
-      alert(`Failed to upload ${file.name}: ${e.message}`);
-    }
-    completed++;
-  }
-  if (results.length) {
-    results.forEach(r => qcReports.unshift(r));
+async function _qcDoUploadReport(jobNum) {
+  if (!canManageQC()) return;
+  var job = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) { return (j.num || '') === jobNum; }) || {};
+  var performer = (document.getElementById('_qcRptPerformer') ? document.getElementById('_qcRptPerformer').value : '').trim();
+  var datePerfmd = (document.getElementById('_qcRptDate') ? document.getElementById('_qcRptDate').value : '').trim();
+  var fileInput = document.getElementById('_qcRptFile');
+  var file = fileInput && fileInput.files && fileInput.files[0];
+  if (!performer) { alert('Please enter the QC inspector name.'); if (document.getElementById('_qcRptPerformer')) document.getElementById('_qcRptPerformer').focus(); return; }
+  if (!datePerfmd) { alert('Please enter the date performed.'); return; }
+  if (!file) { alert('Please select a file to upload.'); return; }
+  var btn = document.getElementById('_qcRptUploadBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⬆ Uploading…'; }
+  var currentUser = localStorage.getItem('dmc_u') || 'unknown';
+  try {
+    var result = await uploadFileToStorage(file, 'qc_reports/' + jobNum + '/reports', function(pct) {
+      if (btn) btn.textContent = '⬆ ' + Math.round(pct * 100) + '%';
+    });
+    var rec = {
+      id: 'qc_' + Date.now(),
+      jobNum: jobNum, jobName: job.name || '', gcName: job.gc || '',
+      type: 'report', fileName: file.name, fileType: file.type,
+      fileUrl: result.url, storagePath: result.path,
+      qcPerformedBy: performer, datePerformed: datePerfmd,
+      uploadedBy: currentUser, uploadedAt: Date.now()
+    };
+    qcReports.unshift(rec);
     saveQCReports();
-    modal.remove();
-    _qcJobDraft = { jobName:'', jobNo:'', gcName:'', location:'', notes:'' };
+    document.getElementById('_qcReportModal')?.remove();
     renderQCReports();
-    pushNotif('success', '🔬 QC Report Uploaded', `${results.length} file${results.length!==1?'s':''} added to QC Reports for ${escHtml(jobName)}.`, null);
-  } else if (uploadBtn) {
-    uploadBtn.disabled = false;
-    uploadBtn.textContent = '⬆ Upload';
+    var lbl = [job.gc, job.name].filter(Boolean).join(' — ') || ('Job #' + jobNum);
+    pushNotif('info', '📋 QC Report Uploaded', 'QC Report uploaded for ' + lbl + ' (Job #' + jobNum + ') — QC by ' + performer + ' on ' + datePerfmd, null);
+  } catch(e) {
+    _logFbError('_qcDoUploadReport', e);
+    alert('Upload failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Upload'; }
+  }
+}
+
+async function _qcDoUploadPlan(jobNum) {
+  if (!canManageQC()) return;
+  var job = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) { return (j.num || '') === jobNum; }) || {};
+  var fileInput = document.getElementById('_qcPlanFile');
+  var file = fileInput && fileInput.files && fileInput.files[0];
+  if (!file) { alert('Please select a file to upload.'); return; }
+  var btn = document.getElementById('_qcPlanUploadBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⬆ Uploading…'; }
+  var currentUser = localStorage.getItem('dmc_u') || 'unknown';
+  try {
+    var result = await uploadFileToStorage(file, 'qc_reports/' + jobNum + '/plans', function(pct) {
+      if (btn) btn.textContent = '⬆ ' + Math.round(pct * 100) + '%';
+    });
+    var rec = {
+      id: 'qc_' + Date.now(),
+      jobNum: jobNum, jobName: job.name || '', gcName: job.gc || '',
+      type: 'plan', fileName: file.name, fileType: file.type,
+      fileUrl: result.url, storagePath: result.path,
+      uploadedBy: currentUser, uploadedAt: Date.now()
+    };
+    qcReports.unshift(rec);
+    saveQCReports();
+    document.getElementById('_qcPlanModal')?.remove();
+    renderQCReports();
+    var lbl = [job.gc, job.name].filter(Boolean).join(' — ') || ('Job #' + jobNum);
+    pushNotif('info', '📋 QC Plan Uploaded', 'QC Plan uploaded for ' + lbl + ' (Job #' + jobNum + ')', null);
+  } catch(e) {
+    _logFbError('_qcDoUploadPlan', e);
+    alert('Upload failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Upload'; }
   }
 }
 
@@ -2267,7 +2108,7 @@ function previewQCReport(id) {
   if (!r) return;
   const title = '🔬 ' + (r.fileName || r.jobName || 'QC Report');
   const src = r.fileUrl || r.fileData || '';
-  const _qcBreadcrumb = { folder:'QC Reports › ' + (r.jobName||''), title: r.fileName || r.jobName || 'QC Report', badge:'QC Report', badgeColor:'var(--orange)' };
+  const _qcBreadcrumb = { folder:'QC › ' + (r.jobName||''), title: r.fileName || r.jobName || 'QC Report', badge:'QC Report', badgeColor:'var(--orange)' };
   if (r.fileType && r.fileType.startsWith('image/')) {
     showReportsPreview(
       title,

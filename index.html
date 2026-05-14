@@ -933,6 +933,9 @@
   .qc-preview-bar { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--asphalt-mid); border-bottom:1px solid var(--asphalt-light); flex-shrink:0; }
   .qc-preview-title { font-family:'DM Sans',sans-serif; font-size:13px; font-weight:700; color:var(--white); flex:1; }
   .qc-preview-frame { flex:1; background:#fff; }
+  .qc-job-grid { display:flex; flex-wrap:wrap; gap:16px; padding:8px 0; }
+  .qc-folder-card { width:calc(10% - 16px); min-width:80px; max-width:120px; text-align:center; cursor:pointer; padding:12px 8px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); transition:all 0.15s; user-select:none; }
+  .qc-folder-card:hover { background:rgba(167,139,250,0.1); border-color:#a78bfa; }
 
   .inv-status-btn { width:56px; border-radius:5px; padding:2px 0; font-family:'DM Mono',monospace; font-size:8px; font-weight:700; cursor:pointer; letter-spacing:0.3px; transition:all 0.15s; border:1px solid; text-align:center; display:block; line-height:1.15; }
   .inv-status-btn.off  { background:rgba(255,255,255,0.04); color:var(--concrete-dim); border-color:var(--asphalt-light); }
@@ -1012,6 +1015,7 @@
     /* Show collapse arrows on mobile */
     .fleet-loc-collapse-arrow { display:inline; }
     .fleet-subcat-collapse-arrow { display:inline; }
+    .qc-folder-card { width:calc(25% - 12px); min-width:0; max-width:none; }
   }
 
   /* ── Certified Payroll Reports ── */
@@ -2995,7 +2999,7 @@
           👷 Foremen's Reports
         </button>
         <button id="tabReportsQC" onclick="switchTab('reportsQC')" style="width:100%;padding:7px 14px 7px 22px;border-radius:var(--radius);font-size:11px;text-align:left;justify-content:flex-start;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);display:flex;align-items:center;gap:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;">
-          🔬 QC Reports
+          🔬 QC
         </button>
         <button id="tabReportsJobMix" onclick="switchTab('reportsJobMix')" style="width:100%;padding:7px 14px 7px 22px;border-radius:var(--radius);font-size:11px;text-align:left;justify-content:flex-start;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);display:flex;align-items:center;gap:8px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;transition:all 0.15s;letter-spacing:0.3px;">
           🧪 Job Mix Formula
@@ -32050,7 +32054,7 @@ function _pruneNavGroups(items) {
     {type:'item', icon:'📄',label:'Daily Orders',     action:'tab',tab:'reportsDailyOrders',sub:true},
     {type:'item', icon:'📊',label:'2-Week Look Ahead',action:'tab',tab:'reportsTwoWeek',   sub:true},
     {type:'item', icon:'👷',label:"Foremen's Reports",action:'tab',tab:'reportsForemens',  sub:true},
-    {type:'item', icon:'🔬',label:'QC Reports',       action:'tab',tab:'reportsQC',        sub:true},
+    {type:'item', icon:'🔬',label:'QC',       action:'tab',tab:'reportsQC',        sub:true},
     {type:'group',label:'Employees'},
     {type:'item', icon:'👷',label:'Employee Tracker', action:'tab',tab:'employees'},
     {type:'group',label:'Settings'},
@@ -32125,7 +32129,7 @@ function _pruneNavGroups(items) {
     { type:'item', icon:'\uD83D\uDCC4', label:'Daily Orders',      action:'tab', tab:'reportsDailyOrders', sub:true },
     { type:'item', icon:'\uD83D\uDCCA', label:'2-Week Look Ahead', action:'tab', tab:'reportsTwoWeek',     sub:true },
     { type:'item', icon:'\uD83D\uDC77', label:"Foremen's Reports", action:'tab', tab:'reportsForemens',    sub:true },
-    { type:'item', icon:'\uD83D\uDD2C', label:'QC Reports',        action:'tab', tab:'reportsQC',          sub:true },
+    { type:'item', icon:'\uD83D\uDD2C', label:'QC',        action:'tab', tab:'reportsQC',          sub:true },
     { type:'item', icon:'\uD83E\uDDEA', label:'Job Mix Formula',   action:'tab', tab:'reportsJobMix',      sub:true },
     { type:'item', icon:'\uD83D\uDCCB', label:'Certifieds',        action:'tab', tab:'reportsCertif',      sub:true },
     { type:'group', label:'People & Equipment' },
