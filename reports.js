@@ -783,6 +783,7 @@ function _populateReportsMainList(tabId) {
   document.getElementById('_rpMainList')?.remove();
   document.getElementById('_doCardView')?.remove();
   document.getElementById('frListWrap')?.remove();
+  document.getElementById('_jmBrowserWrap')?.remove();
   if (gallery) gallery.style.display = 'none';
 
   let items = [], title = '', icon = '';
