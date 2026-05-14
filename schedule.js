@@ -10753,7 +10753,8 @@ function previewJobMixFormula(id) {
         <div style="color:var(--concrete-dim);">Uploaded</div><div style="color:var(--white);">${escHtml(uploaded)}</div>
         <div style="color:var(--concrete-dim);">Uploaded By</div><div style="color:var(--white);">${escHtml(jm.uploadedBy || '')}</div>
       </div>
-      <button onclick="window.open('${escHtml(jm.fileUrl)}','_blank')" style="width:100%;min-height:48px;background:#a78bfa;border:none;border-radius:6px;color:#fff;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;padding:12px 24px;cursor:pointer;letter-spacing:.5px;">${_isPdfFile(jm) ? '📄 Open Document' : '📄 Download Document'}</button>
+      <iframe src="https://docs.google.com/viewer?url=${encodeURIComponent(jm.fileUrl)}&embedded=true" style="width:100%;height:70vh;border:none;border-radius:6px;" allowfullscreen></iframe>
+      <a href="${escHtml(jm.fileUrl)}" target="_blank" style="display:block;text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);text-decoration:none;padding:4px 0;">${_isPdfFile(jm) ? 'Open in new tab ↗' : 'Download ↗'}</a>
     </div>`;
 
   showReportsPreview(
