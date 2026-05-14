@@ -10735,9 +10735,10 @@ function previewJobMixFormula(id) {
   const jm = jobMixFormulas.find(x => x.id === id);
   if (!jm) return;
 
-  const uploaded = jm.uploadedAt ? new Date(jm.uploadedAt).toLocaleString() : '';
+  var supplierPlant = escHtml((jm.supplier || '') + (jm.plant ? ' ' + jm.plant : ''));
   const infoHtml = `
     <div style="padding:20px;display:flex;flex-direction:column;gap:12px;">
+      <button onclick="_populateReportsMainList('reportsJobMix')" style="background:none;border:none;color:#a78bfa;font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;padding:8px 0;min-height:44px;text-align:left;">← Back</button>
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-size:26px;">🧪</span>
         <div>
@@ -10746,12 +10747,9 @@ function previewJobMixFormula(id) {
         </div>
       </div>
       <div style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:12px 14px;display:grid;grid-template-columns:130px 1fr;gap:8px;font-family:'DM Sans',sans-serif;font-size:12px;">
-        <div style="color:var(--concrete-dim);">Supplier</div><div style="color:var(--white);font-weight:700;">${escHtml(jm.supplier || '')}</div>
+        <div style="color:var(--concrete-dim);">Supplier</div><div style="color:var(--white);font-weight:700;">${supplierPlant}</div>
         <div style="color:var(--concrete-dim);">Mix Name</div><div style="color:var(--white);font-weight:700;">${escHtml(jm.mixName || '')}</div>
         <div style="color:var(--concrete-dim);">Mix Code</div><div style="color:var(--white);font-weight:700;">${escHtml(jm.mixCode || '')}</div>
-        <div style="color:var(--concrete-dim);">File</div><div style="color:var(--white);font-weight:700;">${escHtml(jm.fileName || '')}</div>
-        <div style="color:var(--concrete-dim);">Uploaded</div><div style="color:var(--white);">${escHtml(uploaded)}</div>
-        <div style="color:var(--concrete-dim);">Uploaded By</div><div style="color:var(--white);">${escHtml(jm.uploadedBy || '')}</div>
       </div>
       <iframe src="https://docs.google.com/viewer?url=${encodeURIComponent(jm.fileUrl)}&embedded=true" style="width:100%;height:70vh;border:none;border-radius:6px;" allowfullscreen></iframe>
       <a href="${escHtml(jm.fileUrl)}" target="_blank" style="display:block;text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete-dim);text-decoration:none;padding:4px 0;">${_isPdfFile(jm) ? 'Open in new tab ↗' : 'Download ↗'}</a>
