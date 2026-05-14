@@ -10758,13 +10758,18 @@ function previewJobMixFormula(id) {
     { folder:'Job Mix Formula › ' + (jm.supplier||''), title: (jm.mixName||'') + (jm.mixCode ? ' (' + jm.mixCode + ')' : ''), badge:'Mix Formula', badgeColor:'#7ecb8f' }
   );
 
-  var _jmToolbar = document.querySelector('#reportsPreviewPane .reports-preview-toolbar');
-  if (_jmToolbar) {
+  var _jmPaneToolbar = document.querySelector('#reportsPreviewPane .reports-preview-toolbar');
+  if (_jmPaneToolbar) _jmPaneToolbar.style.display = 'none';
+
+  var _jmBc = document.getElementById('reportsPreviewBreadcrumb');
+  if (_jmBc) {
     var _jmBackBtn = document.createElement('button');
-    _jmBackBtn.style.cssText = 'background:none;border:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;padding:8px 10px;min-height:44px;white-space:nowrap;';
     _jmBackBtn.textContent = '← Back';
+    _jmBackBtn.style.cssText = 'background:none;border:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;padding:4px 12px;min-height:36px;';
     _jmBackBtn.onclick = function() { switchTab('reportsJobMix'); };
-    _jmToolbar.appendChild(_jmBackBtn);
+    var _jmDlBtn = _jmBc.querySelector('button');
+    if (_jmDlBtn) _jmBc.insertBefore(_jmBackBtn, _jmDlBtn);
+    else _jmBc.appendChild(_jmBackBtn);
   }
 }
 
