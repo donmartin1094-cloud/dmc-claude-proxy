@@ -14061,6 +14061,7 @@ function openJobFolder(jobId) {
         </div>
         <button onclick="_scanSlipForJob('${escHtml(job.id||'')}','${escHtml(job.name||'')}','${escHtml(job.num||'')}')" style="background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.3);border-radius:var(--radius);color:var(--stripe);font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📷 Scan Slip</button>
         <button onclick="closeJobFolder();_openARKPIs({jobId:'${escHtml(job.id||'')}',jobNum:'${escHtml(job.num||'')}'});" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:var(--radius);color:#a78bfa;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📊 View KPIs</button>
+        ${isAdmin() ? `<button onclick="_deleteJobFolderModal('${escHtml(job.id||'')}')" style="background:rgba(232,85,85,0.1);border:1px solid rgba(232,85,85,0.35);border-radius:var(--radius);color:#e85555;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">🗑️ Delete</button>` : ''}
         <button onclick="closeJobFolder()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;padding:4px 8px;">✕</button>
       </div>
       <div class="jf-tabs" id="jfTabs">
@@ -14080,6 +14081,44 @@ function openJobFolder(jobId) {
 
 function closeJobFolder() {
   document.getElementById('jfOverlay')?.remove();
+}
+
+function _deleteJobFolderModal(jobId) {
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  if (!job) return;
+  var counts = _jfLinkedCounts(job);
+  var billCount = ((job.jobFolder||{}).brokerBills||[]).length;
+  var nameStr = escHtml(job.name||'Unnamed');
+  var numStr  = escHtml(job.num||'');
+  var parts = [];
+  if (billCount          > 0) parts.push(billCount          + ' broker bill'      + (billCount          !== 1 ? 's' : ''));
+  if (counts.foremanReports > 0) parts.push(counts.foremanReports + ' foreman report' + (counts.foremanReports !== 1 ? 's' : ''));
+  if (counts.pavingSlips    > 0) parts.push(counts.pavingSlips    + ' paving slip'    + (counts.pavingSlips    !== 1 ? 's' : ''));
+  var linkedHtml = parts.length
+    ? '<div style="margin:10px 0;padding:10px 12px;background:rgba(232,85,85,0.08);border:1px solid rgba(232,85,85,0.25);border-radius:6px;font-family:\'DM Sans\',sans-serif;font-size:12px;color:#e8a0a0;line-height:1.5;">This job has ' + parts.join(', ') + ' linked to it. These will be kept for historical records.</div>'
+    : '';
+  document.getElementById('_deleteJobModal')?.remove();
+  var modal = document.createElement('div');
+  modal.id = '_deleteJobModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+  modal.innerHTML =
+    '<div style="background:var(--asphalt);border-radius:12px;padding:24px;width:90vw;max-width:420px;max-height:80vh;overflow-y:auto;display:flex;flex-direction:column;gap:0;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:1.2px;color:#e85555;margin-bottom:8px;">⚠️ Delete Job Folder — ' + nameStr + '</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);margin-bottom:4px;">Are you sure you want to delete <strong>' + nameStr + '</strong>' + (numStr ? ' (' + numStr + ')' : '') + '? This cannot be undone.</div>' +
+      linkedHtml +
+      '<button onclick="document.getElementById(\'_deleteJobModal\')?.remove()" style="width:100%;min-height:48px;margin-top:14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">Cancel</button>' +
+      '<button onclick="_deleteJobFolderConfirm(\'' + jobId + '\')" style="width:100%;min-height:48px;margin-top:8px;background:#e85555;border:none;border-radius:8px;color:#fff;font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">🗑️ Delete</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function _deleteJobFolderConfirm(jobId) {
+  backlogJobs = backlogJobs.filter(function(j){ return j.id !== jobId; });
+  saveBacklog();
+  document.getElementById('_deleteJobModal')?.remove();
+  closeJobFolder();
+  renderBacklog();
 }
 
 function switchJfTab(jobId, tab) {
