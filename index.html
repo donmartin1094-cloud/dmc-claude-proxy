@@ -933,8 +933,8 @@
   .qc-preview-bar { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--asphalt-mid); border-bottom:1px solid var(--asphalt-light); flex-shrink:0; }
   .qc-preview-title { font-family:'DM Sans',sans-serif; font-size:13px; font-weight:700; color:var(--white); flex:1; }
   .qc-preview-frame { flex:1; background:#fff; }
-  .qc-job-grid { display:flex; flex-wrap:wrap; gap:16px; padding:8px 0; }
-  .qc-folder-card { width:calc(10% - 16px); min-width:80px; max-width:120px; text-align:center; cursor:pointer; padding:12px 8px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); transition:all 0.15s; user-select:none; }
+  .qc-job-grid { display:grid; grid-template-columns:repeat(10, 1fr); gap:16px; padding:8px 0; }
+  .qc-folder-card { text-align:center; cursor:pointer; padding:12px 8px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); transition:all 0.15s; user-select:none; }
   .qc-folder-card:hover { background:rgba(167,139,250,0.1); border-color:#a78bfa; }
 
   .inv-status-btn { width:56px; border-radius:5px; padding:2px 0; font-family:'DM Mono',monospace; font-size:8px; font-weight:700; cursor:pointer; letter-spacing:0.3px; transition:all 0.15s; border:1px solid; text-align:center; display:block; line-height:1.15; }
@@ -1015,7 +1015,7 @@
     /* Show collapse arrows on mobile */
     .fleet-loc-collapse-arrow { display:inline; }
     .fleet-subcat-collapse-arrow { display:inline; }
-    .qc-folder-card { width:calc(25% - 12px); min-width:0; max-width:none; }
+    .qc-job-grid { grid-template-columns:repeat(4, 1fr); }
   }
 
   /* ── Certified Payroll Reports ── */
@@ -6553,7 +6553,7 @@ function _homeDJHoursWidget() {
       return '<div style="padding:1px;">' +
         '<div style="' + cellBase + 'padding:0 3px;">' +
           '<input type="number" id="_djDayInp_' + d.key + '" value="' + hrs + '" min="0" max="24" step="0.5" ' +
-            'style="width:100%;background:none;border:none;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;text-align:center;outline:none;" ' +
+            'style="width:100%;min-width:0;background:none;border:none;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;text-align:center;outline:none;" ' +
             'onkeydown="if(event.key===\'Enter\'||event.key===\'Tab\'){event.preventDefault();_homeDJDaySave(\'' + d.key + '\');}" ' +
             'onblur="_homeDJDaySave(\'' + d.key + '\')">' +
         '</div></div>';
@@ -6566,7 +6566,7 @@ function _homeDJHoursWidget() {
       '</div></div>';
   }).join('');
 
-  return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;flex-shrink:0;">' +
+  return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;flex-shrink:0;min-width:320px;">' +
     '<div style="padding:9px 12px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;">' +
       '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:2px;color:var(--white);">⏱ MY HOURS</span>' +
       '<span style="display:flex;align-items:center;gap:10px;">' +
