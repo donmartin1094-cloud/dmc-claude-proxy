@@ -2811,7 +2811,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
   const btype = getBlockType(effectiveType);
   const isBlankExtra = effectiveType === 'blank';
   const extraBg = isBlankExtra ? '#ffffff' : (bdata._verifiedColor || btype.color);
-  const fc = '#000000';
+  const fc = (effectiveType === 'day' || effectiveType === 'night') ? '#ffffff' : '#000000';
   const fields = bdata.fields || {};
 
   const fieldsHtml = BLOCK_FIELDS.map(f => {
@@ -3025,7 +3025,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
   return `
     <div class="sched-block sched-extra-block${isLast?' sched-block-bottom':''}${isSecondStop?' sched-second-stop':''}"
          data-date-key="${key}" data-block-slot="${slot}" data-block-type="${effectiveType}" data-parent-slot="${ex.parentSlot||''}"
-         style="background:${extraBg};"
+         style="background:${extraBg};color:${fc};"
          ondragover="schedBlockDragOver(event,'${key}','${slot}','${effectiveType}')"
          ondragleave="schedBlockDragLeave(event)"
          ondrop="schedBlockDrop(event,'${key}','${slot}','${effectiveType}')">
@@ -4602,7 +4602,7 @@ function renderSchedule() {
         const isWeekendBlank = isWeekend && effectiveType === 'blank';
         const isWeekdayBlank = !isWeekend && effectiveType === 'blank';
         const blockBg = isHoliday ? '#e8d5f5' : isWeekendBlank ? '#e8d5f5' : isWeekdayBlank ? '#ffffff' : (bdata._verifiedColor || btype.color);
-        const fc = '#000000';
+        const fc = (effectiveType === 'day' || effectiveType === 'night') ? '#ffffff' : '#000000';
         const fields = bdata.fields || {};
         const canEdit = (isAdmin() || canEditTab('schedule')) && schedEditMode;
 
@@ -4871,7 +4871,7 @@ function renderSchedule() {
         return `
           <div class="sched-block${isRainedOut?' rained-out':''}${slot==='bottom' && !_botStops.length && !_otherExtras.length?' sched-block-bottom':''}"
                data-date-key="${key}" data-block-slot="${slot}" data-block-type="${effectiveType}"
-               style="background:${finalBg};${serviceOutline}"
+               style="background:${finalBg};color:${finalFc};${serviceOutline}"
                ${dragDropAttrs}>
             <div class="sched-block-header" style="${isAfterNight ? 'background:#4a4a4a;border-bottom:2px solid #666;' : ''}">
               <div class="sched-block-header-row1">
