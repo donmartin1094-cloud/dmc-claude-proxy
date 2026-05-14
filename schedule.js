@@ -2796,6 +2796,25 @@ async function fbSetDoc(docName, value) {
 }
 function saveBlockTypes() { localStorage.setItem('pavescope_blocktypes', JSON.stringify(blockTypes)); _checkLocalStorageSize(); try { if(db) fbSet('blocktypes', blockTypes); } catch(e){} }
 
+function _schedNoteToggle(chipId, taId) {
+  var chip = document.getElementById(chipId);
+  var ta   = document.getElementById(taId);
+  if (!chip || !ta) return;
+  chip.style.display = 'none';
+  ta.style.display   = '';
+  ta.focus();
+}
+function _schedNoteBlur(chipId, taId) {
+  var ta   = document.getElementById(taId);
+  var chip = document.getElementById(chipId);
+  if (!ta || !chip) return;
+  if (ta.value.trim()) {
+    chip.querySelector('span').textContent = '📝 ' + ta.value.trim();
+    chip.style.display = '';
+    ta.style.display   = 'none';
+  }
+}
+
 function _toggleSecondStop(dateKey, slot, event) {
   if (event) event.stopPropagation();
   var stateKey = dateKey + '_' + slot;
@@ -2812,6 +2831,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
   const isBlankExtra = effectiveType === 'blank';
   const extraBg = isBlankExtra ? '#ffffff' : (bdata._verifiedColor || btype.color);
   const fc = (effectiveType === 'day' || effectiveType === 'night') ? '#ffffff' : '#000000';
+  const fcDim = fc === '#ffffff' ? '#ffffff' : fc + '80';
   const fields = bdata.fields || {};
 
   const fieldsHtml = BLOCK_FIELDS.map(f => {
@@ -2835,7 +2855,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
           </span>`).join('');
       }
       return `<div class="sched-field sched-field-operators">
-        <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+        <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
         <div class="op-chips-wrap ${f.type === 'material' ? 'mat-chips-wrap' : ''}">${chips}
           ${f.type === 'material'
             ? `<input class="mat-inline-search" placeholder="Search mix…" autocomplete="off"
@@ -2850,7 +2870,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
       const cur = fields.plant || '';
       if (cur) {
         return `<div class="sched-field sched-field-operators">
-          <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+          <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
           <div class="op-chips-wrap">
             <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;cursor:pointer;" onclick="openSchedPlantPicker('${key}','${slot}',this)" title="Click to change plant">
               🏭 ${cur}
@@ -2860,7 +2880,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
         </div>`;
       }
       return `<div class="sched-field sched-field-operators">
-        <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+        <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
         <div class="op-chips-wrap">
           <button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openSchedPlantPicker('${key}','${slot}',this)">+</button>
         </div>
@@ -2880,14 +2900,14 @@ function renderExtraBlock(key, idx, ex, isLast) {
       ].filter(Boolean).map(m => `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;padding:1px 6px;">${m}</span>`).join('');
       const hasAny = trucks || load || space;
       return `<div class="sched-field sched-field-operators">
-        <button class="sched-field-label-btn" style="color:${fc}80;"
+        <button class="sched-field-label-btn" style="color:${fcDim};"
           onclick="openTruckingModal('${key}','${slot}')"
           onmouseenter="showTruckingTooltip(event,'${key}','${slot}')"
           onmouseleave="hideTruckingTooltip()"
           title="Hover to see trucks · Click to edit">${f.label}</button>
         <div class="op-chips-wrap">
           ${metaChips}
-          ${!hasAny ? '<span style="font-size:11px;color:var(--concrete-dim);"></span>' : ''}
+          ${!hasAny ? `<span style="font-size:11px;color:${fcDim};"></span>` : ''}
         </div>
       </div>`;
     }
@@ -2905,7 +2925,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
         ? `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;">${escHtml(_qtrSub)}<button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();clearQTROthers('${key}','${slot}','${f.key}')" title="Clear sub">✕</button></span>`
         : '';
       return `<div class="sched-field">
-        <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+        <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
         <div class="sched-field-btns">${btnsHtml}${othersSubChip}</div>
       </div>`;
     }
@@ -2916,7 +2936,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
       const chipParts = [fields.jobNum ? '#' + fields.jobNum : '', fields.jobName || ''].filter(Boolean);
       const chipLabel = chipParts.join(' — ');
       return `<div class="sched-field sched-field-operators" id="jchip_${key}_${safeSlot}" style="${!hasJob?'display:none;':''}">
-          <div class="sched-field-label" style="color:${fc}80;">Job:</div>
+          <div class="sched-field-label" style="color:${fcDim};">Job:</div>
           <div class="op-chips-wrap">
             <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;cursor:pointer;"
               onclick="_schedJobChipEdit('${key}','${slot}')" title="Click to change job">
@@ -2926,7 +2946,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
           </div>
         </div>
         <div class="sched-field" id="jname_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
-          <div class="sched-field-label" style="color:${fc}80;cursor:pointer;text-decoration:underline dotted;" title="Click to change job name"
+          <div class="sched-field-label" style="color:${fcDim};cursor:pointer;text-decoration:underline dotted;" title="Click to change job name"
             onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNameInput(ta);">
             Job Name:
           </div>
@@ -2947,7 +2967,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
           </div>
         </div>
         <div class="sched-field" id="jnum_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
-          <div class="sched-field-label" style="color:${fc}80;cursor:pointer;text-decoration:underline dotted;" title="Click to change job #"
+          <div class="sched-field-label" style="color:${fcDim};cursor:pointer;text-decoration:underline dotted;" title="Click to change job #"
             onclick="var ta=this.closest('.sched-field').querySelector('textarea');ta.focus();ta.select();schedJobNumInputExtra(ta,'${key}',${idx});">
             Job #:
           </div>
@@ -2987,17 +3007,28 @@ function renderExtraBlock(key, idx, ex, isLast) {
               onclick="event.stopPropagation();removeSchedSpecialAction('${key}','${slot}','${sid}')">✕</button>
           </span>`;
         }).join('') + `</div>` : '';
-      return `<div class="sched-field sched-notes-wrap" id="sanw_${key}_${slot.replace(/[^a-z0-9]/g,'_')}">
+      const _nText = (fields[f.key]||'').trim();
+      const _nSafe = slot.replace(/[^a-z0-9]/g,'_');
+      const _nChipId = `nchip_${key}_${_nSafe}`;
+      const _nTaId   = `nta_${key}_${_nSafe}`;
+      return `<div class="sched-field sched-notes-wrap" id="sanw_${key}_${_nSafe}">
         ${saChipsHtml}
-        <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
-        <textarea class="sched-field-input sched-notes-input" rows="1" placeholder="Notes…" style="color:${fc};"
+        <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
+        <div class="op-chips-wrap" id="${_nChipId}" style="${_nText ? '' : 'display:none;'}">
+          <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;cursor:pointer;white-space:normal;max-width:100%;"
+            onclick="event.stopPropagation();_schedNoteToggle('${_nChipId}','${_nTaId}')">
+            📝 ${escHtml(_nText)}
+          </span>
+        </div>
+        <textarea id="${_nTaId}" class="sched-field-input sched-notes-input" rows="1" placeholder="Notes…" style="color:${fc};${_nText ? 'display:none;' : ''}"
           data-key="${key}" data-slot="${slot}" data-field="${f.key}"
           onchange="saveSchedFieldExtra(this,'${key}',${idx})"
-          oninput="autoResize(this)">${fields[f.key]||''}</textarea>
+          oninput="autoResize(this)"
+          onblur="_schedNoteBlur('${_nChipId}','${_nTaId}')">${fields[f.key]||''}</textarea>
       </div>`;
     }
     return `<div class="sched-field">
-      <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+      <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
       <textarea class="sched-field-input" rows="1" placeholder="—" style="color:${fc};"
         data-key="${key}" data-slot="${slot}" data-field="${f.key}"
         onchange="saveSchedFieldExtra(this,'${key}',${idx})"
@@ -3010,7 +3041,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
     return `<button class="sched-type-btn ${active?'active':''}"
       onclick="setExtraBlockType('${key}',${idx},'${t.id}')"
       title="${t.label}"
-      style="${active?`border-color:${fc}80;background:rgba(255,255,255,0.15);color:${fc};`:`color:${fc}40;border-color:${fc}20;background:rgba(0,0,0,0.2);`}">
+      style="${active?`border-color:${fcDim};background:rgba(255,255,255,0.15);color:${fc};`:`color:${fc}40;border-color:${fc}20;background:rgba(0,0,0,0.2);`}">
       <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${t.color};border:1px solid rgba(255,255,255,0.3);vertical-align:middle;margin-right:3px;"></span>${active ? t.label.replace(' Work','').replace('Pending','Pend') : ''}
     </button>`;
   }).join('');
@@ -4603,6 +4634,7 @@ function renderSchedule() {
         const isWeekdayBlank = !isWeekend && effectiveType === 'blank';
         const blockBg = isHoliday ? '#e8d5f5' : isWeekendBlank ? '#e8d5f5' : isWeekdayBlank ? '#ffffff' : (bdata._verifiedColor || btype.color);
         const fc = (effectiveType === 'day' || effectiveType === 'night') ? '#ffffff' : '#000000';
+        const fcDim = fc === '#ffffff' ? '#ffffff' : fc + '80';
         const fields = bdata.fields || {};
         const canEdit = (isAdmin() || canEditTab('schedule')) && schedEditMode;
 
@@ -4634,7 +4666,7 @@ function renderSchedule() {
                 </span>`).join('');
             }
             return `<div class="sched-field sched-field-operators">
-              <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+              <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
               <div class="op-chips-wrap ${f.type === 'material' ? 'mat-chips-wrap' : ''}">
                 ${chips}
                 ${canEdit ? (f.type === 'material'
@@ -4651,7 +4683,7 @@ function renderSchedule() {
             const cur = fields.plant || '';
             if (cur) {
               return `<div class="sched-field sched-field-operators">
-                <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+                <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
                 <div class="op-chips-wrap">
                   <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;cursor:pointer;" onclick="openSchedPlantPicker('${key}','${slot}',this)" title="Click to change plant">
                     🏭 ${cur}
@@ -4661,7 +4693,7 @@ function renderSchedule() {
               </div>`;
             }
             return `<div class="sched-field sched-field-operators">
-              <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+              <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
               <div class="op-chips-wrap">
                 ${canEdit ? `<button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openSchedPlantPicker('${key}','${slot}',this)">+</button>` : ''}
               </div>
@@ -4681,19 +4713,19 @@ function renderSchedule() {
             ].filter(Boolean).map(m => `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;padding:1px 6px;">${m}</span>`).join('');
             const hasAny = trucks || load || space;
             const labelEl = canEdit
-              ? `<button class="sched-field-label-btn" style="color:${fc}80;"
+              ? `<button class="sched-field-label-btn" style="color:${fcDim};"
                   onclick="openTruckingModal('${key}','${slot}')"
                   onmouseenter="showTruckingTooltip(event,'${key}','${slot}')"
                   onmouseleave="hideTruckingTooltip()"
                   title="Hover to see trucks · Click to edit">${f.label}</button>`
-              : `<div class="sched-field-label" style="color:${fc}80;"
+              : `<div class="sched-field-label" style="color:${fcDim};"
                   onmouseenter="showTruckingTooltip(event,'${key}','${slot}')"
                   onmouseleave="hideTruckingTooltip()">${f.label}</div>`;
             return `<div class="sched-field sched-field-operators">
               ${labelEl}
               <div class="op-chips-wrap">
                 ${metaChips}
-                ${!hasAny ? `<span style="font-size:11px;color:var(--concrete-dim);">${canEdit ? '' : '—'}</span>` : ''}
+                ${!hasAny ? `<span style="font-size:11px;color:${fcDim};">${canEdit ? '' : '—'}</span>` : ''}
               </div>
             </div>`;
           }
@@ -4711,7 +4743,7 @@ function renderSchedule() {
               ? `<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;font-size:9px;">${escHtml(_qtrSub)}${canEdit?`<button class="op-chip-del" style="color:#888;" onclick="event.stopPropagation();clearQTROthers('${key}','${slot}','${f.key}')" title="Clear sub">✕</button>`:''}</span>`
               : '';
             return `<div class="sched-field">
-              <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+              <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
               <div class="sched-field-btns">${btnsHtml}${othersSubChip}</div>
             </div>`;
           }
@@ -4722,7 +4754,7 @@ function renderSchedule() {
             const chipParts = [fields.jobNum ? '#' + fields.jobNum : '', fields.jobName || ''].filter(Boolean);
             const chipLabel = chipParts.join(' — ');
             return `<div class="sched-field sched-field-operators" id="jchip_${key}_${safeSlot}" style="${!hasJob?'display:none;':''}">
-                <div class="sched-field-label" style="color:${fc}80;">Job:</div>
+                <div class="sched-field-label" style="color:${fcDim};">Job:</div>
                 <div class="op-chips-wrap">
                   <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;${canEdit?'cursor:pointer;':''}"
                     ${canEdit?`onclick="_schedJobChipEdit('${key}','${slot}')" title="Click to change job"`:''}
@@ -4730,7 +4762,7 @@ function renderSchedule() {
                 </div>
               </div>
               <div class="sched-field" id="jname_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
-                <div class="sched-field-label" style="color:${fc}80;${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job name':''}">
+                <div class="sched-field-label" style="color:${fcDim};${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job name':''}">
                   Job Name:
                 </div>
                 <div style="position:relative;flex:1;">
@@ -4751,7 +4783,7 @@ function renderSchedule() {
                 </div>
               </div>
               <div class="sched-field" id="jnum_${key}_${safeSlot}" style="${hasJob?'display:none;':''}position:relative;">
-                <div class="sched-field-label" style="color:${fc}80;${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job #':''}">
+                <div class="sched-field-label" style="color:${fcDim};${canEdit?'cursor:pointer;text-decoration:underline dotted;':''}" title="${canEdit?'Click to change job #':''}">
                   Job #:
                 </div>
                 <div style="position:relative;flex:1;">
@@ -4791,21 +4823,32 @@ function renderSchedule() {
                     onclick="event.stopPropagation();removeSchedSpecialAction('${key}','${slot}','` + sid + `')">✕</button>` : ''}
                 </span>`;
               }).join('') + `</div>` : '';
-            return `<div class="sched-field sched-notes-wrap" id="sanw_${key}_${slot.replace(/[^a-z0-9]/g,'_')}">
+            const _nText2  = (fields[f.key]||'').trim();
+            const _nSafe2  = slot.replace(/[^a-z0-9]/g,'_');
+            const _nChipId2 = `nchip_${key}_${_nSafe2}`;
+            const _nTaId2   = `nta_${key}_${_nSafe2}`;
+            return `<div class="sched-field sched-notes-wrap" id="sanw_${key}_${_nSafe2}">
               ${saChips}
-              <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
-              <textarea class="sched-field-input sched-notes-input" rows="1"
+              <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
+              <div class="op-chips-wrap" id="${_nChipId2}" style="${_nText2 ? '' : 'display:none;'}">
+                <span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;${canEdit?'cursor:pointer;':''}white-space:normal;max-width:100%;"
+                  ${canEdit ? `onclick="event.stopPropagation();_schedNoteToggle('${_nChipId2}','${_nTaId2}')"` : ''}>
+                  📝 ${escHtml(_nText2)}
+                </span>
+              </div>
+              <textarea id="${_nTaId2}" class="sched-field-input sched-notes-input" rows="1"
                 placeholder="Notes…"
-                style="color:${fc};"
+                style="color:${fc};${_nText2 ? 'display:none;' : ''}"
                 data-key="${key}" data-slot="${slot}" data-field="${f.key}"
                 onchange="saveSchedField(this)"
                 oninput="autoResize(this);saveSchedField(this)"
+                onblur="${canEdit ? `_schedNoteBlur('${_nChipId2}','${_nTaId2}')` : ''}"
                 ${canEdit?'':'readonly style="pointer-events:none;cursor:default;"'}
               >${fields[f.key]||''}</textarea>
             </div>`;
           }
           return `<div class="sched-field">
-            <div class="sched-field-label" style="color:${fc}80;">${f.label}</div>
+            <div class="sched-field-label" style="color:${fcDim};">${f.label}</div>
             <textarea class="sched-field-input" rows="1"
               placeholder="—"
               style="color:${fc};"
@@ -4822,7 +4865,7 @@ function renderSchedule() {
           return `<button class="sched-type-btn ${active?'active':''}"
                   ${canEdit ? `onclick="setBlockType('${key}','${slot}','${t.id}')"` : 'disabled'}
                   title="${t.label}"
-                  style="${active?`border-color:${fc}80;background:rgba(0,0,0,0.15);color:${fc};`:`color:${fc}40;border-color:${fc}20;background:rgba(0,0,0,0.08);`}${canEdit?'':';cursor:default;opacity:0.5;'}">
+                  style="${active?`border-color:${fcDim};background:rgba(0,0,0,0.15);color:${fc};`:`color:${fc}40;border-color:${fc}20;background:rgba(0,0,0,0.08);`}${canEdit?'':';cursor:default;opacity:0.5;'}">
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${t.color};border:1px solid rgba(255,255,255,0.3);vertical-align:middle;margin-right:3px;"></span>${active ? t.label.replace(' Work','').replace('Pending','Pend') : ''}
           </button>`;
         }).join('');
