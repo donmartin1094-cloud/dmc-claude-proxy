@@ -4854,21 +4854,20 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     var _fBlk  = _invGetSchedFields(invoice.dateOfWork, invoice.foreman);
     var _tdBlk = null;
     if (_fBlk) { try { _tdBlk = JSON.parse(_fBlk.trucking || '{}'); } catch(e) { _tdBlk = {}; } }
-    // QC label: prefer fields.qc (company name) over qcPerformedBy
+    // QC chip: gate on qcReports exact date+job match to prevent schedule multi-day bleed
     var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
+    var _qcRec = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
+      return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
+    });
     var _qcVal = (_fBlk && _fBlk.qc) ? _fBlk.qc : null;
-    var _qcLabel = typeof _qcVal === 'string' ? _qcVal :
-                   (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
-                   (_qcVal && _qcVal.company) ? _qcVal.company :
-                   (_qcVal && _qcVal.name) ? _qcVal.name :
-                   (_qcVal && _qcVal.label) ? _qcVal.label :
-                   '';
-    if (!_qcLabel && _qJ && _qD) {
-      var _qR = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
-        return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
-      });
-      if (_qR) _qcLabel = _qR.qcPerformedBy || '';
-    }
+    var _qcLabel = _qcRec
+      ? (typeof _qcVal === 'string' ? _qcVal :
+         (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
+         (_qcVal && _qcVal.company) ? _qcVal.company :
+         (_qcVal && _qcVal.name) ? _qcVal.name :
+         (_qcVal && _qcVal.label) ? _qcVal.label :
+         (_qcRec.qcPerformedBy || ''))
+      : '';
     var _trParts = [];
     if (_tdBlk) {
       var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
