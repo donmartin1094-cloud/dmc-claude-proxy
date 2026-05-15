@@ -4894,20 +4894,35 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     var _fBlk  = _invGetSchedFields(invoice.dateOfWork, invoice.foreman);
     var _tdBlk = null;
     if (_fBlk) { try { _tdBlk = JSON.parse(_fBlk.trucking || '{}'); } catch(e) { _tdBlk = {}; } }
-    // QC chip: gate on qcReports exact date+job match to prevent schedule multi-day bleed
+    // QC chip: primary = schedData fields.qc for this date, secondary = qcReports (exact then same-week)
     var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
-    var _qcRec = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
-      return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
-    });
     var _qcVal = (_fBlk && _fBlk.qc) ? _fBlk.qc : null;
-    var _qcLabel = _qcRec
-      ? (typeof _qcVal === 'string' ? _qcVal :
-         (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
-         (_qcVal && _qcVal.company) ? _qcVal.company :
-         (_qcVal && _qcVal.name) ? _qcVal.name :
-         (_qcVal && _qcVal.label) ? _qcVal.label :
-         (_qcRec.qcPerformedBy || ''))
-      : '';
+    var _qcRec = null;
+    if (_qJ) {
+      var _qcPool = (typeof qcReports !== 'undefined' ? qcReports : []).filter(function(r) {
+        return (r.jobNum || r.jobNo || '') === _qJ;
+      });
+      _qcRec = _qcPool.find(function(r) { return (r.datePerformed || '') === _qD; });
+      if (!_qcRec && _qD) {
+        var _qcDt = new Date(_qD + 'T12:00:00');
+        var _qcWk0 = new Date(_qcDt); _qcWk0.setDate(_qcDt.getDate() - _qcDt.getDay());
+        var _qcWk6 = new Date(_qcWk0); _qcWk6.setDate(_qcWk0.getDate() + 6);
+        _qcRec = _qcPool.find(function(r) {
+          if (!r.datePerformed) return false;
+          var _rd = new Date(r.datePerformed + 'T12:00:00');
+          return _rd >= _qcWk0 && _rd <= _qcWk6;
+        });
+      }
+    }
+    var _qcLabel = '';
+    if (_qcVal || _qcRec) {
+      _qcLabel = typeof _qcVal === 'string' ? _qcVal :
+                 (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
+                 (_qcVal && _qcVal.company) ? _qcVal.company :
+                 (_qcVal && _qcVal.name) ? _qcVal.name :
+                 (_qcVal && _qcVal.label) ? _qcVal.label :
+                 (_qcRec && _qcRec.qcPerformedBy) ? _qcRec.qcPerformedBy : '';
+    }
     var _trParts = [];
     if (_tdBlk) {
       var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
