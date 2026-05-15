@@ -4761,26 +4761,31 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
       html += _inv3DayBlock(dk, r, null, canEdit);
     });
 
-    // Grader indicator — scan schedData slots for Jimmy (or any sub-grader) on this day
-    var _hasGrader = false;
-    var _daySd = (typeof schedData !== 'undefined' ? schedData : {})[dk];
-    if (_daySd) {
-      var _gSlots = [_daySd.top, _daySd.bottom]
-        .concat((_daySd.extras || []).map(function(e) { return e && e.data; }))
-        .filter(Boolean);
-      _gSlots.forEach(function(slot) {
-        if (_hasGrader || !slot.fields) return;
-        (slot.fields._specialActions || []).forEach(function(saId) {
-          if (_hasGrader) return;
-          var _sa = (typeof specialActions !== 'undefined' ? specialActions : []).find(function(s) { return s.id === saId; });
-          if (_sa) {
-            var _lbl = (_sa.label || '').toLowerCase();
-            if (_lbl.indexOf('jimmy') !== -1 || (_lbl.indexOf('grader') !== -1 && _lbl.indexOf('steve') === -1)) _hasGrader = true;
-          }
-        });
+    // Grader indicator — reads dayNoteSA on the day object (not slot fields)
+    var _dayNoteSA = ((typeof schedData !== 'undefined' && schedData[dk]) ? schedData[dk].dayNoteSA : null) || [];
+    var _graderLoc = '';
+    var _hasGrader = _dayNoteSA.some(function(saId) {
+      var _sa = (typeof specialActions !== 'undefined' ? specialActions : []).find(function(s) { return s.id === saId; });
+      if (!_sa) return false;
+      var _lc = (_sa.label || '').toLowerCase();
+      return _lc.indexOf('grader') !== -1 && _lc.indexOf('steve') === -1;
+    });
+    if (_hasGrader && typeof schedData !== 'undefined' && schedData[dk]) {
+      var _locs = schedData[dk].dayNoteSALocations || {};
+      // find a location entry for any matching grader SA
+      _dayNoteSA.forEach(function(saId) {
+        if (_graderLoc) return;
+        var _sa = (typeof specialActions !== 'undefined' ? specialActions : []).find(function(s) { return s.id === saId; });
+        if (!_sa) return;
+        var _lc = (_sa.label || '').toLowerCase();
+        if (_lc.indexOf('grader') !== -1 && _lc.indexOf('steve') === -1) {
+          var _locVal = _locs[saId] || '';
+          if (typeof _locVal === 'object') _locVal = _locVal.location || '';
+          _graderLoc = (_locVal || '').trim();
+        }
       });
     }
-    if (_hasGrader) html += '<div style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:4px;padding:2px 6px;font-size:10px;color:#93c5fd;font-family:\'DM Mono\',monospace;margin-top:2px;text-align:center;width:100%;box-sizing:border-box;">🚜 Grader</div>';
+    if (_hasGrader) html += '<div style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:4px;padding:2px 6px;font-size:10px;color:#93c5fd;font-family:\'DM Mono\',monospace;margin-top:2px;text-align:center;width:100%;box-sizing:border-box;">🚜 Grader' + (_graderLoc ? ' \xb7 ' + _graderLoc : '') + '</div>';
 
     html += '</div>';
   }
