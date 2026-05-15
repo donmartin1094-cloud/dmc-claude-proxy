@@ -4809,6 +4809,21 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
 
 // ── Day block ─────────────────────────────────────────────────────────────────
 
+function _invGetSchedTd(dateStr, foremanName) {
+  var _sd = (typeof schedData !== 'undefined' ? schedData : {})[dateStr];
+  if (!_sd) return null;
+  var _fLc = (foremanName || '').toLowerCase();
+  var _m = null;
+  (_sd.extras || []).forEach(function(e) {
+    if (_m || !e || !e.data) return;
+    var _en = (e.foreman || '').toLowerCase();
+    if (_en && (_en.indexOf(_fLc.split(' ')[0]) !== -1 || _fLc.indexOf(_en.split(' ')[0]) !== -1)) _m = e.data.fields || {};
+  });
+  if (!_m) _m = (_fLc.indexOf('filipe') !== -1) ? ((_sd.top && _sd.top.fields) || null) : ((_sd.bottom && _sd.bottom.fields) || null);
+  if (!_m) return null;
+  try { return JSON.parse(_m.trucking || '{}'); } catch(e) { return {}; }
+}
+
 function _inv3DayBlock(dateKey, report, invoice, canEdit) {
   var foremanName = report ? report.foreman : (invoice ? invoice.foreman : '');
   var initials = _inv3Initials(foremanName);
@@ -4828,12 +4843,37 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
       + '</div>';
   }
 
+  // ── Trucking summary + QC chip ──
+  var _truckLine = '';
+  var _qcChip   = '';
+  if (invoice) {
+    var _tdBlk = _invGetSchedTd(invoice.dateOfWork, invoice.foreman);
+    if (_tdBlk) {
+      var _dmc = Array.isArray(_tdBlk.assignedDrivers) ? _tdBlk.assignedDrivers.filter(Boolean).length : (parseInt(_tdBlk.trucks) || 0);
+      var _brkC = {};
+      (_tdBlk.brokerTrucks || []).forEach(function(b) { if (b && b.trim()) _brkC[b.trim()] = (_brkC[b.trim()] || 0) + 1; });
+      var _trParts = [];
+      if (_dmc > 0) _trParts.push('DMC:' + _dmc);
+      Object.keys(_brkC).forEach(function(k) { _trParts.push(escHtml(k) + ':' + _brkC[k]); });
+      if (_trParts.length) _truckLine = '<div style="font-size:9px;color:rgba(255,255,255,0.6);font-family:\'DM Mono\',monospace;margin-top:2px;">&#x1F69B; ' + _trParts.join(' \xb7 ') + '</div>';
+    }
+    var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
+    if (_qJ && _qD) {
+      var _qR = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
+        return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
+      });
+      if (_qR) _qcChip = '<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:10px;padding:1px 6px;font-size:9px;color:#93c5fd;font-family:\'DM Mono\',monospace;margin-top:2px;">QC: ' + escHtml(_inv3Initials(_qR.qcPerformedBy || '')) + '</span>';
+    }
+  }
+
   var state  = isApp ? 'approved' : 'filled';
   var amtCls = isApp ? 'green'    : 'yellow';
   return '<div class="inv3-day-block '+state+'"'+(isApp?'':' style="position:relative;"')+' onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(foremanName)+'">'
     + (isApp ? '' : '<span onclick="invQuickApprove(\''+escHtml(invoice.id)+'\',event)" style="position:absolute;top:2px;right:4px;font-size:10px;color:#f59e0b;cursor:pointer;font-weight:700;opacity:0.7;padding:2px;" title="Quick approve">&#10003;</span>')
     + '<div class="inv3-block-info">'+initials+' \xb7 '+jobNo+'</div>'
     + (billed > 0 ? '<div class="inv3-block-amt '+amtCls+'">'+invFmt(billed)+'</div>' : '')
+    + _truckLine
+    + _qcChip
     + '</div>';
 }
 
@@ -5439,7 +5479,27 @@ function _invAutoFillFromSchedule(date, foreman) {
   _setPlain('invJobName', _match.jobName || '');
   _setPlain('invGcName', _gc);
   _setCombo('invSupplier', 'invSupplierSel', 'invSupplierText', _match.plant || '');
-  _setPlain('invActDmcCount', _td.trucks || '');
+
+  // ── Trucking auto-fill (only overwrites empty fields) ──
+  var _dmcAfEl = document.getElementById('invActDmcCount');
+  if (_dmcAfEl && !_dmcAfEl.value.trim()) {
+    var _adLen = Array.isArray(_td.assignedDrivers) ? _td.assignedDrivers.filter(Boolean).length : 0;
+    var _dmcAfVal = _adLen > 0 ? String(_adLen) : (_td.trucks || '');
+    if (_dmcAfVal) _dmcAfEl.value = _dmcAfVal;
+  }
+  if (_invModalBrkRows.length === 0 && (_td.brokerTrucks || []).filter(Boolean).length > 0) {
+    var _brkAfC = {};
+    _td.brokerTrucks.forEach(function(b) { if (b && b.trim()) _brkAfC[b.trim()] = (_brkAfC[b.trim()] || 0) + 1; });
+    Object.keys(_brkAfC).forEach(function(k) { _invModalBrkRows.push({ name: k, count: _brkAfC[k], cost: 0 }); });
+    if (typeof renderInvModalBrkRows === 'function') renderInvModalBrkRows();
+  }
+  var _supAfEl = document.getElementById('invActSupCount');
+  if (_supAfEl && !_supAfEl.value.trim()) {
+    var _supAfCnt = (_td.supplierTrucks || []).filter(Boolean).length;
+    if (_supAfCnt > 0) _supAfEl.value = String(_supAfCnt);
+  }
+  if (typeof invUpdateTruckTotals === 'function') invUpdateTruckTotals();
+  if (typeof _invModalRecalcTotal === 'function') _invModalRecalcTotal();
 }
 
 // ── Modal (initial creation only — all editing is inline on cards) ─────────────
@@ -5585,6 +5645,17 @@ function openInvoiceModal(id, prefill) {
     ? ('<select id="invModalBrkSel" class="inv-input" style="font-size:11px;padding:2px 6px;max-width:160px;" onchange="invModalBrkPick(this)"><option value="">+ Add broker…</option>' + _brkList.map(function(b){ return '<option value="' + escHtml(b) + '">' + escHtml(b) + '</option>'; }).join('') + '</select>')
     : '<button onclick="invAddModalBrkRow()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">+ Add</button>';
 
+  // ── QC chip pre-compute ──
+  var _qcModalChip = '';
+  var _qcMDate = (inv && inv.dateOfWork) || p.dateOfWork || '';
+  var _qcMJob  = (inv && inv.jobNo) || p.jobNo || _curJobNo || '';
+  if (_qcMDate && _qcMJob) {
+    var _qcMRec = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
+      return (r.jobNum || r.jobNo || '') === _qcMJob && (r.datePerformed || '') === _qcMDate;
+    });
+    if (_qcMRec) _qcModalChip = '<div style="margin-bottom:12px;"><span style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:10px;padding:3px 10px;font-size:11px;color:#93c5fd;font-family:\'DM Mono\',monospace;">&#x1F52C; QC: ' + escHtml(_qcMRec.qcPerformedBy || '') + ' \xb7 ' + escHtml(_qcMRec.datePerformed || '') + '</span></div>';
+  }
+
   var overlay = document.createElement('div');
   overlay.id = 'invModal';
   overlay.className = 'inv-modal-overlay';
@@ -5618,6 +5689,7 @@ function openInvoiceModal(id, prefill) {
     +     '<select id="invSupplierSel" style="' + selStyle + (_showSupSel ? '' : 'display:none;') + '" onchange="window._invSupPick(this)">' + _supSelOpts + '</select>'
     +     '<input id="invSupplierText" class="inv-input" placeholder="Supplier name" value="' + escHtml(_showSupSel ? '' : _curSupplier) + '" style="width:100%;' + (_showSupSel ? 'display:none;' : '') + '" oninput="document.getElementById(\'invSupplier\').value=this.value" /></div>'
     + '</div>'
+    + _qcModalChip
     + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types on this Invoice</div>'
     + '<div id="invMixRows">' + mixItems.map(function(m, i) { return mixRowHtml(m, i); }).join('') + '</div>'
     + '<button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:0;font-size:11px;">+ Add Line Item</button>'
