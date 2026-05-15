@@ -3555,11 +3555,11 @@ function _checkLocalStorageSize() {
   } catch(e) { return 0; }
 }
 </script>
-<script src="/ui-components.js"></script>
-<script src="/slips.js"></script>
-<script src="/schedule.js"></script>
-<script src="/reports.js"></script>
-<script src="/mixslip-scanner.js"></script>
+<script src="/ui-components.js?v=3"></script>
+<script src="/slips.js?v=3"></script>
+<script src="/schedule.js?v=3"></script>
+<script src="/reports.js?v=3"></script>
+<script src="/mixslip-scanner.js?v=3"></script>
 <script>
 // Global crash reporter for production troubleshooting.
 function showRuntimeErrorOverlay(title, detail) {
@@ -27672,6 +27672,7 @@ async function fbLoadAll() {
         else if (key === 'equipment_cat_map')    { equipmentCategoryMap = val; }
         else if (key === 'materials')   { materialList = val; }
                 else if (key === 'mix_types')  { mixTypesList = val; localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(val)); syncMixTypeDisplayNames();  _checkLocalStorageSize();}
+                else if (key === 'truckingBrokers') { if (Array.isArray(val)) { truckingBrokersList = val; localStorage.setItem('pavescope_trucking_brokers', JSON.stringify(val)); _checkLocalStorageSize(); } }
                 else if (key === 'invoices')    { invoiceList = val; localStorage.setItem(INVOICES_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
                 else if (key === 'qc_reports')  { qcReports = val; localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
                 else if (key === 'job_mix_formulas') { jobMixFormulas = Array.isArray(val) ? val : jobMixFormulas; localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(jobMixFormulas));  _checkLocalStorageSize();}
@@ -28232,6 +28233,7 @@ async function initApp(username) {
               else if (key === 'special_actions')  { if (Array.isArray(val) && val.length) { specialActions = val; localStorage.setItem(SPECIAL_ACTIONS_KEY, JSON.stringify(val)); }  _checkLocalStorageSize();}
               else if (key === 'rental_crews')     { if (Array.isArray(val)) { rentalCrews = val; localStorage.setItem(RENTAL_CREWS_KEY, JSON.stringify(val)); }  _checkLocalStorageSize();}
               else if (key === 'mix_types')        { mixTypesList = val; localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(val)); if (typeof syncMixTypeDisplayNames === 'function') syncMixTypeDisplayNames(); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
+              else if (key === 'truckingBrokers')  { if (Array.isArray(val)) { truckingBrokersList = val; localStorage.setItem('pavescope_trucking_brokers', JSON.stringify(val)); _checkLocalStorageSize(); } }
               else if (key === 'awarding_authorities') { awardingAuthorities = val; _settingsRefreshPanel('rosters'); }
               else if (key === 'truck_pricing')    { truckPricing = { ...truckPricing, ...val }; _settingsRefreshPanel('trucking'); }
               else if (key === 'theme')            { pendingTheme = val; applyThemeVars(val); localStorage.setItem(THEME_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
