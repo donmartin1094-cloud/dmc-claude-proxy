@@ -4896,7 +4896,10 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     if (_fBlk) { try { _tdBlk = JSON.parse(_fBlk.trucking || '{}'); } catch(e) { _tdBlk = {}; } }
     // QC chip: fires from schedule slot alone — no uploaded report required
     var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
-    var _qcVal = (_fBlk && _fBlk.qc) ? _fBlk.qc : null;
+    // Direct slot read — bypasses _invGetSchedFields extras-first logic that can return the wrong slot
+    var _isFil = (invoice.foreman || '').toLowerCase().indexOf('filipe') !== -1;
+    var _qcSlot = (typeof schedData !== 'undefined' && schedData[_qD]) ? schedData[_qD][_isFil ? 'top' : 'bottom'] : null;
+    var _qcVal = (_qcSlot && _qcSlot.fields && _qcSlot.fields.qc) ? _qcSlot.fields.qc : null;
     var _qcLabel = '';
     if (_qcVal) {
       _qcLabel = typeof _qcVal === 'string' ? _qcVal :
