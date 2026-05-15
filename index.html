@@ -8238,6 +8238,99 @@ function _operatorThisWeekHtml() {
   '</div>';
 }
 
+function _driverThisWeekHtml() {
+  var _u = (localStorage.getItem('dmc_u') || '').toLowerCase();
+  var _dn = _u;
+  try {
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      var _hc = DEFAULT_TEAM_ACCOUNTS.find(function(a) { return a.username.toLowerCase() === _u; });
+      if (_hc && _hc.displayName) _dn = _hc.displayName;
+    }
+  } catch(e) {}
+
+  function _isAssigned(slotData) {
+    if (!slotData || slotData.type === 'blank') return false;
+    try {
+      var td = JSON.parse(((slotData.fields || {}).trucking) || '{}');
+      var assigned = td.assignedDrivers || [];
+      return assigned.some(function(x) { return (x || '').toLowerCase() === _u; });
+    } catch(e2) { return false; }
+  }
+
+  var today = new Date();
+  var todayKey = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var dow = today.getDay();
+  var thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  var DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  var days = [];
+  for (var _di = 0; _di < 7; _di++) {
+    var _d = new Date(thisMonday); _d.setDate(thisMonday.getDate() + _di);
+    var _dk = _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    var _sd = (typeof schedData !== 'undefined') ? (schedData[_dk] || {}) : {};
+    var _blk = null;
+    var _blkSlot = '';
+    if (_isAssigned(_sd.top))    { _blk = _sd.top;    _blkSlot = 'top'; }
+    else if (_isAssigned(_sd.bottom)) { _blk = _sd.bottom; _blkSlot = 'bottom'; }
+    else { (_sd.extras || []).forEach(function(ex, _exi) { if (!_blk && ex && ex.data && _isAssigned(ex.data)) { _blk = ex.data; _blkSlot = 'extra_' + _exi; } }); }
+    if (_di >= 5 && !_blk) continue;
+    days.push({ key: _dk, name: DAY_NAMES[_di], date: _d.getDate(), isToday: _dk === todayKey, blk: _blk, slot: _blkSlot });
+  }
+
+  var N = days.length;
+  if (!N) {
+    return '<div class="home-widget">'+
+      '<div class="home-widget-header"><div class="home-widget-title">🚛 This Week</div></div>'+
+      '<div class="home-widget-body home-widget-empty">No truck assignments this week</div>'+
+    '</div>';
+  }
+
+  function driverBlockCell(bd, dayKey, slot) {
+    if (!bd || !bd.type || bd.type === 'blank') {
+      return '<div style="min-height:44px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07);"></div>';
+    }
+    var bt = (typeof getBlockType === 'function') ? getBlockType(bd.type) : { color:'#a78bfa', label: bd.type };
+    var f = bd.fields || {};
+    var td2 = {}; try { td2 = JSON.parse(f.trucking || '{}'); } catch(e3) {}
+    var jn = f.jobName || '';
+    if (jn.indexOf(' — ') >= 0) jn = jn.split(' — ').slice(1).join(' — ');
+    var shiftLabel = (bt.label || bd.type || '').replace(' Work','');
+    var loadTimeStr = td2.loadTime || f.loadTime || '';
+    var col = '#a78bfa';
+    return '<div class="hw-sched-block" style="background:'+col+'22;border:1.5px solid '+col+'66;min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:3px 5px;gap:2px;cursor:pointer;" '+
+      'onclick="openMobBlockDetail(\''+dayKey+'\',\''+slot+'\')" onmouseenter="hwSchedTipShow(event,this)" onmouseleave="hwSchedTipHide()">'+
+      (f.jobNum ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:800;color:'+col+';line-height:1.1;">#'+escHtml(f.jobNum)+'</span>' : '')+
+      (jn ? '<span style="font-family:\'DM Sans\',sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,0.9);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+escHtml(jn.substring(0,14))+'</span>' : '')+
+      (loadTimeStr ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+col+';line-height:1.2;">'+escHtml(loadTimeStr)+'</span>' : '')+
+      (shiftLabel ? '<span style="font-family:\'DM Mono\',monospace;font-size:7px;color:'+col+';background:'+col+'1a;border-radius:3px;padding:1px 4px;align-self:flex-start;line-height:1.2;">'+escHtml(shiftLabel)+'</span>' : '')+
+    '</div>';
+  }
+
+  var cells = [];
+  cells.push('<div></div>');
+  days.forEach(function(d) {
+    var isT = d.isToday;
+    cells.push('<div style="text-align:center;padding-bottom:3px;border-bottom:'+(isT?'2px solid #a78bfa':'1px solid rgba(255,255,255,0.08)')+';">'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:'+(isT?'#a78bfa':'var(--concrete-dim)')+';letter-spacing:.5px;">'+d.name+'</div>'+
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:'+(isT?'#a78bfa':'var(--white)')+';line-height:1.1;">'+d.date+'</div>'+
+    '</div>');
+  });
+  cells.push('<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-right:4px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="'+escHtml(_dn)+'">Me</div>');
+  days.forEach(function(day) {
+    cells.push('<div style="padding:1px;">'+driverBlockCell(day.blk, day.key, day.slot)+'</div>');
+  });
+
+  return '<div class="home-widget">'+
+    '<div class="home-widget-header"><div class="home-widget-title">🚛 This Week</div></div>'+
+    '<div class="home-widget-body" style="padding:10px 12px;overflow-x:auto;">'+
+      '<div style="display:grid;grid-template-columns:38px repeat('+N+',1fr);gap:4px;min-width:0;">'+
+        cells.join('')+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
 function renderHomeView(el) {
   if (!el) return;
   // Load photos from cloud once per page load (refresh)
@@ -8278,6 +8371,7 @@ function renderHomeView(el) {
     const orderedIds = [...new Set([...savedOrder, ...HOME_WIDGETS_DEF.map(w => w.id)])];
     // Drivers see only schedule + photos widgets (lowbed drivers also see lowbed moves)
     const _role = (typeof getCurrentRole === 'function') ? getCurrentRole() : 'staff';
+    const _isMixDriver = _role === 'driver';
     const _isDriver  = _role === 'driver' || _role === 'lowbed_driver';
     const _isForeman = _role === 'foreman';
     const _isCrewRole = ['operator','laborer','mechanic'].includes(_role);
@@ -8338,6 +8432,8 @@ function renderHomeView(el) {
     let widgetsHtml = '';
     if (_homeIsAdmin()) {
       widgetsHtml = activeWidgets.map(w => buildWidget(w.id, displayName, savedPositions[w.id])).join('');
+    } else if (_isMixDriver) {
+      widgetsHtml = ''; // mix truck driver home rendered outside the widget grid
     } else if (_isOperator) {
       widgetsHtml = ''; // operator home screen is rendered outside the widget grid
     } else if (_isRestrictedRole) {
@@ -8379,6 +8475,26 @@ function renderHomeView(el) {
           '</div>' +
           '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _foremanMyHoursHtml + '</div>' +
           '<div style="flex:1;min-width:180px;box-sizing:border-box;">' + _foremanNext2WeeksHtml + '</div>' +
+        '</div>';
+    }
+
+    // Pre-compute mix truck driver top-row panels
+    var _driverTopSectionHtml = '';
+    var _showDriverGps = false;
+    if (_isMixDriver) {
+      var _drvThisWeekHtml = '';
+      try { _drvThisWeekHtml = _driverThisWeekHtml(); } catch(e) {}
+      _showDriverGps = true;
+      _driverTopSectionHtml =
+        '<div style="display:flex;gap:16px;align-items:flex-start;width:100%;flex-wrap:wrap;padding:0 0 8px;">' +
+          '<div style="flex:1;min-width:180px;box-sizing:border-box;">' +
+            '<div class="home-greeting-text">' +
+              '<div class="home-greeting-sub">' + greeting + ',</div>' +
+              '<div class="home-greeting-name">' + safeName + ' 👋</div>' +
+              '<div class="home-greeting-date">' + dateStr + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="flex:2;min-width:240px;box-sizing:border-box;">' + _drvThisWeekHtml + '</div>' +
         '</div>';
     }
 
@@ -8455,13 +8571,15 @@ function renderHomeView(el) {
       : '';
     el.innerHTML = `
       <div class="home-wrap${_isMobAdmin ? ' home-wrap-mob-admin' : ''}">
-        ${_isOperator
-          ? _operatorTopSectionHtml
-          : _isForeman
-            ? _topSectionHtml
-            : _isQCMgr
-              ? _qcMgrTopSectionHtml
-              : '<div class="home-greeting">' +
+        ${_isMixDriver
+          ? _driverTopSectionHtml
+          : _isOperator
+            ? _operatorTopSectionHtml
+            : _isForeman
+              ? _topSectionHtml
+              : _isQCMgr
+                ? _qcMgrTopSectionHtml
+                : '<div class="home-greeting">' +
               (_homeIsAdmin() && !_isMobAdmin
                 ? '<div style="min-width:0;">' + _homeWeekScheduleWidget() + '</div>' +
                   '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0;">' +
@@ -8487,10 +8605,10 @@ function renderHomeView(el) {
         ${adminWidgetBarHtml}
         ${_isForeman ? '<div id="foremanTodayCard" style="width:100%;max-width:600px;margin:0 auto;box-sizing:border-box;padding:12px 16px 4px;">' + _foremanCardSafe + '</div>' : ''}
         ${_isOperator ? '<div style="width:100%;max-width:600px;margin:0 auto;box-sizing:border-box;padding:4px 16px 4px;">' + _operatorCardSafe + '</div>' : ''}
-        ${_isOperator && _showOpGps ? '<div style="width:100%;height:240px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;margin:4px 0 0;flex-shrink:0;"><div class="home-gps-map-inner" id="homeGpsMapEl" style="width:100%;height:100%;"></div></div>' : ''}
+        ${(_isOperator && _showOpGps || _isMixDriver && _showDriverGps) ? '<div style="width:100%;height:240px;border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);overflow:hidden;margin:4px 0 0;flex-shrink:0;"><div class="home-gps-map-inner" id="homeGpsMapEl" style="width:100%;height:100%;"></div></div>' : ''}
         <div class="home-widgets-grid">${widgetsHtml}</div>
       </div>`;
-    if (_showGpsPanel || (_isOperator && _showOpGps)) { var _gpsGen = ++_homeGps.gen; setTimeout(function(){ if (_homeGps.gen === _gpsGen) _homeInitGps(); }, 150); }
+    if (_showGpsPanel || (_isOperator && _showOpGps) || (_isMixDriver && _showDriverGps)) { var _gpsGen = ++_homeGps.gen; setTimeout(function(){ if (_homeGps.gen === _gpsGen) _homeInitGps(); }, 150); }
   } catch(err) {
     console.error('renderHomeView error:', err);
     el.innerHTML = `<div style="padding:40px;font-family:'DM Sans',sans-serif;color:var(--white);">
@@ -27128,6 +27246,9 @@ const DEFAULT_TEAM_ACCOUNTS = [
   // ── Lowbed / Hybrid Drivers ─────────────────────────────────────────────────
   { username:'Nightmare57', email:'ericsylvia57@gmail.com',               password:'Chevy1970',      role:'lowbed_driver',        displayName:'Eric Sylvia',      driverTypes:['lowbed'] },
   { username:'IGiron',      email:'igiron@donmartincorp.com',             password:STOCK_PASSWORD,   role:'lowbed_driver',        displayName:'Ingrid Giron',     driverTypes:['lowbed','mixtruck'] },
+  // ── Mix Truck Drivers ────────────────────────────────────────────────────
+  { username:'ttengburg', password:'DMC2024!', role:'driver', displayName:'Tommy Tengburg', active:true, driverTypes:['mixtruck'] },
+  { username:'swall',     password:'DMC2024!', role:'driver', displayName:'Skylar Wall',    active:true, driverTypes:['mixtruck'] },
   // ── Rental Lowbed Drivers ─────────────────────────────────────────────────
   { username:'ATow',        password:'DMCTow2025',                        role:'rental_lowbed_driver', displayName:"Andy's Towing" },
   { username:'Chris',       email:'chris@donmartincorp.com',              password:'Projectdev',       role:'admin',    displayName:'Chris', readOnly:true },
@@ -27718,7 +27839,9 @@ async function initApp(username) {
         { username:'asilva',    displayName:'Aaron Silva',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
         { username:'csilva',    displayName:'Corey Silva',    password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
         { username:'dcardoso',  displayName:'Djalo Cardoso',  password:'DMC2024!', role:'operator', active:true, driverTypes:[] },
-        { username:'hmonteiro', displayName:'Helio Monteiro', email:'hmonteiro@donmartincorp.com', password:'DMC2024!', role:'qc_manager', active:true, driverTypes:[] }
+        { username:'hmonteiro', displayName:'Helio Monteiro', email:'hmonteiro@donmartincorp.com', password:'DMC2024!', role:'qc_manager', active:true, driverTypes:[] },
+        { username:'ttengburg', displayName:'Tommy Tengburg', password:'DMC2024!', role:'driver', active:true, driverTypes:['mixtruck'] },
+        { username:'swall',     displayName:'Skylar Wall',    password:'DMC2024!', role:'driver', active:true, driverTypes:['mixtruck'] }
       ];
       var _changed = false;
       _foremanDefaults.forEach(function(fd) {

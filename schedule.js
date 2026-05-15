@@ -9351,6 +9351,21 @@ function buildLookaheadHTML(supplier, dateRange) {
 
 var _truckingKey = null, _truckingSlot = null;
 var _truckingRows = { dmc:[], broker:[], supplier:[] };
+var _truckingAssignedDrivers = [];
+
+function _getMixTruckDrivers() {
+  var drivers = [];
+  try {
+    if (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') {
+      DEFAULT_TEAM_ACCOUNTS.forEach(function(a) {
+        if (a.role === 'driver' || (Array.isArray(a.driverTypes) && a.driverTypes.indexOf('mixtruck') !== -1)) {
+          drivers.push({ username: a.username, displayName: a.displayName || a.username });
+        }
+      });
+    }
+  } catch(e) {}
+  return drivers;
+}
 
 function parseTruckingData(key, slot) {
   let fields;
@@ -9397,9 +9412,10 @@ function clearTruckingField(key, slot) {
 function openTruckingModal(key, slot) {
   _truckingKey = key; _truckingSlot = slot;
   const td = parseTruckingData(key, slot);
-  _truckingRows.dmc      = td.dmcTrucks      || [''];
-  _truckingRows.broker   = td.brokerTrucks   || [''];
-  _truckingRows.supplier = td.supplierTrucks || [''];
+  _truckingRows.dmc           = td.dmcTrucks      || [''];
+  _truckingRows.broker        = td.brokerTrucks   || [''];
+  _truckingRows.supplier      = td.supplierTrucks || [''];
+  _truckingAssignedDrivers    = Array.isArray(td.assignedDrivers) ? td.assignedDrivers.slice() : [];
 
   document.getElementById('truckingModal')?.remove();
   const modal = document.createElement('div');
@@ -9427,6 +9443,9 @@ function openTruckingModal(key, slot) {
         </div>
       </div>
 
+      <div class="trucking-section-label" style="margin-top:12px;">🟣 Assigned Drivers</div>
+      <div id="tm-driver-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+
       <div class="trucking-section-label">🟡 DMC Trucks</div>
       <div id="tm-dmc-rows"></div>
       <button class="trucking-add-truck-btn" onclick="addTruckRow('dmc')">+ Add DMC Truck</button>
@@ -9446,10 +9465,35 @@ function openTruckingModal(key, slot) {
     </div>`;
 
   document.body.appendChild(modal);
+  renderDriverChips();
   renderTruckRows('dmc');
   renderTruckRows('broker');
   renderTruckRows('supplier');
   setTimeout(() => document.getElementById('tm-numtrucks')?.focus(), 60);
+}
+
+function renderDriverChips() {
+  var el = document.getElementById('tm-driver-chips');
+  if (!el) return;
+  var drivers = _getMixTruckDrivers();
+  if (!drivers.length) { el.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No mix truck drivers configured</span>'; return; }
+  el.innerHTML = drivers.map(function(d) {
+    var sel = _truckingAssignedDrivers.indexOf(d.username) !== -1;
+    return '<button onclick="toggleDriverChip(\'' + escHtml(d.username) + '\')" style="' +
+      'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;' +
+      'padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .15s;min-height:44px;' +
+      (sel
+        ? 'background:#a78bfa22;border:2px solid #a78bfa;color:#a78bfa;'
+        : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);') +
+      '">' + escHtml(d.displayName) + '</button>';
+  }).join('');
+}
+
+function toggleDriverChip(username) {
+  var idx = _truckingAssignedDrivers.indexOf(username);
+  if (idx === -1) { _truckingAssignedDrivers.push(username); }
+  else { _truckingAssignedDrivers.splice(idx, 1); }
+  renderDriverChips();
 }
 
 function renderTruckRows(group) {
@@ -9496,12 +9540,13 @@ function saveTruckingModal() {
     });
   });
   const data = {
-    trucks:        document.getElementById('tm-numtrucks')?.value.trim() || '',
-    loadTime:      document.getElementById('tm-loadtime')?.value.trim()  || '',
-    spacing:       document.getElementById('tm-spacing')?.value.trim()   || '',
-    dmcTrucks:     _truckingRows.dmc.filter(t=>t.trim()),
-    brokerTrucks:  _truckingRows.broker.filter(t=>t.trim()),
-    supplierTrucks:_truckingRows.supplier.filter(t=>t.trim()),
+    trucks:          document.getElementById('tm-numtrucks')?.value.trim() || '',
+    loadTime:        document.getElementById('tm-loadtime')?.value.trim()  || '',
+    spacing:         document.getElementById('tm-spacing')?.value.trim()   || '',
+    dmcTrucks:       _truckingRows.dmc.filter(t=>t.trim()),
+    brokerTrucks:    _truckingRows.broker.filter(t=>t.trim()),
+    supplierTrucks:  _truckingRows.supplier.filter(t=>t.trim()),
+    assignedDrivers: _truckingAssignedDrivers.filter(u=>u.trim()),
   };
   saveTruckingData(_truckingKey, _truckingSlot, data);
   closeTruckingModal();

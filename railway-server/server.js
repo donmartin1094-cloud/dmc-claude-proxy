@@ -246,6 +246,7 @@ app.post('/auth-login', (req, res) => {
     'DSouza':      'Pestario86!!',
     'fjoaquim':    'DMC2024!',
     'marruda':     'DMC2024!',
+    'hmonteiro':   'DMC2024!',
     'lmedeiros':   'DMC2024!',
     'eestrela':    'DMC2024!',
     'sleate':      'DMC2024!',
@@ -255,6 +256,8 @@ app.post('/auth-login', (req, res) => {
     'asilva':      'DMC2024!',
     'csilva':      'DMC2024!',
     'dcardoso':    'DMC2024!',
+    'ttengburg':   'DMC2024!',
+    'swall':       'DMC2024!',
   };
   const uLower = login.toLowerCase();
   const matchKey = Object.keys(ACCOUNTS).find(k => k.toLowerCase() === uLower);

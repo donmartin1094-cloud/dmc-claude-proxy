@@ -33,6 +33,8 @@ exports.handler = async (event) => {
       'fjoaquim':    'DMC2024!',
       'marruda':     'DMC2024!',
       'hmonteiro':   'DMC2024!',
+      'ttengburg':   'DMC2024!',
+      'swall':       'DMC2024!',
     };
 
     const uLower = login.toLowerCase();
