@@ -4639,7 +4639,7 @@ function renderInvoiceTracker() {
   wrap.innerHTML = '<div class="inv3-wrap">'
     + _inv3RenderMonthTabs()
     + _inv3KpiBar()
-    + _inv3ViewBar()
+    + _inv3ViewBar(canEdit)
     + (inv3View === 'list' ? _inv3ListView(canEdit) : _inv3CalendarView(canEdit))
     + '</div>';
 
@@ -4692,10 +4692,11 @@ function _inv3KpiBar() {
 
 // ── View toggle bar ──────────────────────────────────────────────────────────
 
-function _inv3ViewBar() {
+function _inv3ViewBar(canEdit) {
   return '<div class="inv3-view-bar">'
     + '<button class="inv3-view-btn'+(inv3View==='calendar'?' active':'')+'" onclick="inv3SetView(\'calendar\')">&#128197; Calendar</button>'
     + '<button class="inv3-view-btn'+(inv3View==='list'?' active':'')+'" onclick="inv3SetView(\'list\')">&#128203; List</button>'
+    + (canEdit ? '<button class="inv3-add-invoice-btn" onclick="openInvoiceModal(null)">+ Add Invoice</button>' : '')
     + '</div>';
 }
 
