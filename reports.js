@@ -4,6 +4,7 @@ var reportsFolderCollapsed = {};
 var reportsDailyViewMode = {}; // { [foreman]: 'month' | 'year' } per foreman folder
 var _invMigrationDone = false;
 var _invModalBrkRows = [];
+var _BROKER_FIXED_COUNT = { 'V&H': 1 }; // broker name → fixed truck count; absent/null = prompt for qty
 var invCalViewMode    = 'grid';  // 'grid' | 'calendar' — mobile only
 var invCalMonthOffset = 0;       // 0 = current month, negative = past
 
@@ -5556,6 +5557,23 @@ function openInvoiceModal(id, prefill) {
     } catch(e) {}
   }
 
+  var _schedDmcCount = '';
+  if (!isEdit && p.dateOfWork) {
+    try {
+      var _ms2   = typeof foremanRoster !== 'undefined' ? foremanRoster : [];
+      var _pSlot2 = (p.foreman && _ms2[1] && p.foreman === _ms2[1]) ? 'bottom' : 'top';
+      var _pDay2  = (typeof schedData !== 'undefined' ? schedData[p.dateOfWork] : null) || {};
+      var _pTd2   = JSON.parse(((_pDay2[_pSlot2] || {}).fields || {}).trucking || '{}');
+      var _adArr  = Array.isArray(_pTd2.assignedDrivers) ? _pTd2.assignedDrivers : [];
+      if (_adArr.length) _schedDmcCount = String(_adArr.length);
+    } catch(e2) {}
+  }
+
+  var _brkList = (typeof truckingBrokersList !== 'undefined') ? truckingBrokersList : [];
+  var _brkSelHtml = _brkList.length
+    ? ('<select id="invModalBrkSel" class="inv-input" style="font-size:11px;padding:2px 6px;max-width:160px;" onchange="invModalBrkPick(this)"><option value="">+ Add broker…</option>' + _brkList.map(function(b){ return '<option value="' + escHtml(b) + '">' + escHtml(b) + '</option>'; }).join('') + '</select>')
+    : '<button onclick="invAddModalBrkRow()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">+ Add</button>';
+
   var overlay = document.createElement('div');
   overlay.id = 'invModal';
   overlay.className = 'inv-modal-overlay';
@@ -5595,21 +5613,28 @@ function openInvoiceModal(id, prefill) {
     + '<div style="margin-top:16px;">'
     +   '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">🚛 Actual Trucking Costs</div>'
     +   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">'
-    +     '<div><label class="inv-form-label">DMC Trucks (actual #)</label><input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="' + (at.dmcCount || p.truckCount || '') + '" style="width:100%;" /></div>'
+    +     '<div><label class="inv-form-label">DMC Trucks (actual #)</label><input class="inv-input" id="invActDmcCount" type="number" min="0" step="1" placeholder="0" value="' + (isEdit ? (at.dmcCount || '') : (_schedDmcCount || p.truckCount || '')) + '" style="width:100%;" oninput="invUpdateTruckTotals()" /></div>'
     +     '<div><label class="inv-form-label">DMC Truck Cost ($)</label><input class="inv-input" id="invActDmcCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.dmcCost || '') + '" style="width:100%;" /></div>'
-    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualDmc()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
+    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualDmc()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">&#8601; Use Projected</button></div>'
     +     '<div style="grid-column:1/-1;">'
-    +       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+    +       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">'
     +         '<span style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Broker Trucks</span>'
-    +         '<button onclick="invAddModalBrkRow()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">+ Add</button>'
-    +         '<button onclick="autoFillActualBrk()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">↙ Use Projected</button>'
+    +         _brkSelHtml
+    +         '<button onclick="autoFillActualBrk()" class="inv-btn-ghost" style="font-size:10px;padding:2px 8px;">&#8601; Use Projected</button>'
+    +       '</div>'
+    +       '<div id="invModalBrkQtyPrompt" style="display:none;align-items:center;gap:6px;margin-bottom:6px;padding:6px 8px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:4px;">'
+    +         '<span id="invModalBrkQtyLabel" style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);white-space:nowrap;">How many trucks?</span>'
+    +         '<input id="invModalBrkQtyInput" class="inv-input" type="number" min="1" step="1" value="1" style="width:60px;font-size:12px;" onkeydown="if(event.key===\'Enter\')invModalBrkConfirmQty()" />'
+    +         '<button onclick="invModalBrkConfirmQty()" class="inv-btn" style="font-size:10px;padding:3px 10px;">&#10003; Add</button>'
+    +         '<button onclick="document.getElementById(\'invModalBrkQtyPrompt\').style.display=\'none\'" class="inv-btn-ghost" style="font-size:10px;padding:3px 8px;">Cancel</button>'
     +       '</div>'
     +       '<div id="invModalBrkRows"></div>'
     +     '</div>'
-    +     '<div><label class="inv-form-label">Supplier Trucks (actual #)</label><input class="inv-input" id="invActSupCount" type="number" min="0" step="1" placeholder="0" value="' + (at.supCount || '') + '" style="width:100%;" /></div>'
+    +     '<div><label class="inv-form-label">Supplier Trucks (actual #)</label><input class="inv-input" id="invActSupCount" type="number" min="0" step="1" placeholder="0" value="' + (at.supCount || '') + '" style="width:100%;" oninput="invUpdateTruckTotals()" /></div>'
     +     '<div><label class="inv-form-label">Supplier Truck Cost ($)</label><input class="inv-input" id="invActSupCost" type="number" min="0" step="0.01" placeholder="0.00" value="' + (at.supCost || '') + '" style="width:100%;" /></div>'
-    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualSup()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">↙ Use Projected</button></div>'
+    +     '<div style="display:flex;align-items:flex-end;"><button onclick="autoFillActualSup()" class="inv-btn-ghost" style="font-size:10px;padding:5px 8px;width:100%;">&#8601; Use Projected</button></div>'
     +   '</div>'
+    +   '<div id="invTruckTotalLine" style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);padding:3px 2px 8px;"></div>'
     + '</div>'
     + '<div style="margin-top:16px;">'
     +   '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">📎 Attached Invoice Files</div>'
@@ -5635,6 +5660,7 @@ function openInvoiceModal(id, prefill) {
   window._invAttachments = ((inv && inv.attachments) || []).map(function(a) { return Object.assign({}, a); });
   if (typeof invRenderAttList === 'function') invRenderAttList();
   renderInvModalBrkRows();
+  invUpdateTruckTotals();
 
   // ── Picker interaction handlers ────────────────────────────────────────────
   window._invJobPick = function(sel) {
@@ -5733,16 +5759,61 @@ function renderInvModalBrkRows() {
     }
     return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:6px;margin-bottom:4px;">'
       + nameField
-      + '<input class="inv-input" type="number" min="0" step="1" placeholder="# trucks" value="' + (row.count || '') + '" oninput="_invModalBrkRows[' + i + '].count=parseFloat(this.value)||0" style="font-size:12px;" />'
+      + '<input class="inv-input" type="number" min="0" step="1" placeholder="# trucks" value="' + (row.count || '') + '" oninput="_invModalBrkRows[' + i + '].count=parseFloat(this.value)||0;invUpdateTruckTotals()" style="font-size:12px;" />'
       + '<input class="inv-input" type="number" min="0" step="0.01" placeholder="$cost" value="' + (row.cost || '') + '" oninput="_invModalBrkRows[' + i + '].cost=parseFloat(this.value)||0" style="font-size:12px;" />'
-      + '<button onclick="_invModalBrkRows.splice(' + i + ',1);renderInvModalBrkRows();" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:0 4px;align-self:center;">✕</button>'
+      + '<button onclick="_invModalBrkRows.splice(' + i + ',1);renderInvModalBrkRows();" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:0 4px;align-self:center;">&#x2715;</button>'
       + '</div>';
   }).join('');
+  invUpdateTruckTotals();
 }
 
 function invAddModalBrkRow() {
   _invModalBrkRows.push({ name: '', count: 0, cost: 0 });
   renderInvModalBrkRows();
+}
+
+function invModalBrkPick(sel) {
+  var name = sel.value;
+  sel.value = '';
+  if (!name) return;
+  var fc = (_BROKER_FIXED_COUNT && _BROKER_FIXED_COUNT[name] !== undefined) ? _BROKER_FIXED_COUNT[name] : null;
+  if (fc !== null && fc > 0) {
+    for (var _fi = 0; _fi < fc; _fi++) { _invModalBrkRows.push({ name: name, count: 1, cost: 0 }); }
+    renderInvModalBrkRows();
+  } else {
+    var prompt = document.getElementById('invModalBrkQtyPrompt');
+    if (prompt) {
+      var lbl = document.getElementById('invModalBrkQtyLabel');
+      if (lbl) lbl.textContent = 'How many ' + name + ' trucks?';
+      prompt.dataset.brkName = name;
+      prompt.style.display = 'flex';
+      var qi = document.getElementById('invModalBrkQtyInput');
+      if (qi) { qi.value = '1'; qi.focus(); qi.select(); }
+    }
+  }
+}
+
+function invModalBrkConfirmQty() {
+  var prompt = document.getElementById('invModalBrkQtyPrompt');
+  if (!prompt) return;
+  var name = prompt.dataset.brkName || '';
+  var qty  = parseInt((document.getElementById('invModalBrkQtyInput') || {}).value) || 1;
+  if (qty < 1) qty = 1;
+  for (var _qi = 0; _qi < qty; _qi++) { _invModalBrkRows.push({ name: name, count: 1, cost: 0 }); }
+  prompt.style.display = 'none';
+  renderInvModalBrkRows();
+}
+
+function invUpdateTruckTotals() {
+  var el = document.getElementById('invTruckTotalLine');
+  if (!el) return;
+  var dmcEl = document.getElementById('invActDmcCount');
+  var supEl = document.getElementById('invActSupCount');
+  var dmc = parseFloat((dmcEl && dmcEl.value) || 0) || 0;
+  var brk = _invModalBrkRows.reduce(function(s, r) { return s + (r.count || 0); }, 0);
+  var sup = parseFloat((supEl && supEl.value) || 0) || 0;
+  var tot = dmc + brk + sup;
+  el.textContent = 'Total Trucks: ' + tot + ' (DMC: ' + dmc + ' \xb7 Broker: ' + brk + ' \xb7 Supplier: ' + sup + ')';
 }
 
 function addInvMixRow() {
