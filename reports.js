@@ -4785,7 +4785,6 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
         }
       });
     }
-    console.log('GRADER INJECT dk:', dk, 'hasGrader:', _hasGrader);
     if (_hasGrader) html += '<div style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:4px;padding:2px 6px;font-size:10px;color:#93c5fd;font-family:\'DM Mono\',monospace;margin-top:2px;text-align:center;width:100%;box-sizing:border-box;">🚜 Grader' + (_graderLoc ? ' \xb7 ' + _graderLoc : '') + '</div>';
 
     html += '</div>';
@@ -5618,7 +5617,7 @@ function openInvoiceModal(id, prefill) {
     + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">'
     +   '<button onclick="document.getElementById(\'invModal\').remove()" class="inv-btn-ghost">Cancel</button>'
-    +   '<button onclick="saveInvoiceEntry(' + (isEdit ? JSON.stringify(id) : 'null') + ')" class="inv-btn">Save Invoice</button>'
+    +   '<button onclick="saveInvoiceEntry(' + (isEdit ? '\'' + escHtml(id) + '\'' : 'null') + ')" class="inv-btn">Save Invoice</button>'
     + '</div>'
     + '</div>';
 
