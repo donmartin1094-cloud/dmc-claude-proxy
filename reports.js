@@ -4952,7 +4952,7 @@ function invShowQCModal(jobNum, date, event) {
   _ov.id = 'invQCModal';
   _ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
 
-  var _c = '<div style="background:#1a1f2e;border:1px solid rgba(59,130,246,0.4);border-radius:12px;width:95vw;max-width:1000px;max-height:95vh;display:flex;flex-direction:column;overflow-y:auto;">';
+  var _c = '<div style="background:#1a1f2e;border:1px solid rgba(59,130,246,0.4);border-radius:12px;width:95vw;max-width:1000px;height:90vh;display:flex;flex-direction:column;overflow:hidden;">';
   _c += '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.1);">';
   _c += '<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#93c5fd;">&#x1F52C; QC Report</span>';
   _c += '<button onclick="document.getElementById(\'invQCModal\').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;padding:0 4px;">&#x2715;</button>';
@@ -4964,8 +4964,8 @@ function invShowQCModal(jobNum, date, event) {
   _c += '</div>';
   if (_qcFile) {
     var _enc = encodeURIComponent(_qcFile);
-    _c += '<div style="flex:1;overflow:hidden;display:flex;flex-direction:column;padding:12px 16px 8px;">';
-    _c += '<iframe src="https://docs.google.com/viewer?url=' + _enc + '&embedded=true" style="flex:1;width:100%;height:75vh;border:none;border-radius:6px;background:#111;" allowfullscreen></iframe>';
+    _c += '<div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 16px 8px;">';
+    _c += '<iframe src="https://docs.google.com/viewer?url=' + _enc + '&embedded=true" style="flex:1;min-height:0;width:100%;height:100%;border:none;border-radius:6px;background:#111;" allowfullscreen></iframe>';
     _c += '<a href="' + escHtml(_qcFile) + '" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;font-family:\'DM Mono\',monospace;font-size:11px;color:#93c5fd;text-decoration:none;">Open in new tab &#x2197;</a>';
     _c += '</div>';
   } else {
