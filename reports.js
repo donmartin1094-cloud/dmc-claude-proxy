@@ -4914,15 +4914,15 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
         });
       }
     }
-    var _qcLabel = '';
-    if (_qcVal || _qcRec) {
-      _qcLabel = typeof _qcVal === 'string' ? _qcVal :
-                 (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
-                 (_qcVal && _qcVal.company) ? _qcVal.company :
-                 (_qcVal && _qcVal.name) ? _qcVal.name :
-                 (_qcVal && _qcVal.label) ? _qcVal.label :
-                 (_qcRec && _qcRec.qcPerformedBy) ? _qcRec.qcPerformedBy : '';
-    }
+    // schedData qcVal = label source only; qcReports is the sole chip gate (scoped by jobNo)
+    var _qcLabel = _qcRec
+      ? (typeof _qcVal === 'string' ? _qcVal :
+         (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
+         (_qcVal && _qcVal.company) ? _qcVal.company :
+         (_qcVal && _qcVal.name) ? _qcVal.name :
+         (_qcVal && _qcVal.label) ? _qcVal.label :
+         (_qcRec.qcPerformedBy || ''))
+      : '';
     var _trParts = [];
     if (_tdBlk) {
       var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
