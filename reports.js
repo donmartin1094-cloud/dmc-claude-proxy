@@ -4857,11 +4857,12 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     // QC label: prefer fields.qc (company name) over qcPerformedBy
     var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
     var _qcVal = (_fBlk && _fBlk.qc) ? _fBlk.qc : null;
-    var _qcLabel = typeof _qcVal === 'string' ? _qcVal.trim() :
+    var _qcLabel = typeof _qcVal === 'string' ? _qcVal :
+                   (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
                    (_qcVal && _qcVal.company) ? _qcVal.company :
                    (_qcVal && _qcVal.name) ? _qcVal.name :
                    (_qcVal && _qcVal.label) ? _qcVal.label :
-                   String(_qcVal || '').trim();
+                   '';
     if (!_qcLabel && _qJ && _qD) {
       var _qR = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
         return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
@@ -4930,11 +4931,12 @@ function invShowQCModal(jobNum, date, event) {
     _allF.forEach(function(f) {
       if (f.qc && !_qcCompany) {
         var _fqc = f.qc;
-        _qcCompany = typeof _fqc === 'string' ? _fqc.trim() :
+        _qcCompany = typeof _fqc === 'string' ? _fqc :
+                     (_fqc && _fqc.subCompany) ? _fqc.subCompany :
                      (_fqc && _fqc.company) ? _fqc.company :
                      (_fqc && _fqc.name) ? _fqc.name :
                      (_fqc && _fqc.label) ? _fqc.label :
-                     String(_fqc || '').trim();
+                     '';
       }
     });
   }
