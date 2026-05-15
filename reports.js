@@ -4849,7 +4849,8 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
   if (invoice) {
     var _tdBlk = _invGetSchedTd(invoice.dateOfWork, invoice.foreman);
     if (_tdBlk) {
-      var _dmc = Array.isArray(_tdBlk.assignedDrivers) ? _tdBlk.assignedDrivers.filter(Boolean).length : (parseInt(_tdBlk.trucks) || 0);
+      var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
+      var _dmc = Array.isArray(_tdBlk.assignedDrivers) ? _tdBlk.assignedDrivers.filter(function(u) { return _dmcUsers.indexOf((u || '').toLowerCase()) !== -1; }).length : 0;
       var _brkC = {};
       (_tdBlk.brokerTrucks || []).forEach(function(b) { if (b && b.trim()) _brkC[b.trim()] = (_brkC[b.trim()] || 0) + 1; });
       var _trParts = [];
