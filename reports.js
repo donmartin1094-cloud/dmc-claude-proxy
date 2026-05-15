@@ -4894,11 +4894,17 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     var _fBlk  = _invGetSchedFields(invoice.dateOfWork, invoice.foreman);
     var _tdBlk = null;
     if (_fBlk) { try { _tdBlk = JSON.parse(_fBlk.trucking || '{}'); } catch(e) { _tdBlk = {}; } }
-    // QC chip: primary = schedData fields.qc for this date, secondary = qcReports (exact then same-week)
+    // QC chip: fires from schedule slot alone — no uploaded report required
     var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
     var _qcVal = (_fBlk && _fBlk.qc) ? _fBlk.qc : null;
+    var _qcLabel = '';
+    if (_qcVal) {
+      _qcLabel = typeof _qcVal === 'string' ? _qcVal :
+                 (_qcVal.subCompany || _qcVal.company || _qcVal.name || _qcVal.label || _qcVal.type || '');
+    }
+    // Find uploaded report for modal context only — does not gate the chip
     var _qcRec = null;
-    if (_qJ) {
+    if (_qcLabel && _qJ) {
       var _qcPool = (typeof qcReports !== 'undefined' ? qcReports : []).filter(function(r) {
         return (r.jobNum || r.jobNo || '') === _qJ;
       });
@@ -4914,15 +4920,6 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
         });
       }
     }
-    // schedData qcVal = label source only; qcReports is the sole chip gate (scoped by jobNo)
-    var _qcLabel = _qcRec
-      ? (typeof _qcVal === 'string' ? _qcVal :
-         (_qcVal && _qcVal.subCompany) ? _qcVal.subCompany :
-         (_qcVal && _qcVal.company) ? _qcVal.company :
-         (_qcVal && _qcVal.name) ? _qcVal.name :
-         (_qcVal && _qcVal.label) ? _qcVal.label :
-         (_qcRec.qcPerformedBy || ''))
-      : '';
     var _trParts = [];
     if (_tdBlk) {
       var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
@@ -4933,7 +4930,7 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
       Object.keys(_brkC).forEach(function(k) { _trParts.push(escHtml(k) + ':' + _brkC[k]); });
     }
     var _qcChipHtml = _qcLabel
-      ? '<span onclick="invShowQCModal(\'' + escHtml(_qJ) + '\',\'' + escHtml(_qD) + '\',event)" style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:10px;padding:1px 6px;font-size:9px;color:#93c5fd;font-family:\'DM Mono\',monospace;cursor:pointer;white-space:nowrap;">&#x1F52C; ' + escHtml(_qcLabel) + '</span>'
+      ? '<span onclick="invShowQCModal(\'' + escHtml(_qJ) + '\',\'' + escHtml(_qD) + '\',\'' + encodeURIComponent(_qcLabel) + '\',event)" style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:10px;padding:1px 6px;font-size:9px;color:#93c5fd;font-family:\'DM Mono\',monospace;cursor:pointer;white-space:nowrap;">&#x1F52C; ' + escHtml(_qcLabel) + '</span>'
       : '';
     if (_trParts.length || _qcChipHtml) {
       _truckLine = '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">'
@@ -4963,7 +4960,7 @@ function invQuickApprove(invId, event) {
   if (typeof renderInvoiceTracker === 'function') renderInvoiceTracker();
 }
 
-function invShowQCModal(jobNum, date, event) {
+function invShowQCModal(jobNum, date, qcLabel, event) {
   event.stopPropagation();
   var existing = document.getElementById('invQCModal');
   if (existing) existing.remove();
@@ -4974,27 +4971,29 @@ function invShowQCModal(jobNum, date, event) {
   });
   var _qcRec = _qcAll.find(function(r) { return (r.datePerformed || '') === date; }) || _qcAll[0] || null;
 
-  // Get QC company from schedule fields (scan all slots for that date)
-  var _qcCompany = '';
-  var _sdQ = (typeof schedData !== 'undefined' ? schedData : {})[date];
-  if (_sdQ) {
-    var _allF = [];
-    if (_sdQ.top    && _sdQ.top.fields)    _allF.push(_sdQ.top.fields);
-    if (_sdQ.bottom && _sdQ.bottom.fields) _allF.push(_sdQ.bottom.fields);
-    (_sdQ.extras || []).forEach(function(e) { if (e && e.data && e.data.fields) _allF.push(e.data.fields); });
-    _allF.forEach(function(f) {
-      if (f.qc && !_qcCompany) {
-        var _fqc = f.qc;
-        _qcCompany = typeof _fqc === 'string' ? _fqc :
-                     (_fqc && _fqc.subCompany) ? _fqc.subCompany :
-                     (_fqc && _fqc.company) ? _fqc.company :
-                     (_fqc && _fqc.name) ? _fqc.name :
-                     (_fqc && _fqc.label) ? _fqc.label :
-                     '';
-      }
-    });
+  // Company: use label passed from chip (foreman-slot-specific), fall back to schedData scan
+  var _qcCompany = qcLabel ? decodeURIComponent(qcLabel) : '';
+  if (!_qcCompany) {
+    var _sdQ = (typeof schedData !== 'undefined' ? schedData : {})[date];
+    if (_sdQ) {
+      var _allF = [];
+      if (_sdQ.top    && _sdQ.top.fields)    _allF.push(_sdQ.top.fields);
+      if (_sdQ.bottom && _sdQ.bottom.fields) _allF.push(_sdQ.bottom.fields);
+      (_sdQ.extras || []).forEach(function(e) { if (e && e.data && e.data.fields) _allF.push(e.data.fields); });
+      _allF.forEach(function(f) {
+        if (f.qc && !_qcCompany) {
+          var _fqc = f.qc;
+          _qcCompany = typeof _fqc === 'string' ? _fqc :
+                       (_fqc && _fqc.subCompany) ? _fqc.subCompany :
+                       (_fqc && _fqc.company) ? _fqc.company :
+                       (_fqc && _fqc.name) ? _fqc.name :
+                       (_fqc && _fqc.label) ? _fqc.label :
+                       '';
+        }
+      });
+    }
+    if (!_qcCompany && _qcRec) _qcCompany = _qcRec.qcPerformedBy || '';
   }
-  if (!_qcCompany && _qcRec) _qcCompany = _qcRec.qcPerformedBy || '';
 
   var _qcTech = (_qcRec && _qcRec.qcPerformedBy && _qcRec.qcPerformedBy !== _qcCompany) ? _qcRec.qcPerformedBy : '';
   var _qcDate = (_qcRec && _qcRec.datePerformed) ? _qcRec.datePerformed : date;
