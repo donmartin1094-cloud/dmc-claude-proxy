@@ -5325,6 +5325,77 @@ function _closeInvDaySheet() {
 }
 
 
+function _invAutoFillFromSchedule(date, foreman) {
+  if (!date || !foreman) return;
+  var _sd = (typeof schedData !== 'undefined' ? schedData : {})[date];
+  if (!_sd) return;
+
+  var _match = null;
+  var _fLc = (foreman || '').toLowerCase();
+
+  // Check extras first — they carry an explicit foreman name
+  (_sd.extras || []).forEach(function(e) {
+    if (_match || !e || !e.data) return;
+    var _eName = (e.foreman || '').toLowerCase();
+    if (_eName && (_eName.indexOf(_fLc.split(' ')[0]) !== -1 || _fLc.indexOf(_eName.split(' ')[0]) !== -1)) {
+      _match = e.data.fields || {};
+    }
+  });
+
+  // Position-based fallback: top = Filipe, bottom = everyone else
+  if (!_match) {
+    if (_fLc.indexOf('filipe') !== -1) {
+      if (_sd.top && _sd.top.fields) _match = _sd.top.fields;
+    } else {
+      if (_sd.bottom && _sd.bottom.fields) _match = _sd.bottom.fields;
+    }
+  }
+
+  if (!_match) return;
+
+  var _td = {};
+  try { _td = JSON.parse(_match.trucking || '{}'); } catch(e) {}
+
+  var _gc = '';
+  if (_match.jobNum) {
+    var _bj = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j) {
+      return (j.num || '').toString().trim() === (_match.jobNum || '').toString().trim();
+    });
+    if (_bj) _gc = _bj.gc || '';
+  }
+
+  // Set a hidden+select+text combo — updates hidden, then visible select or text
+  var _setCombo = function(hidId, selId, txtId, val) {
+    if (!val) return;
+    var hid = document.getElementById(hidId);
+    var sel = document.getElementById(selId);
+    var txt = document.getElementById(txtId);
+    if (hid) hid.value = val;
+    if (sel && sel.style.display !== 'none') {
+      var found = false;
+      for (var oi = 0; oi < sel.options.length; oi++) {
+        if (sel.options[oi].value === val) { sel.value = val; found = true; break; }
+      }
+      if (!found && txt) { sel.style.display = 'none'; txt.style.display = ''; txt.value = val; }
+    } else if (txt) {
+      txt.value = val;
+    }
+  };
+
+  // Set a plain input; remove readonly so the suggestion remains editable
+  var _setPlain = function(id, val) {
+    if (!val) return;
+    var el = document.getElementById(id);
+    if (el) { el.removeAttribute('readonly'); el.value = val; }
+  };
+
+  _setCombo('invJobNo', 'invJobNoSel', 'invJobNoText', _match.jobNum || '');
+  _setPlain('invJobName', _match.jobName || '');
+  _setPlain('invGcName', _gc);
+  _setCombo('invSupplier', 'invSupplierSel', 'invSupplierText', _match.plant || '');
+  _setPlain('invActDmcCount', _td.trucks || '');
+}
+
 // ── Modal (initial creation only — all editing is inline on cards) ─────────────
 function openInvoiceModal(id, prefill) {
   var isEdit  = !!id;
@@ -5459,7 +5530,7 @@ function openInvoiceModal(id, prefill) {
     + '<div class="inv-form-grid">'
     // Date + Invoice #
     +   '<div><label class="inv-form-label">Date of Work *</label>'
-    +     '<input class="inv-input" id="invDate" type="date" value="' + ((inv && inv.dateOfWork) || p.dateOfWork || '') + '" style="width:100%;" /></div>'
+    +     '<input class="inv-input" id="invDate" type="date" value="' + ((inv && inv.dateOfWork) || p.dateOfWork || '') + '" style="width:100%;" onchange="_invAutoFillFromSchedule(this.value, document.getElementById(\'invForeman\') ? document.getElementById(\'invForeman\').value : \'\')" /></div>'
     +   '<div><label class="inv-form-label">Invoice #</label>'
     +     '<input class="inv-input" id="invNo" value="' + escHtml((inv && inv.invoiceNo) || '') + '" placeholder="e.g. INV-20241" style="width:100%;" /></div>'
     // Foreman dropdown
@@ -5571,6 +5642,8 @@ function openInvoiceModal(id, prefill) {
       fmText.focus();
     } else {
       if (hiddenFm) hiddenFm.value = val;
+      var _afDate = document.getElementById('invDate');
+      if (_afDate && _afDate.value) _invAutoFillFromSchedule(_afDate.value, val);
     }
   };
 
