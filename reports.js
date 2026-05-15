@@ -5717,7 +5717,7 @@ function openInvoiceModal(id, prefill) {
       + '<div><label class="inv-form-label">Price / Ton ($)</label>'
       +   '<input class="inv-input" id="invMixPrice-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.mixPrice || '') + '" style="width:100%;" oninput="invCalcTotal(' + i + ')" /></div>'
       + '<div><label class="inv-form-label">Item Total ($)</label>'
-      +   '<input class="inv-input" id="invItemTotal-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.itemTotal || '') + '" style="width:100%;background:rgba(126,203,143,0.06);" /></div>'
+      +   '<input class="inv-input" id="invItemTotal-' + i + '" type="number" step="0.01" placeholder="0.00" value="' + escHtml(m.itemTotal || '') + '" style="width:100%;background:rgba(126,203,143,0.06);" oninput="_invModalRecalcTotal()" /></div>'
       + (i > 0 ? '<button onclick="removeInvMixRow(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;align-self:center;margin-top:14px;">✕</button>' : '<div></div>')
       + '</div>';
   }
@@ -6063,13 +6063,8 @@ function invCalcTotal(i) {
 
 function _invModalRecalcTotal() {
   var total = 0;
-  var rows = document.querySelectorAll('#invMixRows .inv-mix-row');
-  rows.forEach(function(row) {
-    var tEl = row.querySelector('[id^="invTonQty-"]');
-    var pEl = row.querySelector('[id^="invMixPrice-"]');
-    var t = parseFloat((tEl && tEl.value) || 0) || 0;
-    var p = parseFloat((pEl && pEl.value) || 0) || 0;
-    total += t * p;
+  document.querySelectorAll('[id^="invItemTotal-"]').forEach(function(el) {
+    total += parseFloat(el.value || 0) || 0;
   });
   var el = document.getElementById('invModalTotal');
   if (!el) return;
