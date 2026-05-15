@@ -3731,7 +3731,7 @@ function _uspmBuildMat4Row(idx, item) {
     `<option value="${v}"${(gyrations||'—') === v ? ' selected' : ''}>${v}</option>`
   ).join('');
   return `<div class="uspm-mat4-row" id="uspm-mat4-row-${idx}">
-    <select class="uspm-mat4-select" size="6">${optsHtml}</select>
+    <select class="uspm-mat4-select">${optsHtml}</select>
     <input type="number" class="uspm-mat4-tons" placeholder="T" min="0" step="0.1" value="${escHtml(tons)}" />
     <select class="uspm-mat4-gyr">${gyrOpts}</select>
     <input type="text" class="uspm-mat4-rap" placeholder="—" list="uspmRapOpts" value="${escHtml(rapPct)}" />
