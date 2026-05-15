@@ -1968,9 +1968,41 @@ function _qcFileRowHtml(r, canManage) {
     (meta ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:2px;">' + meta + '</div>' : '') +
     '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:1px;">' + uploadDate + (r.uploadedBy ? ' · ' + escHtml(r.uploadedBy) : '') + '</div>' +
     '</div>' +
+    '<button onclick="_qcPreviewFile(\'' + escHtml(r.id) + '\')" style="background:none;border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;flex-shrink:0;">👁 Preview</button>' +
     '<a href="' + escHtml(r.fileUrl || '') + '" target="_blank" class="qc-file-btn" style="text-decoration:none;flex-shrink:0;">⬇ DL</a>' +
     (canManage ? '<button class="qc-file-del" onclick="deleteQCReport(\'' + escHtml(r.id) + '\')" title="Delete">✕</button>' : '') +
     '</div>';
+}
+
+function _qcPreviewFile(recId) {
+  var r = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(x) { return x.id === recId; });
+  if (!r || !r.fileUrl) return;
+  var _fileUrl  = r.fileUrl;
+  var _fileName = r.fileName || 'QC File';
+  var _isMobile = window.innerWidth < 600;
+  var _gdocsUrl = 'https://docs.google.com/viewer?url=' + encodeURIComponent(_fileUrl) + '&embedded=true';
+  var _existing = document.getElementById('_qcPreviewModal');
+  if (_existing) _existing.remove();
+  var _modal = document.createElement('div');
+  _modal.id = '_qcPreviewModal';
+  _modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  var _wrap = _isMobile
+    ? 'width:100vw;height:100vh;border-radius:0;'
+    : 'width:95vw;max-width:1000px;height:90vh;border-radius:8px;';
+  var _iframeH = _isMobile ? 'height:80vh;' : 'height:100%;';
+  _modal.innerHTML =
+    '<div style="' + _wrap + 'background:var(--asphalt-mid);display:flex;flex-direction:column;overflow:hidden;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;">📄 ' + escHtml(_fileName) + '</span>' +
+        '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<a href="' + escHtml(_fileUrl) + '" target="_blank" rel="noopener" style="font-family:\'DM Mono\',monospace;font-size:11px;color:#a78bfa;text-decoration:none;white-space:nowrap;">Open in new tab ↗</a>' +
+          '<button onclick="document.getElementById(\'_qcPreviewModal\').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;padding:0 4px;">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<iframe src="' + _gdocsUrl + '" style="flex:1;min-height:0;width:100%;' + _iframeH + 'border:none;" allowfullscreen></iframe>' +
+    '</div>';
+  _modal.onclick = function(e) { if (e.target === _modal) _modal.remove(); };
+  document.body.appendChild(_modal);
 }
 
 function qcToggleFolder(key) {
