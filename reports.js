@@ -4742,15 +4742,23 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
 
     var _rendered = {};
 
-    // Priority 1: show a block for every invoice that exists for this date
+    // Priority 1: group all invoices by foreman (preserving foreman order),
+    // then render every invoice per foreman stacked together before moving to next foreman
+    var _invsByForeman = {};
+    var _foremanKeys = [];
     dayInvoices.slice().sort(function(a,b){
       return _inv3GetForemanOrder(a.foreman) - _inv3GetForemanOrder(b.foreman);
     }).forEach(function(inv) {
       var fKey = (inv.foreman||'').toLowerCase();
-      if (_rendered[fKey]) return;
+      if (!_invsByForeman[fKey]) { _invsByForeman[fKey] = []; _foremanKeys.push(fKey); }
+      _invsByForeman[fKey].push(inv);
+    });
+    _foremanKeys.forEach(function(fKey) {
       _rendered[fKey] = true;
       var r = dayReports.find(function(rep){ return (rep.foreman||'').toLowerCase()===fKey; }) || null;
-      html += _inv3DayBlock(dk, r, inv, canEdit);
+      _invsByForeman[fKey].forEach(function(inv, idx) {
+        html += _inv3DayBlock(dk, idx === 0 ? r : null, inv, canEdit);
+      });
     });
 
     // Priority 2: empty block for verified reports that have no invoice yet
