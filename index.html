@@ -1750,7 +1750,7 @@
     /* four-col material rows: stack mix type on row 1, inputs on row 2 */
     .uspm-mat4-header { display: none !important; }
     .uspm-mat4-row { grid-template-columns: 1fr 1fr 1fr 24px; grid-template-rows: auto auto; row-gap: 6px; min-height: auto; padding: 10px 14px; }
-    .uspm-mat4-select { grid-column: 1 / 4; grid-row: 1; min-height: 44px; }
+    .uspm-mat4-select { grid-column: 1 / 4; grid-row: 1; height: 104px; min-height: 104px; }
     .uspm-mat4-del    { grid-column: 4;     grid-row: 1; }
     .uspm-mat4-tons   { grid-column: 1;     grid-row: 2; min-height: 44px; }
     .uspm-mat4-gyr    { grid-column: 2;     grid-row: 2; min-height: 44px; }
@@ -2523,9 +2523,9 @@
 
   /* ── Material four-column picker rows ── */
   .uspm-mat4-header { display:grid;grid-template-columns:minmax(0,1fr) 60px 58px 58px 24px;gap:5px;padding:5px 14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);border-bottom:1px solid var(--asphalt-light);background:rgba(0,0,0,0.15); }
-  .uspm-mat4-row { display:grid;grid-template-columns:minmax(0,1fr) 60px 58px 58px 24px;gap:5px;align-items:center;padding:7px 14px;border-bottom:1px solid rgba(255,255,255,0.04);min-height:44px;box-sizing:border-box; }
+  .uspm-mat4-row { display:grid;grid-template-columns:minmax(0,1fr) 60px 58px 58px 24px;gap:5px;align-items:start;padding:7px 14px;border-bottom:1px solid rgba(255,255,255,0.04);min-height:0;box-sizing:border-box; }
   .uspm-mat4-select,.uspm-mat4-gyr { width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 6px;outline:none;min-height:36px;cursor:pointer;box-sizing:border-box;min-width:0; }
-  .uspm-mat4-select { overflow-y:auto;height:auto; }
+  .uspm-mat4-select { height:160px;min-height:160px;overflow-y:auto; }
   .uspm-mat4-select:focus,.uspm-mat4-gyr:focus { border-color:var(--stripe); }
   .uspm-mat4-tons,.uspm-mat4-rap { width:100%;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-size:12px;font-weight:700;padding:5px 6px;outline:none;min-height:36px;box-sizing:border-box;text-align:center; }
   .uspm-mat4-tons { text-align:right; }
