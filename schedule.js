@@ -4614,6 +4614,17 @@ function renderSchedule() {
   ].join('');
 
   const weeksHtml = weeks.map(week => {
+    // Collect standalone extra-crew (no parentSlot) for every day in this week.
+    // Built once here so we can render them in a shared extra row below all day columns.
+    var _weekExtras = {};
+    week.forEach(function(wd) {
+      if (!wd) return;
+      var wk = dk(wd);
+      var exArr = (schedData[wk]?.extras) || [];
+      _weekExtras[wk] = exArr.map(function(ex,i){ return {ex:ex,i:i}; }).filter(function(x){ return !x.ex.parentSlot; });
+    });
+    var _hasWeekExtras = Object.keys(_weekExtras).some(function(k){ return _weekExtras[k].length > 0; });
+
     const daysHtml = week.map(d => {
       if (!d) return `<div></div>`;
       const key = dk(d);
@@ -4912,7 +4923,7 @@ function renderSchedule() {
         const serviceOutline = lookaheadHighlight ? 'outline:3px solid #f5c518;outline-offset:-3px;' : '';
 
         return `
-          <div class="sched-block${isRainedOut?' rained-out':''}${slot==='bottom' && !_botStops.length && !_otherExtras.length?' sched-block-bottom':''}"
+          <div class="sched-block${isRainedOut?' rained-out':''}${slot==='bottom' && !_botStops.length?' sched-block-bottom':''}"
                data-date-key="${key}" data-block-slot="${slot}" data-block-type="${effectiveType}"
                style="background:${finalBg};color:${finalFc};${serviceOutline}"
                ${dragDropAttrs}>
@@ -4948,12 +4959,10 @@ function renderSchedule() {
 
       // Get extra blocks for this day
       const extras = (schedData[key]?.extras) || [];
-      // Group extras: second-stops go under parent card; unaffiliated go at bottom
-      const _topStops    = extras.map((ex,i)=>({ex,i})).filter(x=>x.ex.parentSlot==='top');
-      const _botStops    = extras.map((ex,i)=>({ex,i})).filter(x=>x.ex.parentSlot==='bottom');
-      const _otherExtras = extras.map((ex,i)=>({ex,i})).filter(x=>!x.ex.parentSlot);
-      const _lastExtraI  = _otherExtras.length ? _otherExtras[_otherExtras.length-1].i
-                         : _botStops.length    ? _botStops[_botStops.length-1].i : -1;
+      // Second-stops go under their parent card; unaffiliated extras go to the shared extra row below.
+      const _topStops = extras.map((ex,i)=>({ex,i})).filter(x=>x.ex.parentSlot==='top');
+      const _botStops = extras.map((ex,i)=>({ex,i})).filter(x=>x.ex.parentSlot==='bottom');
+      const _lastExtraI = _botStops.length ? _botStops[_botStops.length-1].i : -1;
 
       const isHoliday = holidays.has(key);
       const canEditSched = (isAdmin() || canEditTab('schedule')) && schedEditMode;
@@ -5007,13 +5016,27 @@ function renderSchedule() {
             </div>`;
           })()}
           ${renderBlock('bottom')}
-          <div class="sched-second-stops-wrap" data-stop-slot="bottom" style="order:4;width:100%;box-sizing:border-box;align-self:stretch;${_schedSecondStopOpen[key+'_bottom'] === false ? 'display:none;' : ''}">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, !_otherExtras.length && i===_lastExtraI)).join('')}</div>
-          ${_otherExtras.map(({ex,i}) => renderExtraBlock(key, i, ex, i===_lastExtraI)).join('')}
+          <div class="sched-second-stops-wrap" data-stop-slot="bottom" style="order:4;width:100%;box-sizing:border-box;align-self:stretch;${_schedSecondStopOpen[key+'_bottom'] === false ? 'display:none;' : ''}">${_botStops.map(({ex,i}) => renderExtraBlock(key, i, ex, i===_lastExtraI)).join('')}</div>
         </div>`;
     }).join('');
 
+    // Shared extra row — one row for ALL standalone extra-crew blocks, each day in its own column.
+    var _extraRowHtml = '';
+    if (_hasWeekExtras) {
+      var _extraCells = week.map(function(d) {
+        if (!d) return '<div style="flex:1;min-width:var(--col-w,311px);box-sizing:border-box;"></div>';
+        var _ek = dk(d);
+        var _dayEx = _weekExtras[_ek] || [];
+        var _blocksHtml = _dayEx.map(function(item, ci) {
+          return renderExtraBlock(_ek, item.i, item.ex, ci === _dayEx.length - 1);
+        }).join('');
+        return '<div class="sched-extra-day-cell" style="flex:1;min-width:var(--col-w,311px);box-sizing:border-box;">' + _blocksHtml + '</div>';
+      }).join('');
+      _extraRowHtml = '<div class="sched-extra-row-container" style="grid-column:1/-1;display:flex;gap:6px;">' + _extraCells + '</div>';
+    }
+
     const { colW, blockH } = getWeekMetrics(week);
-    return `<div class="sched-week"><div class="sched-week-days" style="--col-w:${colW}px;--block-h:${blockH}px;">${daysHtml}</div></div>`;
+    return `<div class="sched-week"><div class="sched-week-days" style="--col-w:${colW}px;--block-h:${blockH}px;">${daysHtml}${_extraRowHtml}</div></div>`;
   }).join('');
 
   // ── Mobile: queue-style foreman rows per day ────────────────────────────
