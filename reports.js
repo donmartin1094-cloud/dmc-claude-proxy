@@ -4809,7 +4809,7 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
 
 // ── Day block ─────────────────────────────────────────────────────────────────
 
-function _invGetSchedTd(dateStr, foremanName) {
+function _invGetSchedFields(dateStr, foremanName) {
   var _sd = (typeof schedData !== 'undefined' ? schedData : {})[dateStr];
   if (!_sd) return null;
   var _fLc = (foremanName || '').toLowerCase();
@@ -4820,6 +4820,11 @@ function _invGetSchedTd(dateStr, foremanName) {
     if (_en && (_en.indexOf(_fLc.split(' ')[0]) !== -1 || _fLc.indexOf(_en.split(' ')[0]) !== -1)) _m = e.data.fields || {};
   });
   if (!_m) _m = (_fLc.indexOf('filipe') !== -1) ? ((_sd.top && _sd.top.fields) || null) : ((_sd.bottom && _sd.bottom.fields) || null);
+  return _m || null;
+}
+
+function _invGetSchedTd(dateStr, foremanName) {
+  var _m = _invGetSchedFields(dateStr, foremanName);
   if (!_m) return null;
   try { return JSON.parse(_m.trucking || '{}'); } catch(e) { return {}; }
 }
@@ -4843,27 +4848,38 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
       + '</div>';
   }
 
-  // ── Trucking summary + QC chip ──
+  // ── Trucking summary + QC chip (combined flex row) ──
   var _truckLine = '';
-  var _qcChip   = '';
   if (invoice) {
-    var _tdBlk = _invGetSchedTd(invoice.dateOfWork, invoice.foreman);
+    var _fBlk  = _invGetSchedFields(invoice.dateOfWork, invoice.foreman);
+    var _tdBlk = null;
+    if (_fBlk) { try { _tdBlk = JSON.parse(_fBlk.trucking || '{}'); } catch(e) { _tdBlk = {}; } }
+    // QC label: prefer fields.qc (company name) over qcPerformedBy
+    var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
+    var _qcLabel = (_fBlk && _fBlk.qc) ? String(_fBlk.qc).trim() : '';
+    if (!_qcLabel && _qJ && _qD) {
+      var _qR = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
+        return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
+      });
+      if (_qR) _qcLabel = _qR.qcPerformedBy || '';
+    }
+    var _trParts = [];
     if (_tdBlk) {
       var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
       var _dmc = Array.isArray(_tdBlk.assignedDrivers) ? _tdBlk.assignedDrivers.filter(function(u) { return _dmcUsers.indexOf((u || '').toLowerCase()) !== -1; }).length : 0;
       var _brkC = {};
       (_tdBlk.brokerTrucks || []).forEach(function(b) { if (b && b.trim()) _brkC[b.trim()] = (_brkC[b.trim()] || 0) + 1; });
-      var _trParts = [];
       if (_dmc > 0) _trParts.push('DMC:' + _dmc);
       Object.keys(_brkC).forEach(function(k) { _trParts.push(escHtml(k) + ':' + _brkC[k]); });
-      if (_trParts.length) _truckLine = '<div style="font-size:9px;color:rgba(255,255,255,0.6);font-family:\'DM Mono\',monospace;margin-top:2px;">&#x1F69B; ' + _trParts.join(' \xb7 ') + '</div>';
     }
-    var _qJ = invoice.jobNo || '', _qD = invoice.dateOfWork || '';
-    if (_qJ && _qD) {
-      var _qR = (typeof qcReports !== 'undefined' ? qcReports : []).find(function(r) {
-        return (r.jobNum || r.jobNo || '') === _qJ && (r.datePerformed || '') === _qD;
-      });
-      if (_qR) _qcChip = '<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:10px;padding:1px 6px;font-size:9px;color:#93c5fd;font-family:\'DM Mono\',monospace;margin-top:2px;">QC: ' + escHtml(_inv3Initials(_qR.qcPerformedBy || '')) + '</span>';
+    var _qcChipHtml = _qcLabel
+      ? '<span onclick="invShowQCModal(\'' + escHtml(_qJ) + '\',\'' + escHtml(_qD) + '\',event)" style="background:rgba(59,130,246,0.2);border:1px solid #3b82f6;border-radius:10px;padding:1px 6px;font-size:9px;color:#93c5fd;font-family:\'DM Mono\',monospace;cursor:pointer;white-space:nowrap;">&#x1F52C; ' + escHtml(_qcLabel) + '</span>'
+      : '';
+    if (_trParts.length || _qcChipHtml) {
+      _truckLine = '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">'
+        + (_trParts.length ? '<span style="font-size:9px;color:rgba(255,255,255,0.6);font-family:\'DM Mono\',monospace;">&#x1F69B; ' + _trParts.join(' \xb7 ') + '</span>' : '')
+        + _qcChipHtml
+        + '</div>';
     }
   }
 
@@ -4874,7 +4890,6 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     + '<div class="inv3-block-info">'+initials+' \xb7 '+jobNo+'</div>'
     + (billed > 0 ? '<div class="inv3-block-amt '+amtCls+'">'+invFmt(billed)+'</div>' : '')
     + _truckLine
-    + _qcChip
     + '</div>';
 }
 
@@ -4886,6 +4901,68 @@ function invQuickApprove(invId, event) {
   if (!inv.approvedAmount) inv.approvedAmount = _inv3BilledTotal(inv);
   if (typeof saveInvoiceList === 'function') saveInvoiceList();
   if (typeof renderInvoiceTracker === 'function') renderInvoiceTracker();
+}
+
+function invShowQCModal(jobNum, date, event) {
+  event.stopPropagation();
+  var existing = document.getElementById('invQCModal');
+  if (existing) existing.remove();
+
+  // Find QC report — exact date match first, then any record for that job
+  var _qcAll = (typeof qcReports !== 'undefined' ? qcReports : []).filter(function(r) {
+    return (r.jobNum || r.jobNo || '') === jobNum;
+  });
+  var _qcRec = _qcAll.find(function(r) { return (r.datePerformed || '') === date; }) || _qcAll[0] || null;
+
+  // Get QC company from schedule fields (scan all slots for that date)
+  var _qcCompany = '';
+  var _sdQ = (typeof schedData !== 'undefined' ? schedData : {})[date];
+  if (_sdQ) {
+    var _allF = [];
+    if (_sdQ.top    && _sdQ.top.fields)    _allF.push(_sdQ.top.fields);
+    if (_sdQ.bottom && _sdQ.bottom.fields) _allF.push(_sdQ.bottom.fields);
+    (_sdQ.extras || []).forEach(function(e) { if (e && e.data && e.data.fields) _allF.push(e.data.fields); });
+    _allF.forEach(function(f) { if (f.qc && !_qcCompany) _qcCompany = String(f.qc).trim(); });
+  }
+  if (!_qcCompany && _qcRec) _qcCompany = _qcRec.qcPerformedBy || '';
+
+  var _qcTech = (_qcRec && _qcRec.qcPerformedBy && _qcRec.qcPerformedBy !== _qcCompany) ? _qcRec.qcPerformedBy : '';
+  var _qcDate = (_qcRec && _qcRec.datePerformed) ? _qcRec.datePerformed : date;
+  var _qcFile = (_qcRec && _qcRec.fileUrl) ? _qcRec.fileUrl : '';
+  var _dateDisp = _qcDate;
+  try { _dateDisp = new Date(_qcDate + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }); } catch(e) {}
+
+  var _ov = document.createElement('div');
+  _ov.id = 'invQCModal';
+  _ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+  var _c = '<div style="background:#1a1f2e;border:1px solid rgba(59,130,246,0.4);border-radius:12px;width:90vw;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">';
+  _c += '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.1);">';
+  _c += '<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#93c5fd;">&#x1F52C; QC Report</span>';
+  _c += '<button onclick="document.getElementById(\'invQCModal\').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;padding:0 4px;">&#x2715;</button>';
+  _c += '</div>';
+  _c += '<div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-family:\'DM Mono\',monospace;font-size:11px;">';
+  _c += '<span style="color:rgba(255,255,255,0.4);">Company</span><span style="color:#e2e8f0;">' + escHtml(_qcCompany || '—') + '</span>';
+  if (_qcTech) _c += '<span style="color:rgba(255,255,255,0.4);">Inspector</span><span style="color:#e2e8f0;">' + escHtml(_qcTech) + '</span>';
+  _c += '<span style="color:rgba(255,255,255,0.4);">Date</span><span style="color:#e2e8f0;">' + escHtml(_dateDisp) + '</span>';
+  _c += '</div>';
+  if (_qcFile) {
+    var _enc = encodeURIComponent(_qcFile);
+    _c += '<div style="flex:1;overflow:hidden;display:flex;flex-direction:column;padding:12px 16px 8px;">';
+    _c += '<iframe src="https://docs.google.com/viewer?url=' + _enc + '&embedded=true" style="flex:1;width:100%;height:65vh;border:none;border-radius:6px;background:#111;" allowfullscreen></iframe>';
+    _c += '<a href="' + escHtml(_qcFile) + '" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;font-family:\'DM Mono\',monospace;font-size:11px;color:#93c5fd;text-decoration:none;">Open in new tab &#x2197;</a>';
+    _c += '</div>';
+  } else {
+    _c += '<div style="padding:24px 16px;text-align:center;font-family:\'DM Mono\',monospace;font-size:11px;color:rgba(255,255,255,0.5);">';
+    _c += 'QC performed by ' + escHtml(_qcCompany || jobNum) + ' — no report uploaded yet.<br>';
+    _c += '<button onclick="document.getElementById(\'invQCModal\').remove();if(typeof switchTab===\'function\')switchTab(\'qcReports\');" style="margin-top:12px;background:rgba(59,130,246,0.15);border:1px solid #3b82f6;border-radius:6px;padding:6px 14px;font-family:\'DM Mono\',monospace;font-size:11px;color:#93c5fd;cursor:pointer;">Upload Report</button>';
+    _c += '</div>';
+  }
+  _c += '</div>';
+
+  _ov.innerHTML = _c;
+  _ov.addEventListener('click', function(e) { if (e.target === _ov) _ov.remove(); });
+  document.body.appendChild(_ov);
 }
 
 // ── List view ─────────────────────────────────────────────────────────────────
