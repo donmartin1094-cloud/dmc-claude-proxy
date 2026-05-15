@@ -6088,7 +6088,7 @@ function saveInvoiceEntry(editId) {
     var tonQty   = tonEl   ? tonEl.value.trim()   : '';
     var mixPrice = priceEl ? priceEl.value.trim() : '';
     var tN = parseFloat(tonQty) || 0, pN = parseFloat(mixPrice) || 0;
-    var itemTotal = (tN > 0 && pN > 0) ? (tN * pN).toFixed(2) : (totEl ? totEl.value.trim() : '');
+    var itemTotal = totEl ? totEl.value.trim() : ((tN > 0 && pN > 0) ? (tN * pN).toFixed(2) : '');
     if (mixType || itemTotal) mixItems.push({ mixType: mixType, tonQty: tonQty, mixPrice: mixPrice, itemTotal: itemTotal });
   });
   if (!mixItems.length) { alert('Add at least one mix type entry.'); return; }
