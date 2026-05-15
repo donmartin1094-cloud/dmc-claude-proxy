@@ -4830,10 +4830,21 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
 
   var state  = isApp ? 'approved' : 'filled';
   var amtCls = isApp ? 'green'    : 'yellow';
-  return '<div class="inv3-day-block '+state+'" onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(foremanName)+'">'
+  return '<div class="inv3-day-block '+state+'"'+(isApp?'':' style="position:relative;"')+' onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(foremanName)+'">'
+    + (isApp ? '' : '<span onclick="invQuickApprove(\''+escHtml(invoice.id)+'\',event)" style="position:absolute;top:2px;right:4px;font-size:10px;color:#f59e0b;cursor:pointer;font-weight:700;opacity:0.7;padding:2px;" title="Quick approve">&#10003;</span>')
     + '<div class="inv3-block-info">'+initials+' \xb7 '+jobNo+'</div>'
     + (billed > 0 ? '<div class="inv3-block-amt '+amtCls+'">'+invFmt(billed)+'</div>' : '')
     + '</div>';
+}
+
+function invQuickApprove(invId, event) {
+  event.stopPropagation();
+  var inv = (invoiceList || []).find(function(i) { return i.id === invId; });
+  if (!inv) return;
+  inv.approved = true;
+  if (!inv.approvedAmount) inv.approvedAmount = _inv3BilledTotal(inv);
+  if (typeof saveInvoiceList === 'function') saveInvoiceList();
+  if (typeof renderInvoiceTracker === 'function') renderInvoiceTracker();
 }
 
 // ── List view ─────────────────────────────────────────────────────────────────
@@ -5609,7 +5620,8 @@ function openInvoiceModal(id, prefill) {
     + '</div>'
     + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types on this Invoice</div>'
     + '<div id="invMixRows">' + mixItems.map(function(m, i) { return mixRowHtml(m, i); }).join('') + '</div>'
-    + '<button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:16px;font-size:11px;">+ Add Line Item</button>'
+    + '<button onclick="addInvMixRow()" class="inv-btn-ghost" style="width:100%;margin-bottom:0;font-size:11px;">+ Add Line Item</button>'
+    + '<div id="invModalTotal" style="text-align:right;font-weight:700;color:#a78bfa;font-size:14px;padding:8px 0;border-top:1px solid rgba(167,139,250,0.3);margin-top:4px;margin-bottom:16px;font-family:\'DM Mono\',monospace;"></div>'
     + '<div style="margin-top:16px;">'
     +   '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--asphalt-light);">🚛 Actual Trucking Costs</div>'
     +   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">'
@@ -5661,6 +5673,7 @@ function openInvoiceModal(id, prefill) {
   if (typeof invRenderAttList === 'function') invRenderAttList();
   renderInvModalBrkRows();
   invUpdateTruckTotals();
+  _invModalRecalcTotal();
 
   // ── Picker interaction handlers ────────────────────────────────────────────
   window._invJobPick = function(sel) {
@@ -5830,6 +5843,7 @@ function addInvMixRow() {
 function removeInvMixRow(i) {
   var el = document.getElementById('invMixRow-' + i);
   if (el) el.remove();
+  _invModalRecalcTotal();
 }
 
 function invCalcTotal(i) {
@@ -5839,6 +5853,22 @@ function invCalcTotal(i) {
   var t = tEl ? (parseFloat(tEl.value) || 0) : 0;
   var p = pEl ? (parseFloat(pEl.value) || 0) : 0;
   if (rEl && t > 0 && p > 0) rEl.value = (t * p).toFixed(2);
+  _invModalRecalcTotal();
+}
+
+function _invModalRecalcTotal() {
+  var total = 0;
+  var rows = document.querySelectorAll('#invMixRows .inv-mix-row');
+  rows.forEach(function(row) {
+    var tEl = row.querySelector('[id^="invTonQty-"]');
+    var pEl = row.querySelector('[id^="invMixPrice-"]');
+    var t = parseFloat((tEl && tEl.value) || 0) || 0;
+    var p = parseFloat((pEl && pEl.value) || 0) || 0;
+    total += t * p;
+  });
+  var el = document.getElementById('invModalTotal');
+  if (!el) return;
+  el.textContent = total > 0 ? ('Invoice Total: $' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '';
 }
 
 function saveInvoiceEntry(editId) {
