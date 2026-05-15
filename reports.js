@@ -5917,6 +5917,7 @@ function saveInvoiceEntry(editId) {
     },
     updatedAt:      Date.now(),
     attachments:    window._invAttachments || [],
+    approved:       existing ? (existing.approved       || false) : false,
     approvedAmount: existing ? (existing.approvedAmount || '') : '',
     invoiceNotes:   existing ? (existing.invoiceNotes   || '') : ''
   };
