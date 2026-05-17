@@ -5021,6 +5021,7 @@ function renderSchedule() {
     }).join('');
 
     // Shared extra row — one row for ALL standalone extra-crew blocks, each day in its own column.
+    console.log('[extraRow] _hasWeekExtras:', _hasWeekExtras, JSON.stringify(Object.keys(_weekExtras).map(function(k){ return k+':'+_weekExtras[k].length; })));
     var _extraRowHtml = '';
     if (_hasWeekExtras) {
       var _extraCells = week.map(function(d) {
@@ -5036,7 +5037,8 @@ function renderSchedule() {
     }
 
     const { colW, blockH } = getWeekMetrics(week);
-    return `<div class="sched-week"><div class="sched-week-days" style="--col-w:${colW}px;--block-h:${blockH}px;">${daysHtml}${_extraRowHtml}</div></div>`;
+    var _fullHtml = daysHtml + (_hasWeekExtras ? _extraRowHtml : '');
+    return `<div class="sched-week"><div class="sched-week-days" style="--col-w:${colW}px;--block-h:${blockH}px;">${_fullHtml}</div></div>`;
   }).join('');
 
   // ── Mobile: queue-style foreman rows per day ────────────────────────────
