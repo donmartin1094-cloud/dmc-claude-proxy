@@ -5033,7 +5033,9 @@ function renderSchedule() {
         }).join('');
         return '<div class="sched-extra-day-cell" style="flex:1;min-width:var(--col-w,311px);box-sizing:border-box;">' + _blocksHtml + '</div>';
       }).join('');
-      _extraRowHtml = '<div class="sched-extra-row-container" style="grid-column:1/-1;display:flex;gap:6px;">' + _extraCells + '</div>';
+      _extraRowHtml = '<div class="sched-extra-row-container" style="grid-column:1/8;display:flex;gap:6px;">' + _extraCells + '</div>';
+      console.log('[extraRow] html length:', _extraRowHtml.length);
+      console.log('[extraRow] html preview:', _extraRowHtml.substring(0, 200));
     }
 
     const { colW, blockH } = getWeekMetrics(week);
