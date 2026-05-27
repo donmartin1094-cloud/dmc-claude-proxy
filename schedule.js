@@ -5842,6 +5842,12 @@ function setBlockType(key, slot, typeId) {
     return;
   }
 
+  // If selecting pending and not already pending, show the consecutive day picker
+  if (typeId === 'pending' && current !== 'pending') {
+    openPendingShiftPicker(key, slot);
+    return;
+  }
+
   // Toggle off if clicking same type (back to blank), or apply directly
   schedData[key][slot].type = current === typeId ? 'blank' : typeId;
   saveSchedData();
@@ -6377,6 +6383,144 @@ function applyConsecutiveDayShifts(startKey, startSlot, count) {
   renderSchedule();
   pushNotif('success', '☀️ Day Shifts Scheduled',
     `${count} consecutive day shift${count !== 1 ? 's' : ''} applied starting ${startKey}.`, null);
+}
+
+function openPendingShiftPicker(startKey, startSlot) {
+  document.getElementById('pendingPickerModal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'pendingPickerModal';
+  overlay.className = 'night-picker-overlay';
+
+  const [yr, mo, dy] = startKey.split('-').map(Number);
+  const startDate = new Date(yr, mo - 1, dy);
+  const dateLabel = startDate.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+
+  overlay.innerHTML = `
+    <div class="night-picker-box">
+      <div class="night-picker-title">📋 Pending</div>
+      <div class="night-picker-sub">Starting ${dateLabel} — how many consecutive days?</div>
+      <div class="night-scroll-wrap" id="pendingScrollWrap">
+        <div class="night-scroll-fade-top"></div>
+        <div class="night-scroll-selector"></div>
+        <div class="night-scroll-fade-bot"></div>
+        <div class="night-scroll-inner" id="pendingScrollInner"></div>
+      </div>
+      <div class="night-picker-actions">
+        <button onclick="document.getElementById('pendingPickerModal').remove()"
+          style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 18px;color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+          Cancel
+        </button>
+        <button id="pendingPickerConfirm"
+          style="background:#5c4000;border:1px solid rgba(245,197,24,0.5);border-radius:var(--radius);padding:9px 18px;color:#f5c518;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:800;cursor:pointer;">
+          📋 Schedule Days
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  const inner = document.getElementById('pendingScrollInner');
+  const ITEM_H = 50;
+  const PADDING = 2;
+  const values = [];
+  for (let i = 0; i < PADDING; i++) values.push('');
+  for (let i = 1; i <= 30; i++) values.push(i);
+  for (let i = 0; i < PADDING; i++) values.push('');
+
+  inner.innerHTML = values.map((v, i) => {
+    const sel = v === 1 ? ' selected' : '';
+    return `<div class="night-scroll-item${sel}" data-val="${v}" style="width:100%;">${v !== '' ? v + (v === 1 ? ' day' : ' days') : ''}</div>`;
+  }).join('');
+
+  let selectedIdx = PADDING;
+  const wrap = document.getElementById('pendingScrollWrap');
+
+  function snapTo(idx) {
+    idx = Math.max(PADDING, Math.min(PADDING + 29, idx));
+    selectedIdx = idx;
+    inner.style.transition = 'transform 0.18s cubic-bezier(.25,.8,.25,1)';
+    inner.style.transform = `translateY(${(PADDING - idx) * ITEM_H + (ITEM_H / 2)}px)`;
+    inner.querySelectorAll('.night-scroll-item').forEach((el, i) => {
+      el.classList.toggle('selected', i === idx);
+    });
+    const val = values[idx];
+    document.getElementById('pendingPickerConfirm').textContent = `📋 Schedule ${val} Day${val !== 1 ? 's' : ''}`;
+  }
+
+  inner.style.transition = 'none';
+  inner.style.transform = `translateY(${(PADDING - selectedIdx) * ITEM_H + (ITEM_H / 2)}px)`;
+
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    snapTo(selectedIdx + (e.deltaY > 0 ? 1 : -1));
+  }, { passive: false });
+
+  let dragStartY = 0, dragStartIdx = 0, isDragging = false;
+  wrap.addEventListener('mousedown', e => { isDragging = true; dragStartY = e.clientY; dragStartIdx = selectedIdx; inner.style.transition = 'none'; });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const delta = Math.round((dragStartY - e.clientY) / ITEM_H);
+    const newIdx = Math.max(PADDING, Math.min(PADDING + 29, dragStartIdx + delta));
+    inner.style.transform = `translateY(${(PADDING - newIdx) * ITEM_H + (ITEM_H / 2)}px)`;
+    inner.querySelectorAll('.night-scroll-item').forEach((el, i) => el.classList.toggle('selected', i === newIdx));
+    selectedIdx = newIdx;
+  });
+  window.addEventListener('mouseup', () => { if (isDragging) { isDragging = false; snapTo(selectedIdx); } });
+
+  wrap.addEventListener('touchstart', e => { dragStartY = e.touches[0].clientY; dragStartIdx = selectedIdx; inner.style.transition = 'none'; }, { passive: true });
+  wrap.addEventListener('touchmove', e => {
+    const delta = Math.round((dragStartY - e.touches[0].clientY) / ITEM_H);
+    const newIdx = Math.max(PADDING, Math.min(PADDING + 29, dragStartIdx + delta));
+    inner.style.transform = `translateY(${(PADDING - newIdx) * ITEM_H + (ITEM_H / 2)}px)`;
+    inner.querySelectorAll('.night-scroll-item').forEach((el, i) => el.classList.toggle('selected', i === newIdx));
+    selectedIdx = newIdx;
+  }, { passive: true });
+  wrap.addEventListener('touchend', () => snapTo(selectedIdx));
+
+  const keyHandler = e => {
+    if (!document.getElementById('pendingPickerModal')) { document.removeEventListener('keydown', keyHandler); return; }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); snapTo(selectedIdx - 1); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); snapTo(selectedIdx + 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); document.getElementById('pendingPickerConfirm')?.click(); }
+    else if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', keyHandler); }
+  };
+  document.addEventListener('keydown', keyHandler);
+  overlay.addEventListener('remove', () => document.removeEventListener('keydown', keyHandler));
+
+  requestAnimationFrame(() => snapTo(selectedIdx));
+
+  document.getElementById('pendingPickerConfirm').onclick = () => {
+    const count = values[selectedIdx];
+    if (!count || count < 1) return;
+    applyConsecutivePendingShifts(startKey, startSlot, count);
+    overlay.remove();
+  };
+}
+
+function applyConsecutivePendingShifts(startKey, startSlot, count) {
+  const srcData = getBlockData(startKey, startSlot);
+  const fieldsToApply = JSON.parse(JSON.stringify(srcData.fields || {}));
+
+  const [yr, mo, dy] = startKey.split('-').map(Number);
+  const cursor = new Date(yr, mo - 1, dy);
+
+  for (let i = 0; i < count; i++) {
+    const key = dk(cursor);
+    if (!schedData[key]) schedData[key] = {};
+    if (!schedData[key][startSlot]) schedData[key][startSlot] = { type:'blank', fields:{} };
+    schedData[key][startSlot] = {
+      type: 'pending',
+      fields: JSON.parse(JSON.stringify(fieldsToApply))
+    };
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  saveSchedData();
+  renderSchedule();
+  pushNotif('success', '📋 Pending Scheduled',
+    `${count} consecutive pending day${count !== 1 ? 's' : ''} applied starting ${startKey}.`, null);
 }
 
 function addBlockToQueue(key, slot) {
