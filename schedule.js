@@ -78,7 +78,7 @@ function openDayNoteSADrop(key, btn) {
   document.getElementById('dayNoteSADrop')?.remove();
   const dn = schedData[key] || {};
   const assigned = dn.dayNoteSA || [];
-  const available = specialActions.filter(sa => !assigned.includes(sa.id) && (!_saIsVacationAction(sa) || canSeeVacation()));
+  const available = specialActions.filter(sa => (_saIsVacationAction(sa) ? canSeeVacation() : !assigned.includes(sa.id)));
   if (!available.length) {
     btn.textContent = '✓ All';
     setTimeout(() => { btn.textContent = '+ Action'; }, 1000);
@@ -2156,6 +2156,7 @@ function _saIsSubGrader(label) {
 
 function _saLocString(raw) {
   if (!raw) return '';
+  if (Array.isArray(raw)) return raw.join(', ');
   if (typeof raw === 'string') return raw;
   return raw.location || '';
 }
@@ -6188,7 +6189,10 @@ function applyDayNoteVacationDays(startKey, saId, personName, numDays) {
     const cur = schedData[key].dayNoteSA || [];
     if (!cur.includes(saId)) schedData[key].dayNoteSA = [...cur, saId];
     schedData[key].dayNoteSALocations = Object.assign({}, schedData[key].dayNoteSALocations || {});
-    schedData[key].dayNoteSALocations[saId] = personName;
+    var _prev = schedData[key].dayNoteSALocations[saId];
+    var _prevArr = Array.isArray(_prev) ? _prev : (_prev ? [_prev] : []);
+    if (_prevArr.indexOf(personName) < 0) _prevArr = _prevArr.concat([personName]);
+    schedData[key].dayNoteSALocations[saId] = _prevArr.length === 1 ? _prevArr[0] : _prevArr;
     cursor.setDate(cursor.getDate() + 1);
   }
   saveSchedDataDirect();
@@ -12251,7 +12255,8 @@ function _saEditModal(saId, dateKey, slot) {
         if (isDayNote) {
           if (!schedData[dateKey]) schedData[dateKey] = {};
           schedData[dateKey].dayNoteSALocations = Object.assign({}, schedData[dateKey].dayNoteSALocations || {});
-          schedData[dateKey].dayNoteSALocations[saId] = person;
+          var _parts = person.split(',').map(function(p){ return p.trim(); }).filter(Boolean);
+          schedData[dateKey].dayNoteSALocations[saId] = _parts.length > 1 ? _parts : (_parts[0] || person);
         } else {
           var bd = getSlotData(dateKey, slot);
           if (!bd.fields) bd.fields = {};
