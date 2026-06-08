@@ -5115,14 +5115,18 @@ function _inv3OnVerify(r) {
   });
   var gcName = (_bj&&_bj.gc) ? _bj.gc : (r.gcName||'');
 
+  var _slot = (r.foreman||'').toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom';
+  var _schedSlot = (typeof schedData!=='undefined' && schedData[r.date]) ? schedData[r.date][_slot] : null;
+  var _f = (_schedSlot && _schedSlot.fields) ? _schedSlot.fields : {};
+
   var stub = {
     id: 'inv_stub_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
     dateOfWork:  r.date,
     foreman:     r.foreman,
-    jobNo:       r.jobNumber||'',
-    jobName:     r.jobLocation||'',
+    jobNo:       _f.jobNum || r.jobNumber || '',
+    jobName:     _f.jobName || r.jobLocation || '',
     gcName:      gcName,
-    supplier:    '',
+    supplier:    _f.plant || '',
     invoiceNo:   '',
     mixItems:    [],
     actualTrucking: { dmcCount:0, dmcCost:0, brkRows:[], supCount:0, supCost:0 },

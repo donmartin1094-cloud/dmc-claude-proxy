@@ -3563,7 +3563,7 @@ function _checkLocalStorageSize() {
 <script src="/ui-components.js?v=3"></script>
 <script src="/slips.js?v=3"></script>
 <script src="/schedule.js?v=8"></script>
-<script src="/reports.js?v=3"></script>
+<script src="/reports.js?v=4"></script>
 <script src="/mixslip-scanner.js?v=3"></script>
 <script>
 // Global crash reporter for production troubleshooting.
@@ -27813,6 +27813,19 @@ async function initApp(username) {
     _checkLocalStorageSize();
     username = _rawU.toLowerCase();
   }
+  // DJ daily auto-logout — kick stale Firebase session on a new calendar day
+  if ((username || '').toLowerCase() === 'dj') {
+    var _djToday = new Date().toLocaleDateString('en-CA');
+    var _djLastSess = localStorage.getItem('dmc_dj_last_session');
+    if (_djLastSess && _djLastSess !== _djToday) {
+      localStorage.removeItem('dmc_u');
+      localStorage.removeItem('dmc_dj_last_session');
+      document.getElementById('loginScreen').style.display = '';
+      document.getElementById('appWrap').style.display = 'none';
+      return;
+    }
+  }
+
   // One-time migration: correct 'marrudia' → 'marruda' in stored accounts
   (function() {
     try {
@@ -28440,6 +28453,32 @@ async function initApp(username) {
     setInterval(_invCheckDailyPrompt, 60000);
   } else {
   }
+
+  // DJ first-login-of-day: trigger verification modal for yesterday's jobs
+  if ((username || '').toLowerCase() === 'dj') {
+    var _djFirstLogin = false;
+    try { _djFirstLogin = !!sessionStorage.getItem('dmc_dj_first_login'); sessionStorage.removeItem('dmc_dj_first_login'); } catch(e) {}
+    if (_djFirstLogin) {
+      setTimeout(function() {
+        var _yest = new Date();
+        _yest.setDate(_yest.getDate() - 1);
+        var _yesterdayKey = _yest.getFullYear() + '-' +
+          String(_yest.getMonth()+1).padStart(2,'0') + '-' +
+          String(_yest.getDate()).padStart(2,'0');
+        var _yestDay = _yest.getDay();
+        var _isWeekday = _yestDay !== 0 && _yestDay !== 6;
+        var _yd = (typeof schedData !== 'undefined') ? schedData[_yesterdayKey] : null;
+        var _hadJobs = _yd && (
+          (_yd.top && _yd.top.type && _yd.top.type !== 'blank') ||
+          (_yd.bottom && _yd.bottom.type && _yd.bottom.type !== 'blank')
+        );
+        var _alreadyVerified = localStorage.getItem('dmc_verified_' + _yesterdayKey);
+        if (_hadJobs && _isWeekday && !_alreadyVerified) {
+          if (typeof _adminVerifyShow === 'function') _adminVerifyShow(_yesterdayKey);
+        }
+      }, 800);
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -29034,6 +29073,10 @@ function _adminVerifyOne(reportId, dateKey) {
   if (badge) badge.textContent = '✅';
   _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman);
   if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
+  var _allRptsOne = (typeof foremanReports!=='undefined'?foremanReports:[]).filter(function(x){ return x.date===dateKey; });
+  if (_allRptsOne.length && _allRptsOne.every(function(x){ return x.locationVerified===true || x.locationVerified===false; })) {
+    localStorage.setItem('dmc_verified_'+dateKey, '1');
+  }
 }
 
 function _adminVerifyShowFlag(reportId) {
@@ -29071,6 +29114,7 @@ function _adminVerifyAll(dateKey) {
     if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
   });
   if (typeof saveForemanReports === 'function') saveForemanReports();
+  localStorage.setItem('dmc_verified_'+dateKey, '1');
 }
 
 function _adminVerifyDone(dateKey) {
@@ -29279,6 +29323,7 @@ function doLogin() {
           }
           localStorage.setItem('dmc_u', (appUser || '').toLowerCase());
           _checkLocalStorageSize();
+          if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
           initApp((appUser || '').toLowerCase());
           firebaseAuthOk = true;
         } catch(fbErr) {
@@ -29310,6 +29355,7 @@ function doLogin() {
         console.warn('Logged in via accounts fallback. Firebase Auth record may need migration.');
         localStorage.setItem('dmc_u', (acctMatch.username || '').toLowerCase());
         _checkLocalStorageSize();
+        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
         // Auto-create Firebase Auth account so Firestore rules work on next login
         if (typeof firebase !== 'undefined' && firebase.auth && acctMatch.email) {
           try {
@@ -29331,6 +29377,7 @@ function doLogin() {
         console.warn('Logged in via hardcoded USERS fallback.');
         localStorage.setItem('dmc_u', hardcodedUser.toLowerCase());
         _checkLocalStorageSize();
+        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
         // Auto-create Firebase Auth account
         const _hwAcct = DEFAULT_TEAM_ACCOUNTS.find(a => a.username.toLowerCase() === hardcodedUser.toLowerCase());
         if (typeof firebase !== 'undefined' && firebase.auth && _hwAcct?.email) {
@@ -29346,6 +29393,7 @@ function doLogin() {
         console.warn('Logged in via hardcoded email fallback.');
         localStorage.setItem('dmc_u', (hardcodedByEmail.username || '').toLowerCase());
         _checkLocalStorageSize();
+        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
         // Auto-create Firebase Auth account
         if (typeof firebase !== 'undefined' && firebase.auth && hardcodedByEmail.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(hardcodedByEmail.email, p).catch(() => {}); } catch(e) {}
@@ -29373,6 +29421,7 @@ function doLogin() {
             if (hit?.username) localStorage.setItem('dmc_u', (hit.username || '').toLowerCase());
             _checkLocalStorageSize();
           }
+          if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
           initApp(localStorage.getItem('dmc_u') || (data.username || '').toLowerCase());
           return;
         }
