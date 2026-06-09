@@ -4130,6 +4130,7 @@ let _toLastClient   = { x:0, y:0 };   // raw client coords for re-projection aft
 let _toEdgeVx       = 0;              // scroll velocity px/frame
 let _toEdgeVy       = 0;
 let _toEdgeRAF      = null;           // rAF handle for edge-scroll loop
+var _toTzScale = 1, _toTzTx = 0, _toTzTy = 0, _toTzInitDist = 0, _toTzLastTap = 0;
 
 // Edge-scroll animation loop — runs while cursor is in the zone and a tool is active
 function _toEdgeTick() {
@@ -4193,9 +4194,9 @@ function _toBuildPortalHTML() {
       <button onclick="_toUndo()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">↩ Undo</button>
       <button onclick="_toClearAll()" style="background:none;border:1px solid #444;border-radius:4px;color:#d94f3d;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">🗑 Clear</button>
       <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-      <button onclick="_toChangePage(-1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">◀</button>
+      <button id="toBtnPrev" onclick="_toChangePage(-1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">◀</button>
       <span id="toPageInfo" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;white-space:nowrap;">— / —</span>
-      <button onclick="_toChangePage(1)"  style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">▶</button>
+      <button id="toBtnNext" onclick="_toChangePage(1)"  style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">▶</button>
       <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
       <button onclick="_toZoomOut()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom Out">−</button>
       <span id="toZoomDisplay" onclick="_toZoomReset()" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;padding:4px 8px;background:#252525;border:1px solid #333;border-radius:4px;cursor:pointer;white-space:nowrap;min-width:40px;text-align:center;" title="Click to reset zoom">100%</span>
@@ -4206,18 +4207,20 @@ function _toBuildPortalHTML() {
       <button onclick="_toClosePortal()" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-size:18px;padding:2px 10px;cursor:pointer;line-height:1;margin-left:4px;">✕</button>
     </div>
     <div id="toCanvasWrap" style="flex:1;overflow:auto;background:#0d0d0d;position:relative;cursor:crosshair;">
-      <canvas id="toCanvas" style="display:block;"></canvas>
-      <svg id="toSvgOverlay" style="position:absolute;top:0;left:0;overflow:visible;" xmlns="http://www.w3.org/2000/svg">
-        <g id="toMeasGroup"></g>
-        <g id="toGhostGroup"></g>
-      </svg>
+      <div id="toCanvasInner" style="position:relative;display:inline-block;transform-origin:center center;">
+        <canvas id="toCanvas" style="display:block;"></canvas>
+        <svg id="toSvgOverlay" style="position:absolute;top:0;left:0;overflow:visible;" xmlns="http://www.w3.org/2000/svg">
+          <g id="toMeasGroup"></g>
+          <g id="toGhostGroup"></g>
+        </svg>
+      </div>
     </div>`;
 }
 
 async function _toOpenPortal(file) {
   if (!document.getElementById('toStyles')) {
     const s = document.createElement('style'); s.id = 'toStyles';
-    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@media(max-width:600px){.to-qty-d{display:none}#toQtyOverlay{max-height:40vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}}`;
+    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:40vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}}`;
     document.head.appendChild(s);
   }
   let ov = document.getElementById('toPortalOverlay');
@@ -4228,7 +4231,7 @@ async function _toOpenPortal(file) {
   }
   ov.innerHTML = _toBuildPortalHTML();
   ov.style.display = 'flex';
-  _toMeasurements = []; _toPoints = []; _toScalePoints = []; _toScale = null; _toTool = null; _toZoom = 1.0; _toPageScales = {}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate();
+  _toMeasurements = []; _toPoints = []; _toScalePoints = []; _toScale = null; _toTool = null; _toZoom = 1.0; _toPageScales = {}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate(); _toTzScale=1; _toTzTx=0; _toTzTy=0;
   _toUpdateStatus('Loading PDF…');
   try {
     await _toLoadPdfJs();
@@ -4279,7 +4282,7 @@ async function _toChangePage(delta) {
   if (np < 1 || np > _toPdfDoc.numPages) return;
   _toQtySaveForPage();
   _toPdfPage = np;
-  _toPoints = []; _toScalePoints = [];
+  _toPoints = []; _toScalePoints = []; _toTzResetTransform();
   // Restore this page's scale (or clear it)
   _toScale = _toPageScales[_toPdfPage] != null ? _toPageScales[_toPdfPage] : null;
   const disp = document.getElementById('toScaleDisplay');
@@ -4310,7 +4313,64 @@ function _toBindEvents() {
     });
     // Stop scrolling when cursor leaves the wrap entirely
     wrap.addEventListener('mouseleave', () => { _toEdgeVx = 0; _toEdgeVy = 0; });
+
+    // ── Mobile: pinch-to-zoom, pan, swipe page nav ──────────────────────────
+    var _tzStart = null;
+    wrap.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 2) {
+        var dx = e.touches[1].clientX - e.touches[0].clientX;
+        var dy = e.touches[1].clientY - e.touches[0].clientY;
+        _toTzInitDist = Math.sqrt(dx*dx + dy*dy);
+        e.preventDefault();
+      } else if (e.touches.length === 1) {
+        _tzStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, tx: _toTzTx, ty: _toTzTy };
+        var now = Date.now();
+        if (now - _toTzLastTap < 300) { _toTzResetTransform(); _toTzLastTap = 0; }
+        else { _toTzLastTap = now; }
+      }
+    }, { passive: false });
+
+    wrap.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var dx = e.touches[1].clientX - e.touches[0].clientX;
+        var dy = e.touches[1].clientY - e.touches[0].clientY;
+        var newDist = Math.sqrt(dx*dx + dy*dy);
+        if (_toTzInitDist > 0) {
+          _toTzScale = Math.min(4, Math.max(0.5, _toTzScale * (newDist / _toTzInitDist)));
+          _toTzInitDist = newDist;
+          _toTzApply();
+        }
+      } else if (e.touches.length === 1 && _tzStart && _toTzScale > 1) {
+        e.preventDefault();
+        _toTzTx = _tzStart.tx + (e.touches[0].clientX - _tzStart.x) / _toTzScale;
+        _toTzTy = _tzStart.ty + (e.touches[0].clientY - _tzStart.y) / _toTzScale;
+        _toTzApply();
+      }
+    }, { passive: false });
+
+    wrap.addEventListener('touchend', function(e) {
+      if (e.changedTouches.length === 1 && e.touches.length === 0 && _tzStart && _toTzScale <= 1) {
+        var dX = e.changedTouches[0].clientX - _tzStart.x;
+        var dY = e.changedTouches[0].clientY - _tzStart.y;
+        if (Math.abs(dX) > 50 && Math.abs(dX) > Math.abs(dY)) {
+          if (dX < 0) _toChangePage(1); else _toChangePage(-1);
+        }
+      }
+      _tzStart = null;
+      _toTzInitDist = 0;
+    }, { passive: true });
   }
+}
+
+function _toTzApply() {
+  var inner = document.getElementById('toCanvasInner');
+  if (inner) inner.style.transform = 'scale(' + _toTzScale + ') translate(' + _toTzTx + 'px,' + _toTzTy + 'px)';
+}
+function _toTzResetTransform() {
+  _toTzScale = 1; _toTzTx = 0; _toTzTy = 0;
+  var inner = document.getElementById('toCanvasInner');
+  if (inner) inner.style.transform = '';
 }
 
 function _toSvgPt(e) {
@@ -4722,19 +4782,146 @@ async function _toSetZoom(newZoom) {
 // ── Takeoffs Window ───────────────────────────────────────────────────────────
 let _toSaveTempData  = null;
 let _toCurrentPdfName = '';
-var _toLinkedJob   = null;
-var _toQtyRows     = [];
-var _toQtyExpanded = true;
-var _toQtyKey      = '';
-var _TO_QTY_STORE  = 'dmc_to_quantities';
+var _toLinkedJob         = null;
+var _toQtyRows           = [];
+var _toQtyExpanded       = true;
+var _toQtyKey            = '';
+var _TO_QTY_STORE        = 'dmc_to_quantities';
+var _takeoffViewerActive = false;
 
 function _renderTakeoffsWindow(container) {
+  _renderTakeoffDirectory(container);
+}
+
+function _renderTakeoffDirectory(container) {
+  _takeoffViewerActive = false;
+  var _qov = document.getElementById('toQtyOverlay');
+  if (_qov) _qov.style.display = 'none';
+  _toFoldersLoad();
+  var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var _awarded = takeoffFolders.filter(function(f) {
+    return f.linkedJobId && _bl.find(function(j) { return j.id === f.linkedJobId; }) && (f.pages||[]).length > 0;
+  }).sort(function(a,b) { return (a.linkedJobNum||'').localeCompare(b.linkedJobNum||''); });
+  var _prospective = takeoffFolders.filter(function(f) {
+    return !(f.linkedJobId && _bl.find(function(j) { return j.id === f.linkedJobId; }));
+  }).sort(function(a,b) { return (b.createdAt||0) - (a.createdAt||0); });
+
+  container.style.cssText = 'padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--asphalt-mid);';
+  container.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:2px solid #a78bfa;background:#1a1a1a;flex-shrink:0;">' +
+      '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:3px;color:#a78bfa;">📐 Takeoffs</span>' +
+      '<button onclick="_renderTakeoffPortal(document.getElementById(\'secPopupBody\'))" style="background:rgba(167,139,250,0.15);border:1px solid #a78bfa;border-radius:6px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:7px 18px;cursor:pointer;">+ New Takeoff</button>' +
+    '</div>' +
+    '<div style="flex:1;overflow-y:auto;padding:20px 24px;">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#f5c518;margin-bottom:12px;border-bottom:1px solid rgba(245,197,24,0.2);padding-bottom:6px;">📁 Awarded Jobs</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:28px;">' +
+        (_awarded.length ? _awarded.map(function(f) { return _toDirJobCard(f, _bl); }).join('') : '<div style="color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:12px 0;font-style:italic;">No awarded jobs with takeoffs yet.</div>') +
+      '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#9b9488;margin-bottom:12px;border-bottom:1px solid rgba(155,148,136,0.2);padding-bottom:6px;">📄 Prospective Jobs</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;">' +
+        (_prospective.length ? _prospective.map(function(f) { return _toDirJobCard(f, _bl); }).join('') : '<div style="color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:12px 0;font-style:italic;">No prospective projects yet.</div>') +
+      '</div>' +
+    '</div>';
+}
+
+function _toDirJobCard(folder, bl) {
+  var _bj = folder.linkedJobId ? (bl||[]).find(function(j) { return j.id === folder.linkedJobId; }) : null;
+  var _num = _bj ? (_bj.num || folder.linkedJobNum || '') : '';
+  var _name = _bj ? (_bj.name || folder.linkedJobName || folder.name) : (folder.linkedJobName || folder.name);
+  var _gc   = _bj ? (_bj.gc || folder.linkedJobGC || '') : '';
+  var _title = (_num ? '#' + _num + ' — ' : '') + _name;
+  var _sub   = _gc || (folder.createdAt ? new Date(folder.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '');
+  var _pgCount = (folder.pages||[]).length;
+  return '<div onclick="_toDirFolderOpen(\'' + folder.id + '\')" ' +
+    'style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:8px;padding:12px 14px;cursor:pointer;" ' +
+    'onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--asphalt-light)\'">' +
+    '<div style="font-size:22px;margin-bottom:6px;">📁</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:var(--white);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escHtml(_title) + '">' + escHtml(_title) + '</div>' +
+    (_sub ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(_sub) + '</div>' : '') +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#a78bfa;">' + _pgCount + ' page' + (_pgCount !== 1 ? 's' : '') + '</div>' +
+  '</div>';
+}
+
+function _toDirFolderOpen(folderId) {
+  _toFoldersLoad();
+  var f = takeoffFolders.find(function(x) { return x.id === folderId; });
+  if (!f) return;
+  var container = document.getElementById('secPopupBody');
+  if (!container) return;
+  var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var _bj = f.linkedJobId ? _bl.find(function(j) { return j.id === f.linkedJobId; }) : null;
+  var _num  = _bj ? (_bj.num || f.linkedJobNum || '') : '';
+  var _name = _bj ? (_bj.name || f.linkedJobName || f.name) : (f.linkedJobName || f.name);
+  var _title = (_num ? '#' + _num + ' — ' : '') + _name;
+  container.style.cssText = 'padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--asphalt-mid);';
+  container.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;background:#1a1a1a;border-bottom:2px solid #a78bfa;flex-shrink:0;">' +
+      '<button onclick="_renderTakeoffDirectory(document.getElementById(\'secPopupBody\'))" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;flex-shrink:0;">← Back</button>' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:#a78bfa;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(_title) + '</div>' +
+      '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);flex-shrink:0;">' + (f.pages||[]).length + ' page(s)</span>' +
+    '</div>' +
+    '<div style="flex:1;overflow-y:auto;padding:16px 20px;">' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;">' +
+        ((f.pages||[]).length ? f.pages.map(function(p) { return _toDirPageCard(f, p); }).join('') :
+          '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;">No pages saved yet.</div>') +
+      '</div>' +
+    '</div>';
+}
+
+function _toDirPageCard(folder, page) {
+  var _totSqFt = (page.quantities||[]).reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
+  var _totTons = (page.quantities||[]).reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
+  var _date = page.savedAt ? new Date(page.savedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+  return '<div onclick="_toDirPageOpen(\'' + folder.id + '\',\'' + page.id + '\')" ' +
+    'style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:6px;overflow:hidden;cursor:pointer;" ' +
+    'onmouseover="this.style.borderColor=\'#a78bfa\'" onmouseout="this.style.borderColor=\'var(--asphalt-light)\'">' +
+    (page.thumbnail ? '<img src="' + page.thumbnail + '" style="width:100%;height:118px;object-fit:cover;display:block;">' :
+      '<div style="height:118px;background:var(--asphalt-mid);display:flex;align-items:center;justify-content:center;font-size:32px;">📄</div>') +
+    '<div style="padding:8px 10px;">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:var(--white);">Page ' + page.pageNum + (_date ? ' · ' + _date : '') + '</div>' +
+      (_totSqFt ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#a78bfa;margin-top:2px;">' + _totSqFt.toLocaleString() + ' sq ft · ' + _totTons.toFixed(1) + ' tons</div>' : '') +
+      (page.notes ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(page.notes) + '</div>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+function _toDirPageOpen(folderId, pageId) {
+  _toFoldersLoad();
+  var f = takeoffFolders.find(function(x) { return x.id === folderId; });
+  if (!f) return;
+  var p = (f.pages||[]).find(function(x) { return x.id === pageId; });
+  if (!p) return;
+  var container = document.getElementById('secPopupBody');
+  if (!container) return;
+  _renderTakeoffPortal(container);
+  setTimeout(function() {
+    // Pre-load saved quantities
+    _toQtyRows = p.quantities ? JSON.parse(JSON.stringify(p.quantities)) : [];
+    _toQtyKey = null;
+    _toQtyRender();
+    _takeoffViewerActive = true;
+    var _qov = document.getElementById('toQtyOverlay');
+    if (_qov) _qov.style.display = '';
+    // Show saved thumbnail as a preview until user loads the actual PDF
+    if (p.thumbnail) {
+      var es = document.getElementById('toEmptyState');
+      if (es) {
+        es.style.display = '';
+        es.innerHTML = '<img src="' + p.thumbnail + '" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:4px;opacity:0.85;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;margin-top:8px;">Saved snapshot · Load PDF to re-measure</div>';
+      }
+    }
+  }, 100);
+}
+
+function _renderTakeoffPortal(container) {
   _toFoldersLoad();
   container.style.cssText='padding:0;overflow:hidden;display:flex;flex-direction:column;height:100%;';
   container.innerHTML=`
     <!-- Portal section -->
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0d0d0d;">
       <div id="toToolbar" style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:#1a1a1a;border-bottom:2px solid #f5c518;flex-shrink:0;flex-wrap:wrap;">
+        <button onclick="_renderTakeoffDirectory(document.getElementById('secPopupBody'))" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;">← Back</button>
         <span style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:#f5c518;white-space:nowrap;">📐 Takeoff Portal</span>
         <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
         <button id="toBtnScale"  class="to-btn" onclick="_toActivate('scale')">📐 Set Scale</button>
@@ -4751,9 +4938,9 @@ function _renderTakeoffsWindow(container) {
         <button onclick="_toUndo()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">↩ Undo</button>
         <button onclick="_toClearAll()" style="background:none;border:1px solid #444;border-radius:4px;color:#d94f3d;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">🗑 Clear</button>
         <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-        <button onclick="_toChangePage(-1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">◀</button>
+        <button id="toBtnPrev" onclick="_toChangePage(-1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">◀</button>
         <span id="toPageInfo" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;white-space:nowrap;">— / —</span>
-        <button onclick="_toChangePage(1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">▶</button>
+        <button id="toBtnNext" onclick="_toChangePage(1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">▶</button>
         <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
         <button onclick="_toZoomOut()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom Out">−</button>
         <span id="toZoomDisplay" onclick="_toZoomReset()" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;padding:4px 8px;background:#252525;border:1px solid #333;border-radius:4px;cursor:pointer;white-space:nowrap;min-width:40px;text-align:center;" title="Click to reset zoom">100%</span>
@@ -4765,10 +4952,12 @@ function _renderTakeoffsWindow(container) {
       </div>
       <div id="toCanvasWrap" style="flex:1;overflow:auto;background:#0d0d0d;position:relative;cursor:default;min-height:0;">
         <div style="padding:60px 0;text-align:center;color:#444;font-family:'DM Mono',monospace;font-size:12px;" id="toEmptyState">Click <strong style="color:#5ab4f5;">📄 Load PDF</strong> above to open a civil plan</div>
-        <canvas id="toCanvas" style="display:none;"></canvas>
-        <svg id="toSvgOverlay" style="position:absolute;top:0;left:0;overflow:visible;display:none;" xmlns="http://www.w3.org/2000/svg">
-          <g id="toMeasGroup"></g><g id="toGhostGroup"></g>
-        </svg>
+        <div id="toCanvasInner" style="position:relative;display:inline-block;transform-origin:center center;">
+          <canvas id="toCanvas" style="display:none;"></canvas>
+          <svg id="toSvgOverlay" style="position:absolute;top:0;left:0;overflow:visible;display:none;" xmlns="http://www.w3.org/2000/svg">
+            <g id="toMeasGroup"></g><g id="toGhostGroup"></g>
+          </svg>
+        </div>
       </div>
     </div>`;
   // Bind events after render
@@ -4779,7 +4968,7 @@ function _renderTakeoffsWindow(container) {
 function _toWinFileChanged(e) {
   const f = e.target.files[0]; if (!f) return;
   _toCurrentPdfName = f.name;
-  _toMeasurements=[]; _toPoints=[]; _toScalePoints=[]; _toScale=null; _toTool=null; _toZoom=1.0; _toPageScales={}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate();
+  _toMeasurements=[]; _toPoints=[]; _toScalePoints=[]; _toScale=null; _toTool=null; _toZoom=1.0; _toPageScales={}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate(); _toTzResetTransform();
   const es = document.getElementById('toEmptyState'); if (es) es.style.display='none';
   const cv = document.getElementById('toCanvas'); if (cv) cv.style.display='block';
   const sv = document.getElementById('toSvgOverlay'); if (sv) sv.style.display='block';
@@ -4791,6 +4980,7 @@ function _toWinFileChanged(e) {
     _toUpdateStatus('Ready — 📐 Set Scale first, then measure');
     _toQtyKey = _toCurrentPdfName + '::1';
     _toQtyLoadForPage(_toQtyKey);
+    _takeoffViewerActive = true;
     var _qov = document.getElementById('toQtyOverlay');
     if (_qov) _qov.style.display = '';
   }).catch(err=>_toUpdateStatus('Error: '+(err.message||err)));
@@ -4815,8 +5005,8 @@ function _toSaveFolderDialog(thumbnail, measurements, pageNum, pdfName) {
     <div style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;margin-bottom:14px;">${escHtml(pdfName||'Plan')} · Page ${pageNum} · ${(measurements||[]).length} measurement(s)</div>
     <div style="margin-bottom:16px;text-align:center;"><img src="${thumbnail}" style="max-width:100%;max-height:180px;object-fit:contain;border-radius:4px;border:1px solid #333;"></div>
     <div style="display:flex;gap:8px;margin-bottom:14px;">
-      <button id="toSaveModeNew" onclick="_toSaveDlgMode('new')" class="to-btn active" style="flex:1;">+ New Folder</button>
-      <button id="toSaveModeEx"  onclick="_toSaveDlgMode('existing')" class="to-btn" style="flex:1;">${takeoffFolders.length?'Existing Folder':'(No folders yet)'}</button>
+      <button id="toSaveModeNew" onclick="_toSaveDlgMode('new')" class="to-btn active" style="flex:1;min-height:48px;">+ New Folder</button>
+      <button id="toSaveModeEx"  onclick="_toSaveDlgMode('existing')" class="to-btn" style="flex:1;min-height:48px;">${takeoffFolders.length?'Existing Folder':'(No folders yet)'}</button>
     </div>
     <div id="toSaveNewFields">
       <div style="margin-bottom:10px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Project Name *</label>
@@ -4832,8 +5022,8 @@ function _toSaveFolderDialog(thumbnail, measurements, pageNum, pdfName) {
       <div style="margin-bottom:12px;">
         <label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Link to Job Directory</label>
         <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <button id="toJobLinkNone" onclick="_toJobLinkMode('none')" class="to-btn active" style="flex:1;">🆕 New Project</button>
-          <button id="toJobLinkExist" onclick="_toJobLinkMode('existing')" class="to-btn" style="flex:1;">📁 Existing Job</button>
+          <button id="toJobLinkNone" onclick="_toJobLinkMode('none')" class="to-btn active" style="flex:1;min-height:48px;">🆕 New Project</button>
+          <button id="toJobLinkExist" onclick="_toJobLinkMode('existing')" class="to-btn" style="flex:1;min-height:48px;">📁 Existing Job</button>
         </div>
         <div id="toJobLinkFields" style="display:none;">
           <input id="toJobSearchInp" type="text" placeholder="Search by job # or project name…" oninput="_toJobSearchFilter(this.value)" autocomplete="off" style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:7px 10px;margin-bottom:6px;">
@@ -4895,7 +5085,7 @@ function _toJobSearchFilter(val) {
   if (!matches.length) { drop.style.display = 'none'; return; }
   drop.style.display = 'block';
   drop.innerHTML = matches.map(function(j) {
-    return '<div onclick="_toJobSearchSelect(\'' + escHtml(j.id) + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #2a2a2a;font-family:\'DM Mono\',monospace;font-size:11px;color:#f9f7f3;hover:background:#222;">' +
+    return '<div onclick="_toJobSearchSelect(\'' + escHtml(j.id) + '\')" style="min-height:44px;padding:10px 12px;cursor:pointer;border-bottom:1px solid #2a2a2a;font-family:\'DM Mono\',monospace;font-size:11px;color:#f9f7f3;display:flex;align-items:center;box-sizing:border-box;">' +
       (j.num ? '<span style="color:#f5c518;margin-right:6px;">#' + escHtml(j.num) + '</span>' : '') +
       escHtml(j.name||'—') +
       (j.gc ? '<span style="color:#9b9488;margin-left:8px;">· ' + escHtml(j.gc) + '</span>' : '') +
@@ -4936,11 +5126,11 @@ function _toQtyInit() {
   ov.id = 'toQtyOverlay';
   ov.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:8900;display:none;font-family:\'DM Mono\',monospace;';
   ov.innerHTML =
-    '<div id="toQtyBar" style="background:#1a1a1a;border-top:2px solid #a78bfa;display:flex;align-items:center;padding:5px 12px;gap:8px;">' +
-      '<span style="font-size:12px;font-weight:700;color:#a78bfa;flex:1;">📐 Quantities</span>' +
+    '<div id="toQtyBar" onclick="_toQtyToggle()" style="background:#1a1a1a;border-top:2px solid #a78bfa;display:flex;align-items:center;padding:5px 12px;gap:8px;cursor:pointer;">' +
+      '<span style="font-size:12px;font-weight:700;color:#a78bfa;flex:1;">📐<span class="to-qty-label"> Quantities</span></span>' +
       '<span id="toQtyTotalsBar" style="font-size:10px;color:#9b9488;margin-right:8px;"></span>' +
-      '<button onclick="_toQtyAddRow()" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Area</button>' +
-      '<button id="toQtyToggleBtn" onclick="_toQtyToggle()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:4px 10px;cursor:pointer;">▲</button>' +
+      '<button onclick="event.stopPropagation();_toQtyAddRow();" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Area</button>' +
+      '<button id="toQtyToggleBtn" onclick="event.stopPropagation();_toQtyToggle();" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:4px 10px;cursor:pointer;">▲</button>' +
     '</div>' +
     '<div id="toQtyBody" style="background:#252525;max-height:calc(35vh - 36px);overflow-y:auto;">' +
       '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
@@ -4969,13 +5159,23 @@ function _toQtyRender() {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;text-align:center;color:#555;font-size:10px;">No areas yet — tap + Add Area</td></tr>';
   } else {
     tbody.innerHTML = _toQtyRows.map(function(row, i) {
-      return '<tr style="border-bottom:1px solid #2a2a2a;">' +
-        '<td style="padding:3px 4px;"><input value="' + escHtml(row.area||'') + '" oninput="_toQtyUpdate(' + i + ',\'area\',this.value)" placeholder="Area name" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:100px;"></td>' +
-        '<td style="padding:3px 4px;"><input type="number" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:70px;text-align:right;display:block;margin-left:auto;"></td>' +
-        '<td class="to-qty-d" style="padding:3px 4px;"><input type="number" step="0.5" value="' + (row.depth||'') + '" oninput="_toQtyUpdate(' + i + ',\'depth\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
-        '<td style="padding:3px 4px;"><input type="number" value="' + (row.tons||'') + '" oninput="_toQtyUpdate(' + i + ',\'tons\',this.value)" placeholder="0.0" style="background:transparent;border:none;outline:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
-        '<td class="to-qty-d" style="padding:3px 4px;"><input value="' + escHtml(row.notes||'') + '" oninput="_toQtyUpdate(' + i + ',\'notes\',this.value)" placeholder="Notes" style="background:transparent;border:none;outline:none;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:80px;"></td>' +
-        '<td style="padding:3px 4px;text-align:center;"><button onclick="_toQtyDeleteRow(' + i + ')" style="background:none;border:none;color:#d94f3d;cursor:pointer;font-size:13px;padding:2px 4px;">✕</button></td>' +
+      return '<tr onclick="_toQtyRowExpand(' + i + ')" style="border-bottom:1px solid #2a2a2a;cursor:pointer;">' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input value="' + escHtml(row.area||'') + '" oninput="_toQtyUpdate(' + i + ',\'area\',this.value)" placeholder="Area name" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:100px;"></td>' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:70px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td class="to-qty-d" onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" step="0.5" value="' + (row.depth||'') + '" oninput="_toQtyUpdate(' + i + ',\'depth\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" value="' + (row.tons||'') + '" oninput="_toQtyUpdate(' + i + ',\'tons\',this.value)" placeholder="0.0" style="background:transparent;border:none;outline:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td class="to-qty-d" onclick="event.stopPropagation()" style="padding:3px 4px;"><input value="' + escHtml(row.notes||'') + '" oninput="_toQtyUpdate(' + i + ',\'notes\',this.value)" placeholder="Notes" style="background:transparent;border:none;outline:none;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:80px;"></td>' +
+        '<td style="padding:3px 4px;text-align:center;"><button onclick="event.stopPropagation();_toQtyDeleteRow(' + i + ')" style="background:none;border:none;color:#d94f3d;cursor:pointer;font-size:13px;padding:2px 4px;">✕</button></td>' +
+      '</tr>' +
+      '<tr id="toQtyExpRow_' + i + '" class="to-qty-expand-row" style="background:#1e1e1e;">' +
+        '<td colspan="6" style="padding:10px 12px;">' +
+          '<div style="display:flex;gap:16px;font-family:\'DM Mono\',monospace;font-size:11px;">' +
+            '<div><div style="color:#9b9488;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Depth (in)</div>' +
+              '<input type="number" step="0.5" value="' + (row.depth||'') + '" oninput="_toQtyUpdate(' + i + ',\'depth\',this.value)" placeholder="0" style="background:#252525;border:1px solid #444;border-radius:3px;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:13px;width:80px;text-align:right;padding:6px 8px;box-sizing:border-box;"></div>' +
+            '<div style="flex:1"><div style="color:#9b9488;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Notes</div>' +
+              '<input value="' + escHtml(row.notes||'') + '" oninput="_toQtyUpdate(' + i + ',\'notes\',this.value)" placeholder="Notes…" style="background:#252525;border:1px solid #444;border-radius:3px;outline:none;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;padding:6px 8px;box-sizing:border-box;"></div>' +
+          '</div>' +
+        '</td>' +
       '</tr>';
     }).join('');
   }
@@ -5015,6 +5215,14 @@ function _toQtyDeleteRow(idx) {
   _toQtyRows.splice(idx, 1);
   _toQtyRender();
   _toQtySaveForPage();
+}
+
+function _toQtyRowExpand(idx) {
+  var expRow = document.getElementById('toQtyExpRow_' + idx);
+  if (!expRow) return;
+  var isOpen = expRow.classList.contains('to-qty-open');
+  expRow.classList.toggle('to-qty-open', !isOpen);
+  expRow.style.display = isOpen ? '' : 'table-row';
 }
 
 function _toQtyUpdate(idx, field, val) {
@@ -28032,6 +28240,10 @@ async function initApp(username) {
     if (_djLastSess && _djLastSess !== _djToday) {
       localStorage.removeItem('dmc_u');
       localStorage.removeItem('dmc_dj_last_session');
+      // Sign out of Firebase so onAuthStateChanged doesn't re-enter initApp
+      if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length && firebase.auth) {
+        try { firebase.auth().signOut(); } catch(e) {}
+      }
       document.getElementById('loginScreen').style.display = '';
       document.getElementById('appWrap').style.display = 'none';
       return;
@@ -29335,6 +29547,24 @@ function _adminVerifyDone(dateKey) {
   if (ov) ov.remove();
 }
 
+// Called directly from login success handlers so the modal fires even if
+// the sessionStorage flag is missed (e.g. by a Firebase re-auth cycle).
+function _djLoginVerifyTrigger() {
+  try {
+    var _yd = new Date(); _yd.setDate(_yd.getDate() - 1);
+    var _yk = _yd.getFullYear() + '-' + String(_yd.getMonth()+1).padStart(2,'0') + '-' + String(_yd.getDate()).padStart(2,'0');
+    var _ywday = _yd.getDay();
+    if (_ywday === 0 || _ywday === 6) return;
+    if (localStorage.getItem('dmc_verified_' + _yk)) return;
+    setTimeout(function() {
+      var _ydd = (typeof schedData !== 'undefined') ? schedData[_yk] : null;
+      if (_ydd && ((_ydd.top && _ydd.top.type !== 'blank') || (_ydd.bottom && _ydd.bottom.type !== 'blank'))) {
+        if (typeof _adminVerifyShow === 'function') _adminVerifyShow(_yk);
+      }
+    }, 800);
+  } catch(e) {}
+}
+
 function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman) {
   if (!dateKey || typeof schedData === 'undefined') return;
   var day = schedData[dateKey] || {};
@@ -29347,6 +29577,13 @@ function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman) {
     var flds = bdata.fields || {};
     var matchByJob = jobNumber && (flds.jobNum || '').trim() === (jobNumber || '').trim();
     var matchByForeman = !matchByJob && foreman && (flds.foreman || '').toLowerCase().trim() === (foreman || '').toLowerCase().trim();
+    // Fallback: match by foremanRoster slot position if flds.foreman is not stored in the block
+    if (!matchByJob && !matchByForeman && foreman && typeof foremanRoster !== 'undefined') {
+      var _rosterFm = '';
+      if (slotName === 'top') _rosterFm = (foremanRoster[0] || '').toLowerCase().trim();
+      else if (slotName === 'bottom') _rosterFm = (foremanRoster[1] || '').toLowerCase().trim();
+      if (_rosterFm && (foreman || '').toLowerCase().trim() === _rosterFm) matchByForeman = true;
+    }
     if (matchByJob || matchByForeman) {
       bdata._verifiedColor = color;
       changed = true;
@@ -29535,7 +29772,7 @@ function doLogin() {
           }
           localStorage.setItem('dmc_u', (appUser || '').toLowerCase());
           _checkLocalStorageSize();
-          if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
+          if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} _djLoginVerifyTrigger(); }
           initApp((appUser || '').toLowerCase());
           firebaseAuthOk = true;
         } catch(fbErr) {
@@ -29567,7 +29804,7 @@ function doLogin() {
         console.warn('Logged in via accounts fallback. Firebase Auth record may need migration.');
         localStorage.setItem('dmc_u', (acctMatch.username || '').toLowerCase());
         _checkLocalStorageSize();
-        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
+        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} _djLoginVerifyTrigger(); }
         // Auto-create Firebase Auth account so Firestore rules work on next login
         if (typeof firebase !== 'undefined' && firebase.auth && acctMatch.email) {
           try {
@@ -29589,7 +29826,7 @@ function doLogin() {
         console.warn('Logged in via hardcoded USERS fallback.');
         localStorage.setItem('dmc_u', hardcodedUser.toLowerCase());
         _checkLocalStorageSize();
-        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
+        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} _djLoginVerifyTrigger(); }
         // Auto-create Firebase Auth account
         const _hwAcct = DEFAULT_TEAM_ACCOUNTS.find(a => a.username.toLowerCase() === hardcodedUser.toLowerCase());
         if (typeof firebase !== 'undefined' && firebase.auth && _hwAcct?.email) {
@@ -29605,7 +29842,7 @@ function doLogin() {
         console.warn('Logged in via hardcoded email fallback.');
         localStorage.setItem('dmc_u', (hardcodedByEmail.username || '').toLowerCase());
         _checkLocalStorageSize();
-        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
+        if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} _djLoginVerifyTrigger(); }
         // Auto-create Firebase Auth account
         if (typeof firebase !== 'undefined' && firebase.auth && hardcodedByEmail.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(hardcodedByEmail.email, p).catch(() => {}); } catch(e) {}
@@ -29633,7 +29870,7 @@ function doLogin() {
             if (hit?.username) localStorage.setItem('dmc_u', (hit.username || '').toLowerCase());
             _checkLocalStorageSize();
           }
-          if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} }
+          if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} _djLoginVerifyTrigger(); }
           initApp(localStorage.getItem('dmc_u') || (data.username || '').toLowerCase());
           return;
         }
