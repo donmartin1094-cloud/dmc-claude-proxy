@@ -4217,7 +4217,7 @@ function _toBuildPortalHTML() {
 async function _toOpenPortal(file) {
   if (!document.getElementById('toStyles')) {
     const s = document.createElement('style'); s.id = 'toStyles';
-    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}`;
+    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@media(max-width:600px){.to-qty-d{display:none}#toQtyOverlay{max-height:40vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}}`;
     document.head.appendChild(s);
   }
   let ov = document.getElementById('toPortalOverlay');
@@ -4277,6 +4277,7 @@ async function _toChangePage(delta) {
   if (!_toPdfDoc) return;
   const np = _toPdfPage + delta;
   if (np < 1 || np > _toPdfDoc.numPages) return;
+  _toQtySaveForPage();
   _toPdfPage = np;
   _toPoints = []; _toScalePoints = [];
   // Restore this page's scale (or clear it)
@@ -4288,6 +4289,8 @@ async function _toChangePage(delta) {
   }
   await _toRenderPage();
   _toDrawMeasGroup();
+  _toQtyKey = _toCurrentPdfName + '::' + _toPdfPage;
+  _toQtyLoadForPage(_toQtyKey);
 }
 
 function _toBindEvents() {
@@ -4719,6 +4722,11 @@ async function _toSetZoom(newZoom) {
 // ── Takeoffs Window ───────────────────────────────────────────────────────────
 let _toSaveTempData  = null;
 let _toCurrentPdfName = '';
+var _toLinkedJob   = null;
+var _toQtyRows     = [];
+var _toQtyExpanded = true;
+var _toQtyKey      = '';
+var _TO_QTY_STORE  = 'dmc_to_quantities';
 
 function _renderTakeoffsWindow(container) {
   _toFoldersLoad();
@@ -4765,6 +4773,7 @@ function _renderTakeoffsWindow(container) {
     </div>`;
   // Bind events after render
   setTimeout(_toBindEvents, 80);
+  _toQtyInit();
 }
 
 function _toWinFileChanged(e) {
@@ -4780,6 +4789,10 @@ function _toWinFileChanged(e) {
     _toPdfDoc = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
     _toPdfPage=1; await _toRenderPage(); _toBindEvents();
     _toUpdateStatus('Ready — 📐 Set Scale first, then measure');
+    _toQtyKey = _toCurrentPdfName + '::1';
+    _toQtyLoadForPage(_toQtyKey);
+    var _qov = document.getElementById('toQtyOverlay');
+    if (_qov) _qov.style.display = '';
   }).catch(err=>_toUpdateStatus('Error: '+(err.message||err)));
 }
 
@@ -4816,6 +4829,18 @@ function _toSaveFolderDialog(thumbnail, measurements, pageNum, pdfName) {
         <div id="toSaveJobNumWrap" style="display:none;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">GC Job #</label>
           <input id="toSaveJobNum" type="text" placeholder="e.g. GC-2025-041" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:8px;box-sizing:border-box;"></div>
       </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Link to Job Directory</label>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button id="toJobLinkNone" onclick="_toJobLinkMode('none')" class="to-btn active" style="flex:1;">🆕 New Project</button>
+          <button id="toJobLinkExist" onclick="_toJobLinkMode('existing')" class="to-btn" style="flex:1;">📁 Existing Job</button>
+        </div>
+        <div id="toJobLinkFields" style="display:none;">
+          <input id="toJobSearchInp" type="text" placeholder="Search by job # or project name…" oninput="_toJobSearchFilter(this.value)" autocomplete="off" style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:7px 10px;margin-bottom:6px;">
+          <div id="toJobSearchDrop" style="display:none;background:#1c1c1c;border:1px solid #555;border-radius:4px;max-height:200px;overflow-y:auto;margin-bottom:6px;"></div>
+          <div id="toJobLinkedChip" style="display:none;align-items:center;gap:6px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:4px;padding:5px 10px;font-family:'DM Mono',monospace;font-size:11px;color:#a78bfa;"></div>
+        </div>
+      </div>
     </div>
     <div id="toSaveExFields" style="display:none;margin-bottom:10px;">
       <label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Select Folder</label>
@@ -4847,6 +4872,192 @@ function _toSaveDlgStatusChange() {
   const w=document.getElementById('toSaveJobNumWrap'); if(w) w.style.display=s==='awarded'?'block':'none';
 }
 
+function _toJobLinkMode(mode) {
+  var isExist = mode === 'existing';
+  document.getElementById('toJobLinkNone')?.classList.toggle('active', !isExist);
+  document.getElementById('toJobLinkExist')?.classList.toggle('active', isExist);
+  var fields = document.getElementById('toJobLinkFields');
+  if (fields) fields.style.display = isExist ? 'block' : 'none';
+  if (!isExist) _toLinkedJob = null;
+}
+
+function _toJobSearchFilter(val) {
+  var q = (val || '').toLowerCase().trim();
+  var drop = document.getElementById('toJobSearchDrop');
+  if (!drop) return;
+  if (!q) { drop.style.display = 'none'; return; }
+  var _bj = (typeof backlogJobs !== 'undefined' ? backlogJobs : []);
+  var matches = _bj.filter(function(j) {
+    return (j.num||'').toLowerCase().indexOf(q) !== -1 ||
+           (j.name||'').toLowerCase().indexOf(q) !== -1 ||
+           (j.gc||'').toLowerCase().indexOf(q) !== -1;
+  }).slice(0, 8);
+  if (!matches.length) { drop.style.display = 'none'; return; }
+  drop.style.display = 'block';
+  drop.innerHTML = matches.map(function(j) {
+    return '<div onclick="_toJobSearchSelect(\'' + escHtml(j.id) + '\')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #2a2a2a;font-family:\'DM Mono\',monospace;font-size:11px;color:#f9f7f3;hover:background:#222;">' +
+      (j.num ? '<span style="color:#f5c518;margin-right:6px;">#' + escHtml(j.num) + '</span>' : '') +
+      escHtml(j.name||'—') +
+      (j.gc ? '<span style="color:#9b9488;margin-left:8px;">· ' + escHtml(j.gc) + '</span>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function _toJobSearchSelect(jobId) {
+  var _bj = (typeof backlogJobs !== 'undefined' ? backlogJobs : []);
+  var j = _bj.find(function(x) { return x.id === jobId; });
+  if (!j) return;
+  _toLinkedJob = { id: j.id, num: j.num||'', name: j.name||'', gc: j.gc||'' };
+  var drop = document.getElementById('toJobSearchDrop');
+  if (drop) drop.style.display = 'none';
+  var inp = document.getElementById('toJobSearchInp');
+  if (inp) inp.value = '';
+  var chip = document.getElementById('toJobLinkedChip');
+  if (chip) {
+    chip.style.display = 'flex';
+    chip.innerHTML = '📁 ' + escHtml((j.num ? '#' + j.num + ' — ' : '') + (j.name||'')) +
+      ' <button onclick="_toJobSearchClear()" style="background:none;border:none;color:#9b9488;cursor:pointer;font-size:13px;margin-left:6px;line-height:1;">✕</button>';
+  }
+}
+
+function _toJobSearchClear() {
+  _toLinkedJob = null;
+  var chip = document.getElementById('toJobLinkedChip');
+  if (chip) chip.style.display = 'none';
+  var inp = document.getElementById('toJobSearchInp');
+  if (inp) inp.value = '';
+}
+
+// ── Takeoff Quantity Table ────────────────────────────────────────────────────
+
+function _toQtyInit() {
+  if (document.getElementById('toQtyOverlay')) return;
+  var ov = document.createElement('div');
+  ov.id = 'toQtyOverlay';
+  ov.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:8900;display:none;font-family:\'DM Mono\',monospace;';
+  ov.innerHTML =
+    '<div id="toQtyBar" style="background:#1a1a1a;border-top:2px solid #a78bfa;display:flex;align-items:center;padding:5px 12px;gap:8px;">' +
+      '<span style="font-size:12px;font-weight:700;color:#a78bfa;flex:1;">📐 Quantities</span>' +
+      '<span id="toQtyTotalsBar" style="font-size:10px;color:#9b9488;margin-right:8px;"></span>' +
+      '<button onclick="_toQtyAddRow()" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Area</button>' +
+      '<button id="toQtyToggleBtn" onclick="_toQtyToggle()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:4px 10px;cursor:pointer;">▲</button>' +
+    '</div>' +
+    '<div id="toQtyBody" style="background:#252525;max-height:calc(35vh - 36px);overflow-y:auto;">' +
+      '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
+        '<thead><tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
+          '<th style="padding:5px 8px;text-align:left;color:#9b9488;font-weight:700;min-width:120px;">Area / Section</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:70px;">Sq Ft</th>' +
+          '<th class="to-qty-d" style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:70px;">Depth (in)</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:70px;">Tons</th>' +
+          '<th class="to-qty-d" style="padding:5px 8px;text-align:left;color:#9b9488;font-weight:700;min-width:100px;">Notes</th>' +
+          '<th style="padding:5px 4px;width:24px;"></th>' +
+        '</tr></thead>' +
+        '<tbody id="toQtyTbody"></tbody>' +
+        '<tfoot id="toQtyFoot"></tfoot>' +
+      '</table>' +
+    '</div>';
+  document.body.appendChild(ov);
+  _toQtyRender();
+}
+
+function _toQtyRender() {
+  var tbody = document.getElementById('toQtyTbody');
+  var tfoot = document.getElementById('toQtyFoot');
+  var totBar = document.getElementById('toQtyTotalsBar');
+  if (!tbody) return;
+  if (!_toQtyRows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;text-align:center;color:#555;font-size:10px;">No areas yet — tap + Add Area</td></tr>';
+  } else {
+    tbody.innerHTML = _toQtyRows.map(function(row, i) {
+      return '<tr style="border-bottom:1px solid #2a2a2a;">' +
+        '<td style="padding:3px 4px;"><input value="' + escHtml(row.area||'') + '" oninput="_toQtyUpdate(' + i + ',\'area\',this.value)" placeholder="Area name" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:100px;"></td>' +
+        '<td style="padding:3px 4px;"><input type="number" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:70px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td class="to-qty-d" style="padding:3px 4px;"><input type="number" step="0.5" value="' + (row.depth||'') + '" oninput="_toQtyUpdate(' + i + ',\'depth\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td style="padding:3px 4px;"><input type="number" value="' + (row.tons||'') + '" oninput="_toQtyUpdate(' + i + ',\'tons\',this.value)" placeholder="0.0" style="background:transparent;border:none;outline:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td class="to-qty-d" style="padding:3px 4px;"><input value="' + escHtml(row.notes||'') + '" oninput="_toQtyUpdate(' + i + ',\'notes\',this.value)" placeholder="Notes" style="background:transparent;border:none;outline:none;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:80px;"></td>' +
+        '<td style="padding:3px 4px;text-align:center;"><button onclick="_toQtyDeleteRow(' + i + ')" style="background:none;border:none;color:#d94f3d;cursor:pointer;font-size:13px;padding:2px 4px;">✕</button></td>' +
+      '</tr>';
+    }).join('');
+  }
+  var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
+  var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
+  if (tfoot) {
+    tfoot.innerHTML = '<tr style="background:#1a1a1a;border-top:2px solid #a78bfa;">' +
+      '<td style="padding:5px 8px;font-weight:700;color:#a78bfa;font-size:11px;">TOTAL</td>' +
+      '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totSqFt ? totSqFt.toLocaleString() : '—') + '</td>' +
+      '<td class="to-qty-d"></td>' +
+      '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totTons ? totTons.toFixed(1) : '—') + '</td>' +
+      '<td class="to-qty-d"></td><td></td>' +
+    '</tr>';
+  }
+  if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' sq ft · ' + totTons.toFixed(1) + ' tons' : '';
+}
+
+function _toQtyToggle() {
+  _toQtyExpanded = !_toQtyExpanded;
+  var body = document.getElementById('toQtyBody');
+  var btn  = document.getElementById('toQtyToggleBtn');
+  if (body) body.style.display = _toQtyExpanded ? '' : 'none';
+  if (btn)  btn.textContent = _toQtyExpanded ? '▲' : '▼';
+}
+
+function _toQtyAddRow() {
+  _toQtyRows.push({ area:'', sqFt:'', depth:'', tons:'', notes:'' });
+  _toQtyRender();
+  _toQtySaveForPage();
+  setTimeout(function() {
+    var rows = document.querySelectorAll('#toQtyTbody tr');
+    if (rows.length) { var inp = rows[rows.length-1].querySelector('input'); if (inp) inp.focus(); }
+  }, 30);
+}
+
+function _toQtyDeleteRow(idx) {
+  _toQtyRows.splice(idx, 1);
+  _toQtyRender();
+  _toQtySaveForPage();
+}
+
+function _toQtyUpdate(idx, field, val) {
+  if (!_toQtyRows[idx]) return;
+  _toQtyRows[idx][field] = val;
+  if (field === 'sqFt' || field === 'depth') {
+    var sqFt  = parseFloat(_toQtyRows[idx].sqFt)  || 0;
+    var depth = parseFloat(_toQtyRows[idx].depth) || 0;
+    if (sqFt && depth) {
+      var calc = parseFloat(((sqFt * depth * 110) / 2000).toFixed(2));
+      _toQtyRows[idx].tons = calc;
+      var tRows = document.querySelectorAll('#toQtyTbody tr');
+      if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[3]) tInps[3].value = calc; }
+    }
+    var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
+    var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
+    var fCells = document.querySelectorAll('#toQtyFoot td');
+    if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
+    if (fCells[3]) fCells[3].textContent = totTons ? totTons.toFixed(1) : '—';
+    var totBar = document.getElementById('toQtyTotalsBar');
+    if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' sq ft · ' + totTons.toFixed(1) + ' tons' : '';
+  }
+  _toQtySaveForPage();
+}
+
+function _toQtyLoadForPage(key) {
+  _toQtyKey = key;
+  try {
+    var all = JSON.parse(localStorage.getItem(_TO_QTY_STORE) || '{}');
+    _toQtyRows = all[key] ? JSON.parse(JSON.stringify(all[key])) : [];
+  } catch(e) { _toQtyRows = []; }
+  _toQtyRender();
+}
+
+function _toQtySaveForPage() {
+  if (!_toQtyKey) return;
+  try {
+    var all = JSON.parse(localStorage.getItem(_TO_QTY_STORE) || '{}');
+    all[_toQtyKey] = _toQtyRows;
+    localStorage.setItem(_TO_QTY_STORE, JSON.stringify(all));
+  } catch(e) {}
+}
+
 function _toConfirmSavePage() {
   if (!_toSaveTempData) return;
   const {thumbnail,measurements,pageNum,pdfName} = _toSaveTempData;
@@ -4858,14 +5069,15 @@ function _toConfirmSavePage() {
     if (!name) { alert('Project name required.'); return; }
     const status=document.getElementById('toSaveStatus')?.value||'bid';
     const gcJobNum=(status==='awarded'?document.getElementById('toSaveJobNum')?.value?.trim():null)||null;
-    folder={id:'tf_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name,status,gcJobNum,pages:[],notes:'',createdAt:Date.now(),updatedAt:Date.now()};
+    folder={id:'tf_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name,status,gcJobNum,pages:[],notes:'',linkedJobId:_toLinkedJob?_toLinkedJob.id:null,linkedJobNum:_toLinkedJob?_toLinkedJob.num:null,linkedJobName:_toLinkedJob?_toLinkedJob.name:null,linkedJobGC:_toLinkedJob?_toLinkedJob.gc:null,createdAt:Date.now(),updatedAt:Date.now()};
+    _toLinkedJob=null;
     takeoffFolders.unshift(folder);
   } else {
     const sel=document.getElementById('toSaveFolderSel')?.value;
     folder=takeoffFolders.find(f=>f.id===sel);
     if (!folder) { alert('Select a folder.'); return; }
   }
-  folder.pages.push({id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),pdfName,pageNum,thumbnail,measurements:measurements||[],notes,savedAt:Date.now()});
+  folder.pages.push({id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),pdfName,pageNum,thumbnail,measurements:measurements||[],quantities:JSON.parse(JSON.stringify(_toQtyRows)),notes,savedAt:Date.now()});
   folder.updatedAt=Date.now();
   _toFoldersSave();
   document.getElementById('toSaveDlg').remove();
