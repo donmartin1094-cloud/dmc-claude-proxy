@@ -4131,6 +4131,7 @@ let _toEdgeVx       = 0;              // scroll velocity px/frame
 let _toEdgeVy       = 0;
 let _toEdgeRAF      = null;           // rAF handle for edge-scroll loop
 var _toTzScale = 1, _toTzTx = 0, _toTzTy = 0, _toTzInitDist = 0, _toTzLastTap = 0;
+var _toIsPanning = false, _toPanDragStart = null;
 
 // Edge-scroll animation loop — runs while cursor is in the zone and a tool is active
 function _toEdgeTick() {
@@ -4282,7 +4283,7 @@ async function _toChangePage(delta) {
   if (np < 1 || np > _toPdfDoc.numPages) return;
   _toQtySaveForPage();
   _toPdfPage = np;
-  _toPoints = []; _toScalePoints = []; _toTzResetTransform();
+  _toPoints = []; _toScalePoints = []; _toTzResetScale();
   // Restore this page's scale (or clear it)
   _toScale = _toPageScales[_toPdfPage] != null ? _toPageScales[_toPdfPage] : null;
   const disp = document.getElementById('toScaleDisplay');
@@ -4307,12 +4308,49 @@ function _toBindEvents() {
   // Track mouse on the wrap too — catches edge proximity when cursor is in the
   // margin area outside the canvas/SVG but still inside the scroll container
   if (wrap) {
-    wrap.addEventListener('mousemove', e => {
+    wrap.addEventListener('mousemove', function(e) {
       _toLastClient = { x: e.clientX, y: e.clientY };
+      if (_toIsPanning && _toPanDragStart) {
+        _toTzTx = _toPanDragStart.tx + (e.clientX - _toPanDragStart.x) / _toTzScale;
+        _toTzTy = _toPanDragStart.ty + (e.clientY - _toPanDragStart.y) / _toTzScale;
+        _toTzApply();
+        return;
+      }
       _toCheckEdgeScroll(e.clientX, e.clientY);
     });
     // Stop scrolling when cursor leaves the wrap entirely
-    wrap.addEventListener('mouseleave', () => { _toEdgeVx = 0; _toEdgeVy = 0; });
+    wrap.addEventListener('mouseleave', function() { _toEdgeVx = 0; _toEdgeVy = 0; });
+
+    // Scroll wheel zoom — CSS transform scale on toCanvasInner (no PDF rerender)
+    wrap.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var _delta = e.deltaY > 0 ? -0.1 : 0.1;
+      _toTzScale = Math.max(0.25, Math.min(8, _toTzScale + _delta));
+      _toTzApply();
+    }, { passive: false });
+
+    // Middle-click pan — mousedown starts, mouseup ends
+    wrap.addEventListener('mousedown', function(e) {
+      if (e.button !== 1) return;
+      e.preventDefault(); // prevent browser autoscroll
+      _toIsPanning = true;
+      _toPanDragStart = { x: e.clientX, y: e.clientY, tx: _toTzTx, ty: _toTzTy };
+      wrap.style.cursor = 'grabbing';
+    });
+    wrap.addEventListener('mouseup', function(e) {
+      if (e.button !== 1 || !_toIsPanning) return;
+      _toIsPanning = false;
+      _toPanDragStart = null;
+      wrap.style.cursor = _toTool ? 'crosshair' : 'default';
+    });
+    // Also catch middle-click release if cursor leaves wrap during drag
+    wrap.addEventListener('mouseleave', function() {
+      if (_toIsPanning) {
+        _toIsPanning = false;
+        _toPanDragStart = null;
+        wrap.style.cursor = _toTool ? 'crosshair' : 'default';
+      }
+    });
 
     // ── Mobile: pinch-to-zoom, pan, swipe page nav ──────────────────────────
     var _tzStart = null;
@@ -4366,18 +4404,29 @@ function _toBindEvents() {
 function _toTzApply() {
   var inner = document.getElementById('toCanvasInner');
   if (inner) inner.style.transform = 'scale(' + _toTzScale + ') translate(' + _toTzTx + 'px,' + _toTzTy + 'px)';
+  var zd = document.getElementById('toZoomDisplay');
+  if (zd) zd.textContent = Math.round(_toTzScale * 100) + '%';
 }
 function _toTzResetTransform() {
   _toTzScale = 1; _toTzTx = 0; _toTzTy = 0;
+  _toIsPanning = false; _toPanDragStart = null;
   var inner = document.getElementById('toCanvasInner');
   if (inner) inner.style.transform = '';
+  var zd = document.getElementById('toZoomDisplay');
+  if (zd) zd.textContent = '100%';
+}
+// Reset only the CSS zoom, keep pan position
+function _toTzResetScale() {
+  _toTzScale = 1;
+  _toTzApply();
 }
 
 function _toSvgPt(e) {
   const svg = document.getElementById('toSvgOverlay');
   if (!svg) return {x:0,y:0};
   const r = svg.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  var _s = _toTzScale || 1;
+  return { x: (e.clientX - r.left) / _s, y: (e.clientY - r.top) / _s };
 }
 
 function _toHandleClick(e) {
