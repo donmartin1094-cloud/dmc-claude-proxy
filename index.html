@@ -4221,7 +4221,7 @@ function _toBuildPortalHTML() {
 async function _toOpenPortal(file) {
   if (!document.getElementById('toStyles')) {
     const s = document.createElement('style'); s.id = 'toStyles';
-    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:40vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}}`;
+    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:50vh}#toQtyBody{max-height:50vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}}`;
     document.head.appendChild(s);
   }
   let ov = document.getElementById('toPortalOverlay');
@@ -4602,8 +4602,10 @@ function _toShowLinearDialog() {
       <div><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Point Color</label>
         <input type="color" id="toLinC2" value="${_toDotColor}" style="width:100%;height:38px;border:1px solid #444;border-radius:4px;cursor:pointer;background:#1a1a1a;padding:2px;"></div>
     </div>
-    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
+    <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
       <input id="toLinLbl" type="text" placeholder="e.g. BC Berm — North Side" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
+    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Depth (in) — for quantity table</label>
+      <input id="toLinDepth" type="number" step="0.5" min="0" list="toQtyDepthList" placeholder="e.g. 2" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
       <button onclick="document.getElementById('toLinDlg').remove();_toPoints=[];_toUpdateGhost();" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:11px;padding:8px 18px;cursor:pointer;">Discard</button>
       <button onclick="_toSaveLinear(${ft!==null?ft.toFixed(4):'null'})" style="background:rgba(90,180,245,0.15);border:1px solid #5ab4f5;border-radius:4px;color:#5ab4f5;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:8px 22px;cursor:pointer;">✓ Save</button>
@@ -4623,7 +4625,8 @@ function _toSaveLinear(ft) {
   _toUpdateGhost();
   var _lqFt = (ft && ft !== 'null') ? parseFloat(ft) : null;
   var _lqLabel = lb ? lb + (_lqFt ? ' (' + _lqFt.toFixed(1) + ' ft)' : '') : ('Linear ' + (_toQtyRows.length + 1) + (_lqFt ? ' — ' + _lqFt.toFixed(1) + ' ft' : ''));
-  _toQtyRows.push({ area: _lqLabel, sqFt: '', sqYd: '', depth: '', tons: '', color: lc });
+  var _lqDepth = parseFloat(document.getElementById('toLinDepth') ? document.getElementById('toLinDepth').value : '') || 0;
+  _toQtyRows.push({ area: _lqLabel, sqFt: '', sqYd: '', depth: _lqDepth || '', tons: '', color: lc });
   _toQtyRender();
   _toQtySaveForPage();
   _toUpdateStatus('Linear saved'+(lb?' — '+lb:'')+(ft&&ft!=='null'?' · '+parseFloat(ft).toFixed(1)+' ft':''));
@@ -4673,8 +4676,10 @@ function _toFinishArea() {
     `:`<div style="font-family:'DM Mono',monospace;font-size:11px;color:#9b9488;margin-bottom:16px;">Set scale first for real-world area &nbsp;·&nbsp; Raw: ${Math.round(pxArea)} px²</div>`}
     <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Fill Color</label>
       <input type="color" id="toAreaC" value="${_toFillColor}" style="width:100%;height:38px;border:1px solid #444;border-radius:4px;cursor:pointer;background:#1a1a1a;padding:2px;"></div>
-    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
+    <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
       <input id="toAreaLbl" type="text" placeholder="e.g. Parking Lot — East Section" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
+    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Depth (in) — for quantity table</label>
+      <input id="toAreaQtyDepth" type="number" step="0.5" min="0" list="toQtyDepthList" placeholder="e.g. 2" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
       <button onclick="document.getElementById('toAreaDlg').remove();_toPoints=[];_toUpdateGhost();" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:11px;padding:8px 18px;cursor:pointer;">Discard</button>
       <button onclick="_toSaveArea(${sqFt!==null?sqFt.toFixed(2):'null'},${_sqYdVal})" style="background:rgba(245,197,24,0.15);border:1px solid #f5c518;border-radius:4px;color:#f5c518;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:8px 22px;cursor:pointer;">✓ Save Area</button>
@@ -4721,7 +4726,9 @@ function _toSaveArea(sqFt, sqYd) {
   var _aqSqFt = (sqFt && sqFt !== 'null') ? parseFloat(sqFt) : null;
   var _aqSqYd = _aqSqFt ? _aqSqFt / 9 : null;
   var _aqLabel = label || ('Area ' + (_toQtyRows.length + 1));
-  _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', depth: '', tons: '', color: color });
+  var _aqDepth = parseFloat(document.getElementById('toAreaQtyDepth') ? document.getElementById('toAreaQtyDepth').value : '') || 0;
+  var _aqTons = (_aqDepth && _aqSqFt) ? parseFloat(((_aqSqFt * _aqDepth * 110) / 2000).toFixed(2)) : 0;
+  _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', depth: _aqDepth || '', tons: _aqTons || '', color: color });
   _toQtyRender();
   _toQtySaveForPage();
   const tonsSuffix = tons.total ? ' / ' + tons.total.toFixed(1) + 'T total' : '';
@@ -5590,7 +5597,7 @@ function _toQtyInit() {
       '<button onclick="event.stopPropagation();_toQtyAddRow();" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Row</button>' +
       '<button id="toQtyToggleBtn" onclick="event.stopPropagation();_toQtyToggle();" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:4px 10px;cursor:pointer;">▲</button>' +
     '</div>' +
-    '<div id="toQtyBody" style="background:#252525;max-height:calc(35vh - 36px);overflow-y:auto;">' +
+    '<div id="toQtyBody" style="background:#252525;max-height:40vh;overflow-y:auto;">' +
       '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
         '<thead><tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
           '<th style="padding:5px 8px;text-align:left;color:#9b9488;font-weight:700;min-width:120px;">Area / Section</th>' +
