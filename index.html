@@ -5284,14 +5284,33 @@ function _toDirPageOpen(folderId, pageId) {
   var container = document.getElementById('secPopupBody');
   if (!container) return;
   _renderTakeoffPortal(container);
+  _toSessionFolderId = f.id;
   setTimeout(function() {
-    // Pre-load saved quantities
+    // Restore quantities
     _toQtyRows = p.quantities ? JSON.parse(JSON.stringify(p.quantities)) : [];
     _toQtyKey = null;
     _toQtyRender();
     _takeoffViewerActive = true;
     var _qov = document.getElementById('toQtyOverlay');
     if (_qov) _qov.style.display = '';
+    // Restore measurements so they're available when PDF is loaded
+    _toMeasurements = p.measurements ? JSON.parse(JSON.stringify(p.measurements)) : [];
+    _toDrawMeasGroup();
+    // Restore scale
+    if (p.scale) {
+      _toScale = p.scale;
+      var _scaleEl = document.getElementById('toScaleDisplay');
+      if (_scaleEl) { _scaleEl.textContent = '1 ft = ' + _toScale.toFixed(1) + ' px'; _scaleEl.style.color = '#7ecb8f'; }
+    } else {
+      _toScale = null;
+      var _warn = document.createElement('div');
+      _warn.id = 'toScaleWarn';
+      _warn.style.cssText = 'background:rgba(245,158,11,0.15);border-bottom:2px solid #f59e0b;padding:6px 16px;font-family:\'DM Mono\',monospace;font-size:11px;color:#f59e0b;cursor:pointer;text-align:center;flex-shrink:0;';
+      _warn.textContent = '⚠️ Scale not set — tap here to set scale before measuring';
+      _warn.onclick = function(){ _toActivateTool('scale'); this.remove(); };
+      var _portal = document.getElementById('toCanvasWrap');
+      if (_portal && _portal.parentNode) _portal.parentNode.insertBefore(_warn, _portal);
+    }
     // Show saved thumbnail as a preview until user loads the actual PDF
     if (p.thumbnail) {
       var es = document.getElementById('toEmptyState');
@@ -5673,6 +5692,14 @@ function _toQtyUpdate(idx, field, val) {
     if (fCells[3]) fCells[3].textContent = totTons ? totTons.toFixed(1) : '—';
     var totBar = document.getElementById('toQtyTotalsBar');
     if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' sq ft · ' + totTons.toFixed(1) + ' tons' : '';
+  } else if (field === 'tons') {
+    var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
+    var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
+    var fCells = document.querySelectorAll('#toQtyFoot td');
+    if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
+    if (fCells[3]) fCells[3].textContent = totTons ? totTons.toFixed(1) : '—';
+    var totBar = document.getElementById('toQtyTotalsBar');
+    if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' sq ft · ' + totTons.toFixed(1) + ' tons' : '';
   }
   _toQtySaveForPage();
 }
@@ -5721,13 +5748,23 @@ function _toConfirmSavePage() {
       if (!folder) { alert('Select a folder.'); return; }
     }
   }
-  folder.pages.push({ id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), pageName:pageName, pdfName:pdfName, pageNum:pageNum, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), notes:notes, savedAt:Date.now() });
+  folder.pages.push({ id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), pageName:pageName, pdfName:pdfName, pageNum:pageNum, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), scale:_toScale||null, notes:notes, savedAt:Date.now() });
   folder.updatedAt = Date.now();
   _toFoldersSave();
   document.getElementById('toSaveDlg').remove();
   _toSaveTempData = null;
   _toRefreshCardStacks();
   _toUpdateStatus('Saved to folder: ' + folder.name);
+  var _smModal = document.createElement('div');
+  _smModal.id = 'toSaveSuccessModal';
+  _smModal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);pointer-events:none;';
+  _smModal.innerHTML = '<div style="background:#252525;border:2px solid #a78bfa;border-radius:10px;padding:28px 36px;text-align:center;max-width:380px;pointer-events:auto;position:relative;">'
+    +'<button onclick="document.getElementById(\'toSaveSuccessModal\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;color:#9b9488;font-size:18px;cursor:pointer;line-height:1;">✕</button>'
+    +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:32px;letter-spacing:3px;color:#a78bfa;margin-bottom:10px;">✅ Takeoff Saved</div>'
+    +'<div style="font-family:\'DM Sans\',sans-serif;font-size:14px;color:#f9f7f3;">' + escHtml(pageName) + ' has been saved to ' + escHtml(folder.takeoffName || folder.name) + '</div>'
+    +'</div>';
+  document.body.appendChild(_smModal);
+  setTimeout(function(){ var m = document.getElementById('toSaveSuccessModal'); if (m) m.remove(); }, 2000);
 }
 
 function _toRefreshCardStacks() {
