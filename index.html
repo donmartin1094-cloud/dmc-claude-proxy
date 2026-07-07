@@ -14843,7 +14843,18 @@ document.getElementById('mainContent').addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     const popup = document.getElementById('secPopup');
-    if (popup && popup.classList.contains('open')) { closeSecPopup(); return; }
+    if (popup && popup.classList.contains('open')) {
+      if (_toTool || (_toPoints && _toPoints.length > 0)) {
+        _toPoints = [];
+        _toTool = null;
+        if (typeof _toUpdateGhost === 'function') _toUpdateGhost();
+        document.querySelectorAll('.to-btn.active').forEach(function(b){
+          b.classList.remove('active');
+        });
+        return;
+      }
+      closeSecPopup(); return;
+    }
   }
   if (!document.getElementById('sheetPanel').classList.contains('open')) return;
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') sheetNav(1);
