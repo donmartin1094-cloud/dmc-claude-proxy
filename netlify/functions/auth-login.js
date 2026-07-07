@@ -29,6 +29,7 @@ exports.handler = async (event) => {
       'IGiron':      'DMCWelcome2026!',
       'ATow':        'DMCTow2025',
       'Christian':   'DMCWelcome2026!',
+      'devtest':     'DMC2024!',
       'DSouza':      'Pestario86!!',
       'fjoaquim':    'DMC2024!',
       'marruda':     'DMC2024!',

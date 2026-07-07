@@ -27676,7 +27676,7 @@ const DEFAULT_TEAM_ACCOUNTS = [
   { username:'swall',     password:'DMC2024!', role:'driver', displayName:'Skylar Wall',    active:true, driverTypes:['mixtruck'] },
   // ── Rental Lowbed Drivers ─────────────────────────────────────────────────
   { username:'ATow',        password:'DMCTow2025',                        role:'rental_lowbed_driver', displayName:"Andy's Towing" },
-  { username:'Chris',       email:'chris@donmartincorp.com',              password:'Projectdev',       role:'admin',    displayName:'Chris', readOnly:true },
+  { username:'devtest',      email:'devtest@donmartincorp.com',            password:'DMC2024!',         role:'admin',    displayName:'Dev Test' },
   // ── Foremans ──────────────────────────────────────────────────────────────
   { username:'fjoaquim',    email:'fjoaquim@donmartincorp.com',           password:'DMC2024!',         role:'foreman',  displayName:'Filipe Joaquim', active:true, driverTypes:[] },
   { username:'marruda',     email:'marruda@donmartincorp.com',            password:'DMC2024!',         role:'foreman',  displayName:'Mario Arruda',   active:true, driverTypes:[] },
@@ -27696,10 +27696,11 @@ const DEFAULT_TEAM_ACCOUNTS = [
 const USERS = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username, a.password]));
 // Accounts that can see the Backlog
 const ADMIN_USERS = DEFAULT_TEAM_ACCOUNTS.filter(a => a.role === 'admin').map(a => a.username);
-const ADMIN_EMAILS = ['dj@donmartincorp.com', 'donmartin@donmartincorp.com', 'christianmcgourty@donmartincorp.com'];
+const ADMIN_EMAILS = ['dj@donmartincorp.com', 'donmartin@donmartincorp.com', 'christianmcgourty@donmartincorp.com', 'devtest@donmartincorp.com'];
 const CORE_ADMIN_EMAIL_BY_USERNAME = {
   dj: 'dj@donmartincorp.com',
-  donmartin: 'donmartin@donmartincorp.com'
+  donmartin: 'donmartin@donmartincorp.com',
+  devtest: 'devtest@donmartincorp.com'
 };
 const REQUIRED_ACCOUNT_BY_USERNAME = Object.fromEntries(DEFAULT_TEAM_ACCOUNTS.map(a => [a.username.toLowerCase(), a]));
 
