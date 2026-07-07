@@ -4734,9 +4734,9 @@ function _toSaveArea(sqFt, sqYd) {
   var _aqSqFt = (sqFt && sqFt !== 'null') ? parseFloat(sqFt) : null;
   var _aqSqYd = _aqSqFt ? _aqSqFt / 9 : null;
   var _aqLabel = label || ('Area ' + (_toQtyRows.length + 1));
-  var _aqBase   = parseFloat(document.getElementById('toDepthBase')   ? document.getElementById('toDepthBase').value   : '') || 0;
-  var _aqBinder = parseFloat(document.getElementById('toDepthBinder') ? document.getElementById('toDepthBinder').value : '') || 0;
-  var _aqTop    = parseFloat(document.getElementById('toDepthTop')    ? document.getElementById('toDepthTop').value    : '') || 0;
+  var _aqBase   = depths.base   || 0;
+  var _aqBinder = depths.binder || 0;
+  var _aqTop    = depths.top    || 0;
   var _aqTotalDepth = _aqBase + _aqBinder + _aqTop;
   var _aqTons = (_aqTotalDepth && _aqSqFt) ? parseFloat(((_aqSqFt * _aqTotalDepth * 110) / 2000).toFixed(2)) : 0;
   _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', base: _aqBase || '', binder: _aqBinder || '', top: _aqTop || '', tons: _aqTons || '', color: color });
