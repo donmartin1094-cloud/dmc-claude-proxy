@@ -2489,7 +2489,7 @@ function saveAiaReqs() {
 const TAKEOFFS_KEY = 'dmc_takeoffs';
 var takeoffFolders = [];
 function _toFoldersLoad() { try { takeoffFolders = JSON.parse(localStorage.getItem(TAKEOFFS_KEY)||'[]'); } catch(e) { takeoffFolders=[]; } }
-function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); _checkLocalStorageSize(); }
+function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); _checkLocalStorageSize(); try { if (typeof db !== 'undefined' && db) fbSet('takeoff_folders', takeoffFolders); } catch(e) {} }
 _toFoldersLoad();
 _slipsLoad();
 

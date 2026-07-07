@@ -15096,6 +15096,11 @@ function _jfRenderTab(job, tab) {
     const hasTax = (folder.taxCerts||[]).length > 0;
     const numVal = parseFloat(job.num)||0;
     const linked = _jfLinkedCounts(job);
+    _toFoldersLoad();
+    const _jfTakeoffCount = takeoffFolders.filter(function(f) {
+      return (job.num && f.linkedJobNum && f.linkedJobNum === job.num) ||
+             (job.id && f.linkedJobId  && f.linkedJobId  === job.id);
+    }).length;
     const complianceStatus = numVal > 3899
       ? (hasPO && hasTax ? `<span style="color:#7ecb8f;font-weight:700;">✓ Compliant</span>` : `<span style="color:var(--red);font-weight:700;">⚠ Missing ${!hasPO?'PO':''}${!hasPO&&!hasTax?' & ':''}${!hasTax?'Tax Cert':''}</span>`)
       : `<span style="color:var(--concrete-dim);">N/A (Job# ≤ 3899)</span>`;
@@ -15129,6 +15134,7 @@ function _jfRenderTab(job, tab) {
             ['📄 Paving Slips',    linked.pavingSlips,    'slips'],
             ['🧾 Broker Bills',    (job.jobFolder?.brokerBills||[]).length, 'bills'],
             ['📎 Other Docs',      (job.jobFolder?.otherDocs||[]).length,   'other'],
+            ['📐 Takeoffs',        _jfTakeoffCount,                         'takeoffs'],
           ].map(([label,count,tabKey])=>`
             <div onclick="switchJfTab('${job.id}','${tabKey}')" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:10px;cursor:pointer;text-align:center;transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(245,197,24,0.3)'" onmouseout="this.style.borderColor='var(--asphalt-light)'">
               <div style="font-size:18px;">${label.split(' ')[0]}</div>
