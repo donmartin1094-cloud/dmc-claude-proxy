@@ -4830,6 +4830,7 @@ async function _toSetZoom(newZoom) {
 
 // ── Takeoffs Window ───────────────────────────────────────────────────────────
 let _toSaveTempData  = null;
+var _toSessionFolderId   = null;
 let _toCurrentPdfName = '';
 var _toLinkedJob         = null;
 var _toQtyRows           = [];
@@ -5125,6 +5126,7 @@ function _toNtStart() {
   }
   _toFoldersLoad();
   takeoffFolders.unshift(folder);
+  _toSessionFolderId = folder.id;
   _toFoldersSave();
   _toNtLinkedJob = null;
   _toNtMode = null;
@@ -5386,55 +5388,94 @@ function _toSavePageToFolder() {
 function _toSaveFolderDialog(thumbnail, measurements, pageNum, pdfName) {
   _toSaveTempData = { thumbnail, measurements, pageNum, pdfName };
   _toFoldersLoad();
-  const d=document.createElement('div'); d.id='toSaveDlg';
-  d.style.cssText='position:fixed;inset:0;z-index:9300;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);';
-  d.innerHTML=`<div style="background:#252525;border:2px solid #7ecb8f;border-radius:10px;padding:28px 32px;min-width:min(480px,95vw);max-width:min(600px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:#7ecb8f;margin-bottom:4px;">💾 Save Page to Takeoff Folder</div>
-    <div style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;margin-bottom:14px;">${escHtml(pdfName||'Plan')} · Page ${pageNum} · ${(measurements||[]).length} measurement(s)</div>
-    <div style="margin-bottom:16px;text-align:center;"><img src="${thumbnail}" style="max-width:100%;max-height:180px;object-fit:contain;border-radius:4px;border:1px solid #333;"></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;">
-      <button id="toSaveModeNew" onclick="_toSaveDlgMode('new')" class="to-btn active" style="flex:1;min-height:48px;">+ New Folder</button>
-      <button id="toSaveModeEx"  onclick="_toSaveDlgMode('existing')" class="to-btn" style="flex:1;min-height:48px;">${takeoffFolders.length?'Existing Folder':'(No folders yet)'}</button>
-    </div>
-    <div id="toSaveNewFields">
-      <div style="margin-bottom:10px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Project Name *</label>
-        <input id="toSaveName" type="text" placeholder="e.g. Main St Resurfacing" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:13px;padding:8px 10px;box-sizing:border-box;"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-        <div><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Status</label>
-          <select id="toSaveStatus" onchange="_toSaveDlgStatusChange()" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:8px;">
-            <option value="bid">Bid — Not Yet Awarded</option><option value="awarded">Awarded Job</option>
-          </select></div>
-        <div id="toSaveJobNumWrap" style="display:none;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">GC Job #</label>
-          <input id="toSaveJobNum" type="text" placeholder="e.g. GC-2025-041" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:8px;box-sizing:border-box;"></div>
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Link to Job Directory</label>
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <button id="toJobLinkNone" onclick="_toJobLinkMode('none')" class="to-btn active" style="flex:1;min-height:48px;">🆕 New Project</button>
-          <button id="toJobLinkExist" onclick="_toJobLinkMode('existing')" class="to-btn" style="flex:1;min-height:48px;">📁 Existing Job</button>
-        </div>
-        <div id="toJobLinkFields" style="display:none;">
-          <input id="toJobSearchInp" type="text" placeholder="Search by job # or project name…" oninput="_toJobSearchFilter(this.value)" autocomplete="off" style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:7px 10px;margin-bottom:6px;">
-          <div id="toJobSearchDrop" style="display:none;background:#1c1c1c;border:1px solid #555;border-radius:4px;max-height:200px;overflow-y:auto;margin-bottom:6px;"></div>
-          <div id="toJobLinkedChip" style="display:none;align-items:center;gap:6px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:4px;padding:5px 10px;font-family:'DM Mono',monospace;font-size:11px;color:#a78bfa;"></div>
-        </div>
-      </div>
-    </div>
-    <div id="toSaveExFields" style="display:none;margin-bottom:10px;">
-      <label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Select Folder</label>
-      <select id="toSaveFolderSel" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:8px;">
-        ${takeoffFolders.map(f=>`<option value="${f.id}">${f.status==='awarded'&&f.gcJobNum?f.gcJobNum+' — ':''}${escHtml(f.name)}</option>`).join('')||'<option value="">No folders yet</option>'}
-      </select>
-    </div>
-    <div style="margin-bottom:18px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Page Notes</label>
-      <textarea id="toSaveNotes" rows="2" placeholder="Phasing notes, foreman callouts, scope items…" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:11px;padding:8px 10px;box-sizing:border-box;resize:vertical;"></textarea></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button onclick="document.getElementById('toSaveDlg').remove();" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:11px;padding:8px 18px;cursor:pointer;">Cancel</button>
-      <button onclick="_toConfirmSavePage()" style="background:rgba(126,203,143,0.15);border:1px solid #7ecb8f;border-radius:4px;color:#7ecb8f;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:8px 22px;cursor:pointer;">💾 Save</button>
-    </div>
-  </div>`;
+  var _sfFolder = _toSessionFolderId ? takeoffFolders.find(function(f){ return f.id === _toSessionFolderId; }) : null;
+
+  // Build quantity summary block
+  var _qtyBlock = '';
+  if (_toQtyRows && _toQtyRows.length > 0) {
+    var _qTotSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
+    var _qTotTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
+    var _qLines = _toQtyRows.map(function(r,i){
+      var _label = (r.area||'').trim() || ('Area '+(i+1));
+      var _parts = [];
+      if (r.sqFt) _parts.push((parseFloat(r.sqFt)||0).toLocaleString()+' sq ft');
+      if (r.depth) _parts.push(r.depth+'"');
+      if (r.tons) _parts.push((parseFloat(r.tons)||0).toFixed(1)+' tons');
+      return escHtml(_label) + (_parts.length ? ': ' + _parts.join(' · ') : '');
+    });
+    _qLines.push('────────────────────');
+    _qLines.push('Total: '+_qTotSqFt.toLocaleString()+' sq ft · '+_qTotTons.toFixed(1)+' tons');
+    _qtyBlock = '<div style="background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:10px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;white-space:pre-wrap;line-height:1.65;margin-bottom:8px;max-height:140px;overflow-y:auto;">'+_qLines.join('\n')+'</div>';
+  } else {
+    _qtyBlock = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#555;padding:6px 0 8px;">No quantities recorded for this page</div>';
+  }
+
+  // Folder section — auto-filled (session) or manual (legacy)
+  var _folderSec = '';
+  if (_sfFolder) {
+    var _sfTitle = escHtml(_sfFolder.takeoffName || _sfFolder.name || '');
+    var _sfProj  = (_sfFolder.name && _sfFolder.name !== _sfFolder.takeoffName) ? escHtml(_sfFolder.name) : '';
+    var _sfNum   = _sfFolder.gcJobNum || _sfFolder.linkedJobNum || '';
+    var _sfGC    = _sfFolder.linkedJobGC || '';
+    var _sfMeta  = [_sfNum?'#'+escHtml(_sfNum):'', escHtml(_sfGC)].filter(Boolean).join(' · ');
+    _folderSec = '<div style="margin-bottom:16px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:6px;padding:10px 14px;">'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;margin-bottom:5px;">Saving To Folder</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:12px;color:#a78bfa;font-weight:700;">'+_sfTitle+'</div>'
+      +(_sfProj?'<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#f9f7f3;margin-top:3px;">'+_sfProj+'</div>':'')
+      +(_sfMeta?'<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;margin-top:2px;">'+_sfMeta+'</div>':'')
+      +'</div>';
+  } else {
+    var _fOpts = takeoffFolders.map(function(f){
+      return '<option value="'+f.id+'">'+(f.status==='awarded'&&f.gcJobNum?f.gcJobNum+' — ':'')+escHtml(f.name)+'</option>';
+    }).join('') || '<option value="">No folders yet</option>';
+    _folderSec = '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+      +'<button id="toSaveModeNew" onclick="_toSaveDlgMode(\'new\')" class="to-btn active" style="flex:1;min-height:48px;">+ New Folder</button>'
+      +'<button id="toSaveModeEx" onclick="_toSaveDlgMode(\'existing\')" class="to-btn" style="flex:1;min-height:48px;">'+(takeoffFolders.length?'Existing Folder':'(No folders yet)')+'</button>'
+      +'</div>'
+      +'<div id="toSaveNewFields">'
+        +'<div style="margin-bottom:10px;"><label style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Project Name *</label>'
+          +'<input id="toSaveName" type="text" placeholder="e.g. Main St Resurfacing" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:13px;padding:8px 10px;box-sizing:border-box;"></div>'
+        +'<div style="margin-bottom:12px;">'
+          +'<label style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Link to Job Directory</label>'
+          +'<div style="display:flex;gap:8px;margin-bottom:8px;">'
+            +'<button id="toJobLinkNone" onclick="_toJobLinkMode(\'none\')" class="to-btn active" style="flex:1;min-height:48px;">🆕 New Project</button>'
+            +'<button id="toJobLinkExist" onclick="_toJobLinkMode(\'existing\')" class="to-btn" style="flex:1;min-height:48px;">📁 Existing Job</button>'
+          +'</div>'
+          +'<div id="toJobLinkFields" style="display:none;">'
+            +'<input id="toJobSearchInp" type="text" placeholder="Search by job # or project name…" oninput="_toJobSearchFilter(this.value)" autocomplete="off" style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;padding:7px 10px;margin-bottom:6px;">'
+            +'<div id="toJobSearchDrop" style="display:none;background:#1c1c1c;border:1px solid #555;border-radius:4px;max-height:200px;overflow-y:auto;margin-bottom:6px;"></div>'
+            +'<div id="toJobLinkedChip" style="display:none;align-items:center;gap:6px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:4px;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;color:#a78bfa;"></div>'
+          +'</div>'
+        +'</div>'
+      +'</div>'
+      +'<div id="toSaveExFields" style="display:none;margin-bottom:10px;">'
+        +'<label style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Select Folder</label>'
+        +'<select id="toSaveFolderSel" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;padding:8px;">'+_fOpts+'</select>'
+      +'</div>';
+  }
+
+  var _defPageName = 'Page ' + pageNum;
+  const d = document.createElement('div'); d.id = 'toSaveDlg';
+  d.style.cssText = 'position:fixed;inset:0;z-index:9300;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);';
+  d.innerHTML = '<div style="background:#252525;border:2px solid #7ecb8f;border-radius:10px;padding:28px 32px;min-width:min(480px,95vw);max-width:min(600px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);">'
+    +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:3px;color:#7ecb8f;margin-bottom:4px;">💾 Save Page to Takeoff Folder</div>'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;margin-bottom:14px;">'+escHtml(pdfName||'Plan')+' · Page '+pageNum+' · '+(measurements||[]).length+' measurement(s)</div>'
+    +'<div style="margin-bottom:16px;text-align:center;"><img src="'+thumbnail+'" style="max-width:100%;max-height:180px;object-fit:contain;border-radius:4px;border:1px solid #333;"></div>'
+    +'<div style="margin-bottom:14px;"><label style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Page Name</label>'
+      +'<input id="toSavePageName" type="text" value="'+escHtml(_defPageName)+'" placeholder="e.g. Page 1 — Parking Lot, Site Plan…" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:13px;padding:8px 10px;box-sizing:border-box;"></div>'
+    +_folderSec
+    +'<div style="margin-bottom:10px;"><label style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">📐 Quantities — Page '+pageNum+'</label>'
+      +_qtyBlock
+    +'</div>'
+    +'<div style="margin-bottom:18px;"><label style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:4px;">Page Notes</label>'
+      +'<textarea id="toSaveNotes" rows="2" placeholder="Phasing notes, foreman callouts, scope items…" style="width:100%;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;padding:8px 10px;box-sizing:border-box;resize:vertical;"></textarea></div>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;">'
+      +'<button onclick="document.getElementById(\'toSaveDlg\').remove();" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;padding:8px 18px;cursor:pointer;">Cancel</button>'
+      +'<button onclick="_toConfirmSavePage()" style="background:rgba(126,203,143,0.15);border:1px solid #7ecb8f;border-radius:4px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:8px 22px;cursor:pointer;">💾 Save</button>'
+    +'</div>'
+  +'</div>';
   document.body.appendChild(d);
-  setTimeout(()=>document.getElementById('toSaveName')?.focus(),50);
+  setTimeout(function(){ var n=document.getElementById('toSavePageName'); if(n){n.focus();n.select();} }, 50);
 }
 
 function _toSaveDlgMode(mode) {
@@ -5656,30 +5697,37 @@ function _toQtySaveForPage() {
 
 function _toConfirmSavePage() {
   if (!_toSaveTempData) return;
-  const {thumbnail,measurements,pageNum,pdfName} = _toSaveTempData;
-  const notes = document.getElementById('toSaveNotes')?.value||'';
-  const isNew  = document.getElementById('toSaveModeNew')?.classList.contains('active');
-  let folder;
-  if (isNew) {
-    const name=(document.getElementById('toSaveName')?.value||'').trim();
-    if (!name) { alert('Project name required.'); return; }
-    const status=document.getElementById('toSaveStatus')?.value||'bid';
-    const gcJobNum=(status==='awarded'?document.getElementById('toSaveJobNum')?.value?.trim():null)||null;
-    folder={id:'tf_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name,status,gcJobNum,pages:[],notes:'',linkedJobId:_toLinkedJob?_toLinkedJob.id:null,linkedJobNum:_toLinkedJob?_toLinkedJob.num:null,linkedJobName:_toLinkedJob?_toLinkedJob.name:null,linkedJobGC:_toLinkedJob?_toLinkedJob.gc:null,createdAt:Date.now(),updatedAt:Date.now()};
-    _toLinkedJob=null;
-    takeoffFolders.unshift(folder);
+  var thumbnail    = _toSaveTempData.thumbnail;
+  var measurements = _toSaveTempData.measurements;
+  var pageNum      = _toSaveTempData.pageNum;
+  var pdfName      = _toSaveTempData.pdfName;
+  var pageName = ((document.getElementById('toSavePageName') ? document.getElementById('toSavePageName').value : '') || '').trim() || ('Page ' + pageNum);
+  var notes    = document.getElementById('toSaveNotes') ? document.getElementById('toSaveNotes').value : '';
+  var folder;
+  if (_toSessionFolderId) {
+    folder = takeoffFolders.find(function(f){ return f.id === _toSessionFolderId; });
+    if (!folder) { alert('Takeoff folder not found — please try again.'); return; }
   } else {
-    const sel=document.getElementById('toSaveFolderSel')?.value;
-    folder=takeoffFolders.find(f=>f.id===sel);
-    if (!folder) { alert('Select a folder.'); return; }
+    var isNew = document.getElementById('toSaveModeNew') && document.getElementById('toSaveModeNew').classList.contains('active');
+    if (isNew) {
+      var name = ((document.getElementById('toSaveName') ? document.getElementById('toSaveName').value : '') || '').trim();
+      if (!name) { alert('Project name required.'); return; }
+      folder = { id:'tf_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), name:name, status:'bid', gcJobNum:null, pages:[], notes:'', linkedJobId:_toLinkedJob?_toLinkedJob.id:null, linkedJobNum:_toLinkedJob?_toLinkedJob.num:null, linkedJobName:_toLinkedJob?_toLinkedJob.name:null, linkedJobGC:_toLinkedJob?_toLinkedJob.gc:null, createdAt:Date.now(), updatedAt:Date.now() };
+      _toLinkedJob = null;
+      takeoffFolders.unshift(folder);
+    } else {
+      var sel = document.getElementById('toSaveFolderSel') ? document.getElementById('toSaveFolderSel').value : '';
+      folder = takeoffFolders.find(function(f){ return f.id === sel; });
+      if (!folder) { alert('Select a folder.'); return; }
+    }
   }
-  folder.pages.push({id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),pdfName,pageNum,thumbnail,measurements:measurements||[],quantities:JSON.parse(JSON.stringify(_toQtyRows)),notes,savedAt:Date.now()});
-  folder.updatedAt=Date.now();
+  folder.pages.push({ id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), pageName:pageName, pdfName:pdfName, pageNum:pageNum, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), notes:notes, savedAt:Date.now() });
+  folder.updatedAt = Date.now();
   _toFoldersSave();
   document.getElementById('toSaveDlg').remove();
-  _toSaveTempData=null;
+  _toSaveTempData = null;
   _toRefreshCardStacks();
-  _toUpdateStatus('Saved to folder: '+folder.name);
+  _toUpdateStatus('Saved to folder: ' + folder.name);
 }
 
 function _toRefreshCardStacks() {
