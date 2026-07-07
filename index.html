@@ -4604,8 +4604,16 @@ function _toShowLinearDialog() {
     </div>
     <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
       <input id="toLinLbl" type="text" placeholder="e.g. BC Berm — North Side" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
-    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Depth (in) — for quantity table</label>
-      <input id="toLinDepth" type="number" step="0.5" min="0" list="toQtyDepthList" placeholder="e.g. 2" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
+    <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:8px;">Depth by Lift (in)</label>
+      <div style="display:grid;grid-template-columns:52px 1fr;gap:5px;align-items:center;">
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;">Base</span>
+        <input id="toLinBase" type="number" min="0" step="0.25" list="toQtyDepthList" placeholder="depth (in)" style="background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:6px 8px;box-sizing:border-box;">
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;">Binder</span>
+        <input id="toLinBinder" type="number" min="0" step="0.25" list="toQtyDepthList" placeholder="depth (in)" style="background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:6px 8px;box-sizing:border-box;">
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;">Top</span>
+        <input id="toLinTop" type="number" min="0" step="0.25" list="toQtyDepthList" placeholder="depth (in)" style="background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:6px 8px;box-sizing:border-box;">
+      </div>
+    </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
       <button onclick="document.getElementById('toLinDlg').remove();_toPoints=[];_toUpdateGhost();" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:11px;padding:8px 18px;cursor:pointer;">Discard</button>
       <button onclick="_toSaveLinear(${ft!==null?ft.toFixed(4):'null'})" style="background:rgba(90,180,245,0.15);border:1px solid #5ab4f5;border-radius:4px;color:#5ab4f5;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:8px 22px;cursor:pointer;">✓ Save</button>
@@ -4625,8 +4633,10 @@ function _toSaveLinear(ft) {
   _toUpdateGhost();
   var _lqFt = (ft && ft !== 'null') ? parseFloat(ft) : null;
   var _lqLabel = lb ? lb + (_lqFt ? ' (' + _lqFt.toFixed(1) + ' ft)' : '') : ('Linear ' + (_toQtyRows.length + 1) + (_lqFt ? ' — ' + _lqFt.toFixed(1) + ' ft' : ''));
-  var _lqDepth = parseFloat(document.getElementById('toLinDepth') ? document.getElementById('toLinDepth').value : '') || 0;
-  _toQtyRows.push({ area: _lqLabel, sqFt: '', sqYd: '', depth: _lqDepth || '', tons: '', color: lc });
+  var _lqBase   = parseFloat(document.getElementById('toLinBase')   ? document.getElementById('toLinBase').value   : '') || 0;
+  var _lqBinder = parseFloat(document.getElementById('toLinBinder') ? document.getElementById('toLinBinder').value : '') || 0;
+  var _lqTop    = parseFloat(document.getElementById('toLinTop')    ? document.getElementById('toLinTop').value    : '') || 0;
+  _toQtyRows.push({ area: _lqLabel, sqFt: '', sqYd: '', base: _lqBase || '', binder: _lqBinder || '', top: _lqTop || '', tons: '', color: lc });
   _toQtyRender();
   _toQtySaveForPage();
   _toUpdateStatus('Linear saved'+(lb?' — '+lb:'')+(ft&&ft!=='null'?' · '+parseFloat(ft).toFixed(1)+' ft':''));
@@ -4676,10 +4686,8 @@ function _toFinishArea() {
     `:`<div style="font-family:'DM Mono',monospace;font-size:11px;color:#9b9488;margin-bottom:16px;">Set scale first for real-world area &nbsp;·&nbsp; Raw: ${Math.round(pxArea)} px²</div>`}
     <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Fill Color</label>
       <input type="color" id="toAreaC" value="${_toFillColor}" style="width:100%;height:38px;border:1px solid #444;border-radius:4px;cursor:pointer;background:#1a1a1a;padding:2px;"></div>
-    <div style="margin-bottom:14px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
+    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Label (optional)</label>
       <input id="toAreaLbl" type="text" placeholder="e.g. Parking Lot — East Section" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
-    <div style="margin-bottom:20px;"><label style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9b9488;display:block;margin-bottom:6px;">Depth (in) — for quantity table</label>
-      <input id="toAreaQtyDepth" type="number" step="0.5" min="0" list="toQtyDepthList" placeholder="e.g. 2" style="width:100%;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;box-sizing:border-box;"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
       <button onclick="document.getElementById('toAreaDlg').remove();_toPoints=[];_toUpdateGhost();" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:11px;padding:8px 18px;cursor:pointer;">Discard</button>
       <button onclick="_toSaveArea(${sqFt!==null?sqFt.toFixed(2):'null'},${_sqYdVal})" style="background:rgba(245,197,24,0.15);border:1px solid #f5c518;border-radius:4px;color:#f5c518;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:8px 22px;cursor:pointer;">✓ Save Area</button>
@@ -4726,9 +4734,12 @@ function _toSaveArea(sqFt, sqYd) {
   var _aqSqFt = (sqFt && sqFt !== 'null') ? parseFloat(sqFt) : null;
   var _aqSqYd = _aqSqFt ? _aqSqFt / 9 : null;
   var _aqLabel = label || ('Area ' + (_toQtyRows.length + 1));
-  var _aqDepth = parseFloat(document.getElementById('toAreaQtyDepth') ? document.getElementById('toAreaQtyDepth').value : '') || 0;
-  var _aqTons = (_aqDepth && _aqSqFt) ? parseFloat(((_aqSqFt * _aqDepth * 110) / 2000).toFixed(2)) : 0;
-  _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', depth: _aqDepth || '', tons: _aqTons || '', color: color });
+  var _aqBase   = parseFloat(document.getElementById('toDepthBase')   ? document.getElementById('toDepthBase').value   : '') || 0;
+  var _aqBinder = parseFloat(document.getElementById('toDepthBinder') ? document.getElementById('toDepthBinder').value : '') || 0;
+  var _aqTop    = parseFloat(document.getElementById('toDepthTop')    ? document.getElementById('toDepthTop').value    : '') || 0;
+  var _aqTotalDepth = _aqBase + _aqBinder + _aqTop;
+  var _aqTons = (_aqTotalDepth && _aqSqFt) ? parseFloat(((_aqSqFt * _aqTotalDepth * 110) / 2000).toFixed(2)) : 0;
+  _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', base: _aqBase || '', binder: _aqBinder || '', top: _aqTop || '', tons: _aqTons || '', color: color });
   _toQtyRender();
   _toQtySaveForPage();
   const tonsSuffix = tons.total ? ' / ' + tons.total.toFixed(1) + 'T total' : '';
@@ -5601,10 +5612,12 @@ function _toQtyInit() {
       '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
         '<thead><tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
           '<th style="padding:5px 8px;text-align:left;color:#9b9488;font-weight:700;min-width:120px;">Area / Section</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:65px;">Sq Ft</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Sq Yds</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:70px;">Depth (in)</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:65px;">Tons</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Sq Ft</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:55px;">Sq Yds</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:58px;">Base (in)</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Binder (in)</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:52px;">Top (in)</th>' +
+          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Tons</th>' +
           '<th style="padding:5px 4px;width:24px;"></th>' +
         '</tr></thead>' +
         '<tbody id="toQtyTbody"></tbody>' +
@@ -5620,8 +5633,9 @@ function _toQtyRender() {
   var tfoot = document.getElementById('toQtyFoot');
   var totBar = document.getElementById('toQtyTotalsBar');
   if (!tbody) return;
+  var _depInpStyle = 'background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:48px;text-align:right;display:block;margin-left:auto;';
   if (!_toQtyRows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;text-align:center;color:#555;font-size:10px;">No areas yet — measurements auto-add here, or tap + Add Row</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:12px 8px;text-align:center;color:#555;font-size:10px;">No areas yet — measurements auto-add here, or tap + Add Row</td></tr>';
   } else {
     tbody.innerHTML = _toQtyRows.map(function(row, i) {
       var dotColor = row.color || '#a78bfa';
@@ -5633,9 +5647,11 @@ function _toQtyRender() {
             '<input value="' + escHtml(row.area||'') + '" oninput="_toQtyUpdate(' + i + ',\'area\',this.value)" placeholder="Area name" style="background:transparent;border:none;outline:none;color:' + dotColor + ';font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:80px;">' +
           '</div>' +
         '</td>' +
-        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:65px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
         '<td id="toQtySY_' + i + '" style="padding:3px 8px;text-align:right;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;">' + sqYdDisp + '</td>' +
-        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" step="0.5" value="' + (row.depth||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'depth\',this.value)" placeholder="—" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:55px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" step="0.25" value="' + (row.base||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'base\',this.value)" placeholder="—" style="' + _depInpStyle + '"></td>' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" step="0.25" value="' + (row.binder||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'binder\',this.value)" placeholder="—" style="' + _depInpStyle + '"></td>' +
+        '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" step="0.25" value="' + (row.top||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'top\',this.value)" placeholder="—" style="' + _depInpStyle + '"></td>' +
         '<td onclick="event.stopPropagation()" style="padding:3px 4px;"><input type="number" value="' + (row.tons||'') + '" oninput="_toQtyUpdate(' + i + ',\'tons\',this.value)" placeholder="0.0" style="background:transparent;border:none;outline:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;width:55px;text-align:right;display:block;margin-left:auto;"></td>' +
         '<td style="padding:3px 4px;text-align:center;"><button onclick="event.stopPropagation();_toQtyDeleteRow(' + i + ')" style="background:none;border:none;color:#d94f3d;cursor:pointer;font-size:13px;padding:2px 4px;">✕</button></td>' +
       '</tr>';
@@ -5649,7 +5665,7 @@ function _toQtyRender() {
       '<td style="padding:5px 8px;font-weight:700;color:#a78bfa;font-size:11px;">TOTAL</td>' +
       '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totSqFt ? totSqFt.toLocaleString() : '—') + '</td>' +
       '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totSqYd ? totSqYd.toFixed(1) : '—') + '</td>' +
-      '<td></td>' +
+      '<td></td><td></td><td></td>' +
       '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totTons ? totTons.toFixed(1) : '—') + '</td>' +
       '<td></td>' +
     '</tr>';
@@ -5666,7 +5682,7 @@ function _toQtyToggle() {
 }
 
 function _toQtyAddRow() {
-  _toQtyRows.push({ area:'', sqFt:'', sqYd:'', depth:'', tons:'', color:'' });
+  _toQtyRows.push({ area:'', sqFt:'', sqYd:'', base:'', binder:'', top:'', tons:'', color:'' });
   _toQtyRender();
   _toQtySaveForPage();
   setTimeout(function() {
@@ -5693,17 +5709,17 @@ function _toQtyUpdate(idx, field, val) {
   if (!_toQtyRows[idx]) return;
   _toQtyRows[idx][field] = val;
   if (field === 'sqFt') {
-    var sqFt  = parseFloat(val) || 0;
-    var sqYd  = sqFt ? sqFt / 9 : 0;
+    var sqFt = parseFloat(val) || 0;
+    var sqYd = sqFt ? sqFt / 9 : 0;
     _toQtyRows[idx].sqYd = sqYd || '';
     var syEl = document.getElementById('toQtySY_' + idx);
     if (syEl) syEl.textContent = sqYd ? sqYd.toFixed(1) : '';
-    var depth = parseFloat(_toQtyRows[idx].depth) || 0;
-    if (sqFt && depth) {
-      var calc = parseFloat(((sqFt * depth * 110) / 2000).toFixed(2));
+    var totalDepth = (parseFloat(_toQtyRows[idx].base) || 0) + (parseFloat(_toQtyRows[idx].binder) || 0) + (parseFloat(_toQtyRows[idx].top) || 0);
+    if (sqFt && totalDepth) {
+      var calc = parseFloat(((sqFt * totalDepth * 110) / 2000).toFixed(2));
       _toQtyRows[idx].tons = calc;
       var tRows = document.querySelectorAll('#toQtyTbody tr');
-      if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[3]) tInps[3].value = calc; }
+      if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[5]) tInps[5].value = calc; }
     }
     var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
     var totSqYd = totSqFt / 9;
@@ -5711,25 +5727,28 @@ function _toQtyUpdate(idx, field, val) {
     var fCells = document.querySelectorAll('#toQtyFoot td');
     if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
     if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
-    if (fCells[4]) fCells[4].textContent = totTons ? totTons.toFixed(1) : '—';
+    if (fCells[6]) fCells[6].textContent = totTons ? totTons.toFixed(1) : '—';
     var totBar = document.getElementById('toQtyTotalsBar');
     if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
-  } else if (field === 'depth') {
-    var sqFt  = parseFloat(_toQtyRows[idx].sqFt)  || 0;
-    var depth = parseFloat(val) || 0;
-    if (sqFt && depth) {
-      var calc = parseFloat(((sqFt * depth * 110) / 2000).toFixed(2));
+  } else if (field === 'base' || field === 'binder' || field === 'top') {
+    var sqFt = parseFloat(_toQtyRows[idx].sqFt) || 0;
+    var totalDepth = (parseFloat(_toQtyRows[idx].base) || 0) + (parseFloat(_toQtyRows[idx].binder) || 0) + (parseFloat(_toQtyRows[idx].top) || 0);
+    if (sqFt && totalDepth) {
+      var calc = parseFloat(((sqFt * totalDepth * 110) / 2000).toFixed(2));
       _toQtyRows[idx].tons = calc;
-      var tRows = document.querySelectorAll('#toQtyTbody tr');
-      if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[3]) tInps[3].value = calc; }
+    } else {
+      _toQtyRows[idx].tons = '';
+      calc = '';
     }
+    var tRows = document.querySelectorAll('#toQtyTbody tr');
+    if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[5]) tInps[5].value = calc; }
     var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
     var totSqYd = totSqFt / 9;
     var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
     var fCells = document.querySelectorAll('#toQtyFoot td');
     if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
     if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
-    if (fCells[4]) fCells[4].textContent = totTons ? totTons.toFixed(1) : '—';
+    if (fCells[6]) fCells[6].textContent = totTons ? totTons.toFixed(1) : '—';
     var totBar = document.getElementById('toQtyTotalsBar');
     if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
   } else if (field === 'tons') {
@@ -5739,7 +5758,7 @@ function _toQtyUpdate(idx, field, val) {
     var fCells = document.querySelectorAll('#toQtyFoot td');
     if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
     if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
-    if (fCells[4]) fCells[4].textContent = totTons ? totTons.toFixed(1) : '—';
+    if (fCells[6]) fCells[6].textContent = totTons ? totTons.toFixed(1) : '—';
     var totBar = document.getElementById('toQtyTotalsBar');
     if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
   }
