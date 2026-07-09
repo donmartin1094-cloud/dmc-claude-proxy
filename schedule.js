@@ -5478,13 +5478,15 @@ function lookupBacklogByJobNum(el) {
   const { key, slot } = el.dataset;
   const num = el.value.trim();
   if (!num) return;
+  var _numNorm = num.toLowerCase().replace(/^0+/, '');
   const match = (typeof backlogJobs !== 'undefined' ? backlogJobs : [])
     .find(j => {
-      const jn = (j.num || j.jobNum || j.number || '').trim().toLowerCase();
-      return jn && jn === num.toLowerCase();
+      const jn = (j.num || j.jobNum || j.number || '').toString().trim().toLowerCase();
+      return jn && (jn === num.toLowerCase() || jn.replace(/^0+/, '') === _numNorm);
     });
   if (!match) return;
-  const parts = [match.gc, match.name].filter(Boolean);
+  const jobName = match.name || match.jobName || '';
+  const parts = [match.gc, jobName].filter(Boolean);
   const autoName = parts.join(' — ');
   if (!schedData[key]) schedData[key] = {};
   if (!schedData[key][slot]) schedData[key][slot] = { type:'blank', fields:{} };
@@ -5496,6 +5498,7 @@ function lookupBacklogByJobNum(el) {
     const jobNameEl = block.querySelector('[data-field="jobName"]');
     if (jobNameEl) { jobNameEl.value = autoName; autoResize(jobNameEl); }
   }
+  _schedChipUpdate(key, slot);
 }
 
 function lookupBacklogByJobName(el) {
@@ -5733,10 +5736,15 @@ function lookupBacklogByJobNumExtra(el, key, idx) {
   const slot = `extra_${idx}`;
   const num = el.value.trim();
   if (!num) return;
+  var _numNorm = num.toLowerCase().replace(/^0+/, '');
   const match = (typeof backlogJobs !== 'undefined' ? backlogJobs : [])
-    .find(j => j.num && j.num.trim().toLowerCase() === num.toLowerCase());
+    .find(j => {
+      const jn = (j.num || j.jobNum || j.number || '').toString().trim().toLowerCase();
+      return jn && (jn === num.toLowerCase() || jn.replace(/^0+/, '') === _numNorm);
+    });
   if (!match) return;
-  const autoName = [match.gc, match.name].filter(Boolean).join(' — ');
+  const jobName = match.name || match.jobName || '';
+  const autoName = [match.gc, jobName].filter(Boolean).join(' — ');
   if (schedData[key]?.extras?.[idx]?.data?.fields) {
     schedData[key].extras[idx].data.fields.jobName = autoName;
     saveSchedData();
@@ -5745,6 +5753,7 @@ function lookupBacklogByJobNumExtra(el, key, idx) {
       const jobNameEl = block.querySelector('[data-field="jobName"]');
       if (jobNameEl) { jobNameEl.value = autoName; autoResize(jobNameEl); }
     }
+    _schedChipUpdate(key, slot);
   }
 }
 
