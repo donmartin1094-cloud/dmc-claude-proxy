@@ -6633,7 +6633,10 @@ function renderSidebar() {
 // HOME DASHBOARD
 // ══════════════════════════════════════════════════════════════════════════
 
-const HOME_PREFS_KEY = 'dmc_home_prefs';
+function _homePrefsKey() {
+  var _u = (localStorage.getItem('dmc_u') || 'default').toLowerCase().trim();
+  return 'dmc_home_prefs_' + _u;
+}
 const HOME_WIDGETS_DEF = [
   { id:'today',       label:"Today's Schedule",    icon:'📅', desc:'Jobs and crews scheduled for today',          defaultOn:true  },
   { id:'notifications', label:'Notifications',     icon:'🔔', desc:'Recent alerts and system notifications',      defaultOn:true  },
@@ -6661,19 +6664,21 @@ const HOME_WIDGETS_DEF = [
 ];
 
 function getHomePrefs() {
-  try { return JSON.parse(localStorage.getItem(HOME_PREFS_KEY) || 'null') || {}; } catch(e) { return {}; }
+  try { return JSON.parse(localStorage.getItem(_homePrefsKey()) || 'null') || {}; } catch(e) { return {}; }
 }
 function saveHomePrefs(prefs) {
   // Stamp a timestamp so cross-device sync knows which layout is newest
   if (prefs.positions) prefs.positionsUpdatedAt = Date.now();
-  localStorage.setItem(HOME_PREFS_KEY, JSON.stringify(prefs));
+  localStorage.setItem(_homePrefsKey(), JSON.stringify(prefs));
   _checkLocalStorageSize();
-  try { fbSet('home_prefs', prefs); } catch(e) {}
+  var _hpFbKey = 'home_prefs_' + (localStorage.getItem('dmc_u') || 'default').toLowerCase().trim();
+  try { fbSet(_hpFbKey, prefs); } catch(e) {}
 }
 
 async function _loadHomePrefsFromCloud() {
   try {
-    const remote = await fbGet('home_prefs', null);
+    var _hpFbKey = 'home_prefs_' + (localStorage.getItem('dmc_u') || 'default').toLowerCase().trim();
+    const remote = await fbGet(_hpFbKey, null);
     if (!remote || typeof remote !== 'object') return;
     const local = getHomePrefs();
     // Non-layout prefs: remote wins (widget enabled/disabled toggles sync normally)
@@ -6696,7 +6701,7 @@ async function _loadHomePrefsFromCloud() {
       merged.order     = remote.order     || local.order;
       merged.positionsUpdatedAt = remoteTs;
     }
-    localStorage.setItem(HOME_PREFS_KEY, JSON.stringify(merged));
+    localStorage.setItem(_homePrefsKey(), JSON.stringify(merged));
     _checkLocalStorageSize();
     const hv = document.getElementById('homeView');
     if (hv && hv.style.display !== 'none') renderHomeView(hv);
