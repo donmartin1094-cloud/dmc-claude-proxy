@@ -6212,7 +6212,24 @@ function _injectARKPIMobileStyles() {
   if (document.getElementById('_arKpiMobileStyle')) return;
   var s = document.createElement('style');
   s.id = '_arKpiMobileStyle';
-  s.textContent = '@media (max-width:600px){ .arkpi-back-btn{ width:100%; } }';
+  s.textContent = [
+    '@media (max-width:600px){ .arkpi-back-btn{ width:100%; } }',
+    '.arkpi-inv-header,.arkpi-inv-row{ display:grid; grid-template-columns:70px 80px 1fr 140px 120px 90px; align-items:center; gap:8px; padding:8px 12px; }',
+    '.arkpi-inv-header{ padding:4px 12px 6px; border-bottom:1px solid var(--asphalt-light); font-family:\'DM Mono\',monospace; font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--concrete-dim); }',
+    '.arkpi-inv-row{ border-bottom:1px solid rgba(255,255,255,0.06); min-height:44px; cursor:pointer; }',
+    '.arkpi-c-date,.arkpi-c-inv,.arkpi-c-fore,.arkpi-c-plant,.arkpi-c-job{ font-family:\'DM Mono\',monospace; font-size:11px; color:var(--concrete-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }',
+    '.arkpi-c-billed{ text-align:right; font-family:\'DM Mono\',monospace; font-size:11px; }',
+    '@media (max-width:600px){',
+    '  .arkpi-inv-header{ display:none; }',
+    '  .arkpi-inv-row{ grid-template-columns:auto auto 1fr; grid-template-areas:"date inv job" "fore plant billed"; row-gap:2px; }',
+    '  .arkpi-c-date{ grid-area:date; }',
+    '  .arkpi-c-inv{ grid-area:inv; }',
+    '  .arkpi-c-job{ grid-area:job; }',
+    '  .arkpi-c-fore{ grid-area:fore; }',
+    '  .arkpi-c-plant{ grid-area:plant; }',
+    '  .arkpi-c-billed{ grid-area:billed; text-align:right; }',
+    '}'
+  ].join('');
   document.head.appendChild(s);
 }
 
@@ -6439,6 +6456,11 @@ function _buildARKPIDashboardHtml() {
   if (gcSelected) {
     var gcInvs = invs.slice().sort(function(a,b){ return (b.dateOfWork||'').localeCompare(a.dateOfWork||''); });
     var invTotBilled = 0, invTotApproved = 0;
+    var invHeaderHtml = gcInvs.length
+      ? '<div class="arkpi-inv-header">'
+        +'<div>Date</div><div>Invoice #</div><div>Job</div><div>Foreman</div><div>Plant</div><div style="text-align:right;">Billed</div>'
+        +'</div>'
+      : '';
     var invRowsHtml = gcInvs.map(function(inv) {
       var billed = (inv.mixItems||[]).reduce(function(s,m){ return s+(parseFloat(m.itemTotal)||0); },0);
       var appAmt = parseFloat(((inv.approvedAmount||'')+'').replace(/[^0-9.\-]/g,''))||0;
@@ -6446,25 +6468,21 @@ function _buildARKPIDashboardHtml() {
       invTotApproved += appAmt;
       var billedColor = inv.approved ? '#7ecb8f' : '#f59e0b';
       var plant = inv.supplier || inv.plant || '';
-      var invNoHtml = inv.invoiceNo ? '<span style="font-family:\'DM Mono\',monospace;white-space:nowrap;">#'+esc(inv.invoiceNo)+'</span>' : '';
       var appLineHtml = (appAmt > 0 && appAmt !== billed)
-        ? '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#7ecb8f;">Appr: '+fmtD(appAmt)+'</div>'
+        ? '<span style="display:block;font-size:9px;color:#7ecb8f;">Appr '+fmtD(appAmt)+'</span>'
         : '';
-      return '<div style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06);min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:pointer;" onclick="openInvoiceModal(\''+inv.id+'\')">'
-        +'<div style="display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--concrete-dim);overflow:hidden;">'
-        +  '<span style="white-space:nowrap;">'+esc(_trFmtDate(inv.dateOfWork))+'</span>'
-        +  invNoHtml
-        +  '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-        +    '<span style="color:var(--stripe);font-weight:600;">'+esc(inv.jobNo||'—')+'</span>'
-        +    (inv.jobName ? ' — <span style="color:var(--white);font-weight:600;">'+esc(inv.jobName)+'</span>' : '')
-        +  '</span>'
+      return '<div class="arkpi-inv-row" onclick="openInvoiceModal(\''+inv.id+'\')">'
+        +'<div class="arkpi-c-date">'+esc(_trFmtDate(inv.dateOfWork))+'</div>'
+        +'<div class="arkpi-c-inv">'+(inv.invoiceNo ? esc(inv.invoiceNo) : '')+'</div>'
+        +'<div class="arkpi-c-job">'
+        +  '<span style="color:var(--stripe);font-weight:600;">'+esc(inv.jobNo||'—')+'</span>'
+        +  (inv.jobName ? ' — <span style="color:var(--white);">'+esc(inv.jobName)+'</span>' : '')
         +'</div>'
-        +'<div style="display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--concrete-dim);">'
-        +  '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(inv.foreman||'—')+(plant?' · '+esc(plant):'')+'</span>'
-        +  '<div style="text-align:right;flex-shrink:0;">'
-        +    '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:'+billedColor+';">'+fmtD(billed)+'</div>'
-        +    appLineHtml
-        +  '</div>'
+        +'<div class="arkpi-c-fore">'+esc(inv.foreman||'—')+'</div>'
+        +'<div class="arkpi-c-plant">'+esc(plant||'—')+'</div>'
+        +'<div class="arkpi-c-billed">'
+        +  '<span style="font-weight:700;color:'+billedColor+';">'+fmtD(billed)+'</span>'
+        +  appLineHtml
         +'</div>'
         +'</div>';
     }).join('');
@@ -6476,6 +6494,7 @@ function _buildARKPIDashboardHtml() {
       +'</div>';
     leftCol = '<div style="flex:1;min-width:0;min-height:0;">'
       +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">💰 INVOICES</div>'
+      +invHeaderHtml
       +'<div style="max-height:420px;overflow-y:auto;">'+(invRowsHtml || '<div style="padding:16px 4px;text-align:center;color:var(--concrete-dim);font-size:12px;">No invoices.</div>')+'</div>'
       +invTotalsHtml
       +'</div>';
