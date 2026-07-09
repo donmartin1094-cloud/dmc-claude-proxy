@@ -6205,8 +6205,15 @@ function arKpiClearFilter() {
 
 function _arKpiGoToGC(gcName) {
   _arKpiFilter = { gcName: gcName };
-  if (typeof setBacklogView === 'function') setBacklogView('gc');
-  if (typeof switchTab === 'function') switchTab('backlog');
+  if (typeof renderArOverview === 'function') renderArOverview();
+}
+
+function _injectARKPIMobileStyles() {
+  if (document.getElementById('_arKpiMobileStyle')) return;
+  var s = document.createElement('style');
+  s.id = '_arKpiMobileStyle';
+  s.textContent = '@media (max-width:600px){ .arkpi-back-btn{ width:100%; } }';
+  document.head.appendChild(s);
 }
 
 function _arKpiMtLabel(raw) {
@@ -6264,16 +6271,24 @@ function _buildARKPIDashboardHtml() {
     return '<option value="'+mk+'"'+((_arKpiMonth===mk)?' selected':'')+'>'+MN[parseInt(p[1])-1]+' '+p[0]+'</option>';
   }).join('');
 
-  // ── Filter chip ──────────────────────────────────────────────────────────
+  // ── Filter chip / GC selection header ──────────────────────────────────────
+  var gcSelected = _arKpiFilter.gcName || '';
   var filterLabel = '';
-  if (_arKpiFilter.gcName) filterLabel = '🏢 '+esc(_arKpiFilter.gcName);
-  else if (_arKpiFilter.jobNum) filterLabel = 'Job #'+esc(_arKpiFilter.jobNum);
+  if (!gcSelected && _arKpiFilter.jobNum) filterLabel = 'Job #'+esc(_arKpiFilter.jobNum);
   var filterChipHtml = filterLabel
     ? '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:20px;padding:3px 12px;">'
     +   '<span style="font-size:11px;color:#a78bfa;font-family:\'DM Sans\',sans-serif;">'+filterLabel+'</span>'
     +   '<button onclick="arKpiClearFilter()" style="background:none;border:none;cursor:pointer;color:#a78bfa;font-size:12px;padding:0 0 0 4px;line-height:1;">✕ Clear</button>'
     + '</div>'
     : '';
+
+  var gcHeaderHtml = gcSelected
+    ? '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">'
+    +   '<button onclick="arKpiClearFilter()" class="arkpi-back-btn" style="font-family:\'DM Mono\',monospace;font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.35);border-radius:6px;color:#a78bfa;padding:0 14px;min-height:44px;cursor:pointer;">← All GCs</button>'
+    +   '<div style="font-family:\'DM Sans\',sans-serif;font-size:14px;color:#a78bfa;">Showing: '+esc(gcSelected)+'</div>'
+    + '</div>'
+    : '';
+  if (typeof _injectARKPIMobileStyles === 'function') _injectARKPIMobileStyles();
 
   var filterBarHtml = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
     + '<select onchange="arKpiSetMonth(this.value)" style="font-family:\'DM Mono\',monospace;font-size:10px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:4px;color:var(--white);padding:5px 10px;cursor:pointer;">'
@@ -6287,6 +6302,7 @@ function _buildARKPIDashboardHtml() {
   if (!invs.length) {
     return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:12px;padding:16px 18px;">'
       + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--white);margin-bottom:12px;">📊 AR / SALES KPI DASHBOARD</div>'
+      + gcHeaderHtml
       + filterBarHtml
       + '<div style="text-align:center;padding:24px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;">No invoice data for this period.</div>'
       + '</div>';
@@ -6419,12 +6435,49 @@ function _buildARKPIDashboardHtml() {
   var secHdr = '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--white);margin-bottom:12px;">📊 AR / SALES KPI DASHBOARD</div>';
 
   // ── Left column ───────────────────────────────────────────────────────────
-  var leftCol = '<div style="flex:1;min-width:0;min-height:0;">'
-    +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">💰 REVENUE BY GC</div>'
-    +'<div style="display:flex;justify-content:center;max-height:220px;"><canvas id="arKpiGCPie" style="max-height:220px;max-width:220px;"></canvas></div>'
-    +'<div style="margin-top:8px;">'+gcLegendHtml+'</div>'
-    +gcTableHtml
-    +'</div>';
+  var leftCol;
+  if (gcSelected) {
+    var gcInvs = invs.slice().sort(function(a,b){ return (b.dateOfWork||'').localeCompare(a.dateOfWork||''); });
+    var invTotBilled = 0, invTotApproved = 0;
+    var invRowsHtml = gcInvs.map(function(inv) {
+      var billed = (inv.mixItems||[]).reduce(function(s,m){ return s+(parseFloat(m.itemTotal)||0); },0);
+      var appAmt = parseFloat(((inv.approvedAmount||'')+'').replace(/[^0-9.\-]/g,''))||0;
+      invTotBilled += billed;
+      invTotApproved += appAmt;
+      var billedColor = inv.approved ? '#7ecb8f' : '#f59e0b';
+      var initials = typeof _inv3Initials === 'function' ? _inv3Initials(inv.foreman) : esc(inv.foreman||'—');
+      var appLineHtml = (appAmt > 0 && appAmt !== billed)
+        ? '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#7ecb8f;">Appr: '+fmtD(appAmt)+'</div>'
+        : '';
+      return '<div style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;min-height:44px;display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openInvoiceModal(\''+inv.id+'\')">'
+        +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);white-space:nowrap;">'+esc(_trFmtDate(inv.dateOfWork))+'</div>'
+        +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;letter-spacing:1px;color:var(--stripe);white-space:nowrap;">'+esc(inv.jobNo||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--white);white-space:nowrap;">'+esc(initials)+'</div>'
+        +'<div style="flex:1;text-align:right;">'
+        +  '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:'+billedColor+';">'+fmtD(billed)+'</div>'
+        +  appLineHtml
+        +'</div>'
+        +'</div>';
+    }).join('');
+    var invOutstanding = invTotBilled - invTotApproved;
+    var invTotalsHtml = '<div style="padding:10px 12px;border-top:2px solid var(--asphalt-light);margin-top:2px;">'
+      +'<div style="display:flex;justify-content:space-between;font-family:\'DM Mono\',monospace;font-size:11px;color:#f59e0b;margin-bottom:4px;"><span>Total Billed</span><span>'+fmtD(invTotBilled)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;font-family:\'DM Mono\',monospace;font-size:11px;color:#7ecb8f;margin-bottom:4px;"><span>Total Approved</span><span>'+fmtD(invTotApproved)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;font-family:\'DM Mono\',monospace;font-size:11px;color:#e8a33d;"><span>Outstanding</span><span>'+fmtD(invOutstanding)+'</span></div>'
+      +'</div>';
+    leftCol = '<div style="flex:1;min-width:0;min-height:0;">'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">💰 INVOICES</div>'
+      +'<div style="max-height:420px;overflow-y:auto;">'+(invRowsHtml || '<div style="padding:16px 4px;text-align:center;color:var(--concrete-dim);font-size:12px;">No invoices.</div>')+'</div>'
+      +invTotalsHtml
+      +'</div>';
+  } else {
+    leftCol = '<div style="flex:1;min-width:0;min-height:0;">'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--asphalt-light);">💰 REVENUE BY GC</div>'
+      +'<div style="display:flex;justify-content:center;max-height:220px;"><canvas id="arKpiGCPie" style="max-height:220px;max-width:220px;"></canvas></div>'
+      +'<div style="margin-top:8px;">'+gcLegendHtml+'</div>'
+      +gcTableHtml
+      +'</div>';
+  }
 
   // ── Divider ───────────────────────────────────────────────────────────────
   var divider = '<div style="width:1px;background:var(--asphalt-light);flex-shrink:0;margin:0 18px;"></div>';
@@ -6445,7 +6498,7 @@ function _buildARKPIDashboardHtml() {
     +'</div>';
 
   return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:12px;padding:16px 18px;">'
-    +secHdr+filterBarHtml+colsHtml
+    +secHdr+gcHeaderHtml+filterBarHtml+colsHtml
     +'</div>';
 }
 
