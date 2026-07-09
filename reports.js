@@ -4265,6 +4265,15 @@ function deleteInvoice(id) {
   renderInvoiceTracker();
 }
 
+// Called from the invoice entry modal — owns confirm + modal close to avoid double-confirm
+function _invModalDelete(invId) {
+  if (!confirm('Delete this invoice? This cannot be undone.')) return;
+  document.getElementById('invModal')?.remove();
+  invoiceList = invoiceList.filter(function(i) { return i.id !== invId; });
+  saveInvoiceList();
+  renderInvoiceTracker();
+}
+
 // ── Single card renderer ───────────────────────────────────────────────────────
 function _invRenderCard(inv) {
   var at       = inv.actualTrucking || {};
@@ -5886,7 +5895,8 @@ function openInvoiceModal(id, prefill) {
     +   '</div>'
     +   '<div id="invAttList"></div>'
     + '</div>'
-    + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">'
+    + '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px;">'
+    +   (isEdit ? '<button onclick="_invModalDelete(\'' + escHtml(id) + '\')" style="background:rgba(232,89,89,0.15);border:1px solid #e85555;color:#e85555;font-family:\'DM Mono\',monospace;font-size:11px;padding:8px 16px;border-radius:6px;cursor:pointer;margin-right:auto;min-height:44px;">🗑️ Delete Invoice</button>' : '')
     +   '<button onclick="document.getElementById(\'invModal\').remove()" class="inv-btn-ghost">Cancel</button>'
     +   '<button onclick="saveInvoiceEntry(' + (isEdit ? '\'' + escHtml(id) + '\'' : 'null') + ')" class="inv-btn">Save Invoice</button>'
     + '</div>'
