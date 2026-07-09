@@ -6445,17 +6445,26 @@ function _buildARKPIDashboardHtml() {
       invTotBilled += billed;
       invTotApproved += appAmt;
       var billedColor = inv.approved ? '#7ecb8f' : '#f59e0b';
-      var initials = typeof _inv3Initials === 'function' ? _inv3Initials(inv.foreman) : esc(inv.foreman||'—');
+      var plant = inv.supplier || inv.plant || '';
+      var invNoHtml = inv.invoiceNo ? '<span style="font-family:\'DM Mono\',monospace;white-space:nowrap;">#'+esc(inv.invoiceNo)+'</span>' : '';
       var appLineHtml = (appAmt > 0 && appAmt !== billed)
         ? '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#7ecb8f;">Appr: '+fmtD(appAmt)+'</div>'
         : '';
-      return '<div style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;min-height:44px;display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openInvoiceModal(\''+inv.id+'\')">'
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);white-space:nowrap;">'+esc(_trFmtDate(inv.dateOfWork))+'</div>'
-        +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;letter-spacing:1px;color:var(--stripe);white-space:nowrap;">'+esc(inv.jobNo||'—')+'</div>'
-        +'<div style="font-size:11px;color:var(--white);white-space:nowrap;">'+esc(initials)+'</div>'
-        +'<div style="flex:1;text-align:right;">'
-        +  '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:'+billedColor+';">'+fmtD(billed)+'</div>'
-        +  appLineHtml
+      return '<div style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06);min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:pointer;" onclick="openInvoiceModal(\''+inv.id+'\')">'
+        +'<div style="display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--concrete-dim);overflow:hidden;">'
+        +  '<span style="white-space:nowrap;">'+esc(_trFmtDate(inv.dateOfWork))+'</span>'
+        +  invNoHtml
+        +  '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+        +    '<span style="color:var(--stripe);font-weight:600;">'+esc(inv.jobNo||'—')+'</span>'
+        +    (inv.jobName ? ' — <span style="color:var(--white);font-weight:600;">'+esc(inv.jobName)+'</span>' : '')
+        +  '</span>'
+        +'</div>'
+        +'<div style="display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--concrete-dim);">'
+        +  '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(inv.foreman||'—')+(plant?' · '+esc(plant):'')+'</span>'
+        +  '<div style="text-align:right;flex-shrink:0;">'
+        +    '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:'+billedColor+';">'+fmtD(billed)+'</div>'
+        +    appLineHtml
+        +  '</div>'
         +'</div>'
         +'</div>';
     }).join('');
