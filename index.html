@@ -4902,18 +4902,9 @@ function _renderTakeoffDirectory(container) {
         var _jobNum  = _bj ? (_bj.num  || _grpFolders[0].linkedJobNum  || '') : (_grpFolders[0].linkedJobNum  || '');
         var _jobName = _bj ? (_bj.name || _grpFolders[0].linkedJobName || '') : (_grpFolders[0].linkedJobName || '');
         var _jobGC   = _bj ? (_bj.gc   || _grpFolders[0].linkedJobGC   || '') : (_grpFolders[0].linkedJobGC   || '');
-        var _entries = _grpFolders.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);})
-          .map(function(f) { return _toDirJobEntry(f); }).join('');
-        return '<div style="margin-bottom:16px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:8px;overflow:hidden;">' +
-          '<div style="background:rgba(167,139,250,0.08);border-bottom:1px solid rgba(167,139,250,0.25);padding:10px 14px;display:flex;align-items:center;gap:8px;">' +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">' + (_jobNum ? '#' + escHtml(_jobNum) + ' — ' : '') + escHtml(_jobName) + '</span>' +
-            (_jobGC ? '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">· ' + escHtml(_jobGC) + '</span>' : '') +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-left:auto;">' + _grpFolders.length + ' takeoff' + (_grpFolders.length !== 1 ? 's' : '') + '</span>' +
-          '</div>' +
-          '<div style="padding:6px 12px;">' + _entries + '</div>' +
-        '</div>';
+        return _toDirJobFolderCard(key, _jobNum, _jobName, _jobGC, _grpFolders.length);
       }).join('')
-    : '<div style="color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:12px 0;font-style:italic;">No awarded job takeoffs yet.</div>';
+    : '<div style="grid-column:1/-1;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:12px 0;font-style:italic;">No awarded job takeoffs yet.</div>';
 
   container.style.cssText = 'padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--asphalt-mid);';
   container.innerHTML =
@@ -4927,7 +4918,7 @@ function _renderTakeoffDirectory(container) {
         _bidHTML +
       '</div>' +
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#a78bfa;margin-bottom:12px;border-bottom:1px solid rgba(167,139,250,0.2);padding-bottom:6px;">📁 Job Directory</div>' +
-      '<div>' + _dirHTML + '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:16px;">' + _dirHTML + '</div>' +
     '</div>';
 }
 
@@ -4978,6 +4969,93 @@ function _toDirJobEntry(folder) {
     '</div>' +
     '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:#a78bfa;flex-shrink:0;">Open →</span>' +
   '</div>';
+}
+
+// ── Job Directory — folder card (one per job) ─────────────────────────────────
+function _toDirJobFolderCard(jobId, jobNum, jobName, jobGC, count) {
+  return '<div class="qc-folder-card" onclick="_toDirJobFolderOpen(\'' + jobId + '\')">' +
+    '<div style="font-size:40px;margin-bottom:6px;">📁</div>' +
+    (jobNum ? '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">#' + escHtml(jobNum) + '</div>' : '') +
+    '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:#f9f7f3;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escHtml(jobName) + '">' + escHtml(jobName) + '</div>' +
+    (jobGC ? '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(jobGC) + '</div>' : '') +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:6px;">' + count + ' takeoff' + (count !== 1 ? 's' : '') + '</div>' +
+  '</div>';
+}
+
+// ── Job Directory — folder detail view (all takeoffs for one job) ─────────────
+function _toDirJobFolderOpen(jobId) {
+  _toFoldersLoad();
+  var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
+  var _bj = _bl.find(function(j) { return j.id === jobId; });
+  var _grpFolders = takeoffFolders.filter(function(f) { return f.linkedJobId === jobId; })
+    .sort(function(a,b) { return (b.createdAt||0)-(a.createdAt||0); });
+  var _jobNum  = _bj ? (_bj.num  || (_grpFolders[0]||{}).linkedJobNum  || '') : ((_grpFolders[0]||{}).linkedJobNum  || '');
+  var _jobName = _bj ? (_bj.name || (_grpFolders[0]||{}).linkedJobName || '') : ((_grpFolders[0]||{}).linkedJobName || '');
+  var _jobGC   = _bj ? (_bj.gc   || (_grpFolders[0]||{}).linkedJobGC   || '') : ((_grpFolders[0]||{}).linkedJobGC   || '');
+  var container = document.getElementById('secPopupBody');
+  if (!container) return;
+  var _rows = _grpFolders.length
+    ? _grpFolders.map(function(f) { return _toDirJobFolderRow(f, jobId); }).join('')
+    : '<div style="color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:24px 0;text-align:center;">No takeoffs saved yet.</div>';
+  container.style.cssText = 'padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--asphalt-mid);';
+  container.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;background:#1a1a1a;border-bottom:2px solid #a78bfa;flex-shrink:0;flex-wrap:wrap;">' +
+      '<button onclick="_renderTakeoffDirectory(document.getElementById(\'secPopupBody\'))" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;flex-shrink:0;">← Back</button>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:#a78bfa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📁 ' + escHtml((_jobNum ? '#' + _jobNum + ' — ' : '') + _jobName) + '</div>' +
+        (_jobGC ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + escHtml(_jobGC) + '</div>' : '') +
+      '</div>' +
+      '<button onclick="_toDirNewTakeoffForJob(\'' + jobId + '\')" style="background:#a78bfa;border:none;border-radius:6px;color:#fff;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:8px 18px;cursor:pointer;min-height:36px;flex-shrink:0;">+ Add Takeoff</button>' +
+    '</div>' +
+    '<div style="flex:1;overflow-y:auto;padding:16px 20px;">' +
+      '<div id="toDirJobFolderRows">' + _rows + '</div>' +
+    '</div>';
+}
+
+function _toDirJobFolderRow(folder, jobId) {
+  var _totSqFt = 0, _totTons = 0;
+  (folder.pages||[]).forEach(function(p) {
+    (p.quantities||[]).forEach(function(r) { _totSqFt += parseFloat(r.sqFt)||0; _totTons += parseFloat(r.tons)||0; });
+  });
+  var _pgCount  = (folder.pages||[]).length;
+  var _dateStr  = folder.createdAt ? new Date(folder.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+  var _dispName = folder.takeoffName || folder.name || '(Untitled)';
+  var _isAdm    = typeof isAdmin === 'function' && isAdmin();
+  return '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:6px;margin-bottom:8px;min-height:44px;">' +
+    '<div style="flex:1;min-width:0;">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#f9f7f3;">' + escHtml(_dispName) + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:3px;">' +
+        (_dateStr ? _dateStr + ' · ' : '') + _pgCount + ' page' + (_pgCount !== 1 ? 's' : '') +
+        (_totSqFt ? ' · <span style="color:#a78bfa;">' + Math.round(_totSqFt).toLocaleString() + ' sq ft · ' + _totTons.toFixed(1) + ' T</span>' : '') +
+      '</div>' +
+    '</div>' +
+    '<button onclick="_toDirFolderOpen(\'' + folder.id + '\')" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.4);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:6px 12px;cursor:pointer;flex-shrink:0;min-height:36px;">📂 Open</button>' +
+    (_isAdm ? '<button onclick="_toDirDeleteTakeoff(\'' + folder.id + '\',\'' + jobId + '\')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:4px;color:#ef4444;font-family:\'DM Mono\',monospace;font-size:10px;padding:6px 10px;cursor:pointer;flex-shrink:0;min-height:36px;">🗑️</button>' : '') +
+  '</div>';
+}
+
+function _toDirDeleteTakeoff(folderId, jobId) {
+  _toFoldersLoad();
+  var _df = takeoffFolders.find(function(x) { return x.id === folderId; });
+  if (!_df) return;
+  var _dname = _df.takeoffName || _df.name || 'this takeoff';
+  if (!confirm('Delete "' + _dname + '"? This cannot be undone.')) return;
+  takeoffFolders = takeoffFolders.filter(function(x) { return x.id !== folderId; });
+  _toFoldersSave();
+  var _remaining = takeoffFolders.filter(function(f) { return f.linkedJobId === jobId; });
+  if (_remaining.length) {
+    _toDirJobFolderOpen(jobId);
+  } else {
+    _renderTakeoffDirectory(document.getElementById('secPopupBody'));
+  }
+}
+
+function _toDirNewTakeoffForJob(jobId) {
+  _toNewTakeoffModal();
+  setTimeout(function() {
+    _toNtSelectMode('awarded');
+    setTimeout(function() { _toNtJobSelect(jobId); }, 40);
+  }, 60);
 }
 
 // ── New Takeoff Modal ─────────────────────────────────────────────────────────
