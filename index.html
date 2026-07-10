@@ -31138,9 +31138,8 @@ function calcProjectedTrucking(inv) {
     });
   }
 
-  // DMC: single fleet rate applied to all DMC truck names
-  const dmcTrucks = (td.dmcTrucks||[]).filter(t=>t.trim());
-  const dmcCount  = dmcTrucks.length;
+  // DMC: single fleet rate applied per assigned driver (DMC trucks field removed — assignedDrivers is now the DMC truck count)
+  const dmcCount  = (td.assignedDrivers||[]).length;
   const dmcCost   = applyRate(getTruckRate('dmc', ''), dmcCount);
 
   // Broker: each truck name matched to its named company rate

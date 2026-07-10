@@ -9564,8 +9564,9 @@ function buildLookaheadHTML(supplier, dateRange) {
 // ════════════════════════════════════════
 
 var _truckingKey = null, _truckingSlot = null;
-var _truckingRows = { dmc:[], broker:[], supplier:[] };
+var _truckingRows = { supplier:[] };
 var _truckingAssignedDrivers = [];
+var _truckingBrokerEntries = []; // [{ broker, count }]
 
 function _getMixTruckDrivers() {
   var drivers = [];
@@ -9626,10 +9627,17 @@ function clearTruckingField(key, slot) {
 function openTruckingModal(key, slot) {
   _truckingKey = key; _truckingSlot = slot;
   const td = parseTruckingData(key, slot);
-  _truckingRows.dmc           = td.dmcTrucks      || [''];
-  _truckingRows.broker        = td.brokerTrucks   || [''];
   _truckingRows.supplier      = td.supplierTrucks || [''];
   _truckingAssignedDrivers    = Array.isArray(td.assignedDrivers) ? td.assignedDrivers.slice() : [];
+  if (Array.isArray(td.brokers)) {
+    _truckingBrokerEntries = td.brokers.map(function(b) { return { broker: b.broker, count: b.count || 1 }; });
+  } else {
+    // Legacy schedule entries only have a flat brokerTrucks array (one name per truck) — group it.
+    var _legacyBrk = td.brokerTrucks || [];
+    var _legacyGrouped = {};
+    _legacyBrk.forEach(function(name) { if (!name) return; _legacyGrouped[name] = (_legacyGrouped[name] || 0) + 1; });
+    _truckingBrokerEntries = Object.keys(_legacyGrouped).map(function(name) { return { broker: name, count: _legacyGrouped[name] }; });
+  }
 
   document.getElementById('truckingModal')?.remove();
   const modal = document.createElement('div');
@@ -9642,11 +9650,7 @@ function openTruckingModal(key, slot) {
       <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--white);margin-bottom:4px;">🚛 Trucking Setup</div>
       <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--concrete-dim);margin-bottom:18px;">${key} · ${slot.toUpperCase()}</div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:4px;">
-        <div class="form-group" style="margin:0;">
-          <label class="form-label">🚛 # of Trucks</label>
-          <input class="form-input" id="tm-numtrucks" placeholder="e.g. 6" value="${td.trucks||td.numTrucks||''}" style="font-size:13px;" />
-        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;">
         <div class="form-group" style="margin:0;">
           <label class="form-label">⏱ Load Time</label>
           <input class="form-input" id="tm-loadtime" placeholder="e.g. 6:00 AM" value="${td.loadTime||''}" style="font-size:13px;" />
@@ -9660,17 +9664,19 @@ function openTruckingModal(key, slot) {
       <div class="trucking-section-label" style="margin-top:12px;">🟣 Assigned Drivers</div>
       <div id="tm-driver-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
 
-      <div class="trucking-section-label">🟡 DMC Trucks</div>
-      <div id="tm-dmc-rows"></div>
-      <button class="trucking-add-truck-btn" onclick="addTruckRow('dmc')">+ Add DMC Truck</button>
-
       <div class="trucking-section-label">🔵 Broker Trucks</div>
-      <div id="tm-broker-rows"></div>
-      <button class="trucking-add-truck-btn" onclick="addTruckRow('broker')">+ Add Broker Truck</button>
+      <div id="tm-broker-entries" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+      <select id="tm-broker-select" class="trucking-truck-input" style="width:100%;" onchange="_truckingBrokerPick(this.value)">
+        <option value="">— select broker to add —</option>
+        ${truckingBrokersList.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('')}
+      </select>
+      <div id="tm-broker-qty-wrap" style="display:none;margin-top:8px;"></div>
 
-      <div class="trucking-section-label">🟢 Supplier Trucks</div>
+      <div class="trucking-section-label" style="margin-top:12px;">🟢 Supplier Trucks</div>
       <div id="tm-supplier-rows"></div>
       <button class="trucking-add-truck-btn" onclick="addTruckRow('supplier')">+ Add Supplier Truck</button>
+
+      <div id="tm-total-trucks" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);margin-top:14px;padding-top:10px;border-top:1px solid var(--asphalt-light);"></div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
         <button class="btn btn-ghost" onclick="closeTruckingModal()">Cancel</button>
@@ -9680,10 +9686,10 @@ function openTruckingModal(key, slot) {
 
   document.body.appendChild(modal);
   renderDriverChips();
-  renderTruckRows('dmc');
-  renderTruckRows('broker');
+  renderTruckingBrokerEntries();
   renderTruckRows('supplier');
-  setTimeout(() => document.getElementById('tm-numtrucks')?.focus(), 60);
+  renderTruckingTotal();
+  setTimeout(() => document.getElementById('tm-loadtime')?.focus(), 60);
 }
 
 function renderDriverChips() {
@@ -9708,20 +9714,91 @@ function toggleDriverChip(username) {
   if (idx === -1) { _truckingAssignedDrivers.push(username); }
   else { _truckingAssignedDrivers.splice(idx, 1); }
   renderDriverChips();
+  renderTruckingTotal();
+}
+
+// ── Broker truck picker: select broker, then enter quantity ────────────────
+function renderTruckingBrokerEntries() {
+  var el = document.getElementById('tm-broker-entries');
+  if (!el) return;
+  if (!_truckingBrokerEntries.length) {
+    el.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No broker trucks added</span>';
+    return;
+  }
+  el.innerHTML = _truckingBrokerEntries.map(function(b, i) {
+    return '<div onclick="_truckingBrokerEditCount(' + i + ')" style="display:flex;align-items:center;gap:6px;' +
+      'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;color:#5ab4f5;' +
+      'background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.35);border-radius:20px;' +
+      'padding:6px 8px 6px 12px;cursor:pointer;min-height:44px;">' +
+      escHtml(b.broker) + ' × ' + b.count +
+      '<button onclick="event.stopPropagation();_truckingBrokerRemove(' + i + ')" title="Remove" ' +
+      'style="background:none;border:none;cursor:pointer;color:rgba(90,180,245,0.6);font-size:13px;padding:0 4px;line-height:1;">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+function _truckingBrokerPick(name) {
+  var wrap = document.getElementById('tm-broker-qty-wrap');
+  if (!wrap) return;
+  if (!name) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  var existing = _truckingBrokerEntries.find(function(b) { return b.broker === name; });
+  var curCount = existing ? existing.count : 1;
+  wrap.style.display = 'flex';
+  wrap.innerHTML = '<div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box;">' +
+    '<span style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);flex:1;">How many ' + escHtml(name) + ' trucks?</span>' +
+    '<input id="tm-broker-qty" type="number" min="1" value="' + curCount + '" style="width:60px;font-family:\'DM Mono\',monospace;font-size:13px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:4px;color:var(--white);padding:5px 8px;" />' +
+    '<button class="btn btn-primary btn-sm" onclick="_truckingBrokerAdd()">Add</button>' +
+    '</div>';
+}
+
+function _truckingBrokerAdd() {
+  var sel   = document.getElementById('tm-broker-select');
+  var qtyEl = document.getElementById('tm-broker-qty');
+  var name  = sel ? sel.value : '';
+  if (!name) return;
+  var count = Math.max(1, parseInt(qtyEl ? qtyEl.value : '1') || 1);
+  var existing = _truckingBrokerEntries.find(function(b) { return b.broker === name; });
+  if (existing) { existing.count = count; }
+  else { _truckingBrokerEntries.push({ broker: name, count: count }); }
+  if (sel) sel.value = '';
+  var wrap = document.getElementById('tm-broker-qty-wrap');
+  if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+  renderTruckingBrokerEntries();
+  renderTruckingTotal();
+}
+
+function _truckingBrokerEditCount(idx) {
+  var entry = _truckingBrokerEntries[idx];
+  if (!entry) return;
+  var val = prompt('How many ' + entry.broker + ' trucks?', entry.count);
+  if (val === null) return;
+  entry.count = Math.max(1, parseInt(val) || 1);
+  renderTruckingBrokerEntries();
+  renderTruckingTotal();
+}
+
+function _truckingBrokerRemove(idx) {
+  _truckingBrokerEntries.splice(idx, 1);
+  renderTruckingBrokerEntries();
+  renderTruckingTotal();
+}
+
+// ── Total trucks: auto-calculated from assigned drivers + brokers + supplier rows ──
+function renderTruckingTotal() {
+  var el = document.getElementById('tm-total-trucks');
+  if (!el) return;
+  var _dmcCount    = _truckingAssignedDrivers.length;
+  var _brokerCount = _truckingBrokerEntries.reduce(function(sum, b) { return sum + (b.count || 1); }, 0);
+  var _supCount    = (_truckingRows.supplier || []).filter(function(t) { return t.trim(); }).length;
+  var _total       = _dmcCount + _brokerCount + _supCount;
+  el.textContent = '🚛 Total: ' + _total + ' trucks (DMC: ' + _dmcCount + ' · Broker: ' + _brokerCount + ' · Supplier: ' + _supCount + ')';
 }
 
 function renderTruckRows(group) {
   const el = document.getElementById(`tm-${group}-rows`);
   if (!el) return;
-  const useDrop = group === 'broker' && truckingBrokersList.length > 0;
   el.innerHTML = _truckingRows[group].map((name, i) => {
-    const field = useDrop
-      ? `<select class="trucking-truck-input" style="flex:1;"
-            onchange="_truckingRows['${group}'][${i}]=this.value;">
-           <option value="">— select broker —</option>
-           ${truckingBrokersList.map(b => `<option value="${escHtml(b)}"${b===name?' selected':''}>${escHtml(b)}</option>`).join('')}
-         </select>`
-      : `<input class="trucking-truck-input" value="${escHtml(name)}"
+    const field = `<input class="trucking-truck-input" value="${escHtml(name)}"
            placeholder="Truck / company name…"
            oninput="_truckingRows['${group}'][${i}]=this.value;"
            onkeydown="if(event.key==='Enter'){addTruckRow('${group}');}" />`;
@@ -9738,29 +9815,40 @@ function addTruckRow(group) {
   // Focus last input
   const rows = document.querySelectorAll(`#tm-${group}-rows .trucking-truck-input`);
   if (rows.length) rows[rows.length-1].focus();
+  renderTruckingTotal();
 }
 
 function removeTruckRow(group, idx) {
   _truckingRows[group].splice(idx, 1);
   if (!_truckingRows[group].length) _truckingRows[group] = [''];
   renderTruckRows(group);
+  renderTruckingTotal();
 }
 
 function saveTruckingModal() {
-  // Collect current input values (oninput may not fire for last typed chars)
-  ['dmc','broker','supplier'].forEach(g => {
-    document.querySelectorAll(`#tm-${g}-rows .trucking-truck-input`).forEach((inp, i) => {
-      _truckingRows[g][i] = inp.value;
-    });
+  // Collect current supplier input values (oninput may not fire for last typed chars)
+  document.querySelectorAll('#tm-supplier-rows .trucking-truck-input').forEach(function(inp, i) {
+    _truckingRows.supplier[i] = inp.value;
+  });
+  var _supplierTrucks = _truckingRows.supplier.filter(function(t) { return t.trim(); });
+  var _assignedDrivers = _truckingAssignedDrivers.filter(function(u) { return u.trim(); });
+  var _dmcCount    = _assignedDrivers.length;
+  var _brokerCount = _truckingBrokerEntries.reduce(function(sum, b) { return sum + (b.count || 1); }, 0);
+  var _supCount    = _supplierTrucks.length;
+  // Derive a flat brokerTrucks array (one entry per truck) so existing cost/count
+  // calculations elsewhere (calcProjectedTrucking, invoice auto-fill) keep working.
+  var _brokerTrucksFlat = [];
+  _truckingBrokerEntries.forEach(function(b) {
+    for (var i = 0; i < (b.count || 1); i++) _brokerTrucksFlat.push(b.broker);
   });
   const data = {
-    trucks:          document.getElementById('tm-numtrucks')?.value.trim() || '',
+    trucks:          _dmcCount + _brokerCount + _supCount,
     loadTime:        document.getElementById('tm-loadtime')?.value.trim()  || '',
     spacing:         document.getElementById('tm-spacing')?.value.trim()   || '',
-    dmcTrucks:       _truckingRows.dmc.filter(t=>t.trim()),
-    brokerTrucks:    _truckingRows.broker.filter(t=>t.trim()),
-    supplierTrucks:  _truckingRows.supplier.filter(t=>t.trim()),
-    assignedDrivers: _truckingAssignedDrivers.filter(u=>u.trim()),
+    brokers:         _truckingBrokerEntries.slice(),
+    brokerTrucks:    _brokerTrucksFlat,
+    supplierTrucks:  _supplierTrucks,
+    assignedDrivers: _assignedDrivers,
   };
   saveTruckingData(_truckingKey, _truckingSlot, data);
   closeTruckingModal();
