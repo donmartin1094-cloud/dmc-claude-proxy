@@ -15238,6 +15238,7 @@ function openJobFolder(jobId) {
           <div class="jf-panel-name">${escHtml(job.name||'Unnamed Job')}</div>
           <div class="jf-panel-gc">${escHtml(job.gc||'')}${job.awardingAuthority?' · '+escHtml(job.awardingAuthority):''}</div>
         </div>
+        ${isAdmin() ? `<button onclick="_editJobFolderModal('${escHtml(job.id||'')}')" style="background:none;border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:4px;">✏️ Edit</button>` : ''}
         <button onclick="_scanSlipForJob('${escHtml(job.id||'')}','${escHtml(job.name||'')}','${escHtml(job.num||'')}')" style="background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.3);border-radius:var(--radius);color:var(--stripe);font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📷 Scan Slip</button>
         <button onclick="closeJobFolder();_openARKPIs({jobId:'${escHtml(job.id||'')}',jobNum:'${escHtml(job.num||'')}'});" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:var(--radius);color:#a78bfa;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📊 View KPIs</button>
         ${isAdmin() ? `<button onclick="_deleteJobFolderModal('${escHtml(job.id||'')}')" style="background:rgba(232,85,85,0.1);border:1px solid rgba(232,85,85,0.35);border-radius:var(--radius);color:#e85555;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">🗑️ Delete</button>` : ''}
@@ -15298,6 +15299,78 @@ function _deleteJobFolderConfirm(jobId) {
   document.getElementById('_deleteJobModal')?.remove();
   closeJobFolder();
   renderBacklog();
+}
+
+function _editJobFolderModal(jobId) {
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  if (!job) return;
+  var _gcNames = Array.from(new Set((backlogJobs||[]).map(function(j){ return j.gc; }).filter(Boolean)));
+  var _gcOptionsHtml = _gcNames.map(function(g){ return '<option value="' + escHtml(g) + '">'; }).join('');
+  document.getElementById('_editJobModal')?.remove();
+  var modal = document.createElement('div');
+  modal.id = '_editJobModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+  var _fieldLabelStyle = "display:block;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--concrete-dim);margin-bottom:4px;";
+  var _fieldInputStyle = "width:100%;min-height:44px;box-sizing:border-box;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:6px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:14px;padding:0 12px;";
+  modal.innerHTML =
+    '<div style="background:var(--asphalt);border-radius:12px;padding:24px;width:90vw;max-width:480px;max-height:80vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:1.2px;color:var(--white);">✏️ Edit Job Details</div>' +
+      '<div><label style="' + _fieldLabelStyle + '">Job #</label><input id="_editJobNum" type="text" value="' + escHtml(job.num||'') + '" style="' + _fieldInputStyle + '"></div>' +
+      '<div><label style="' + _fieldLabelStyle + '">Project Name</label><input id="_editJobName" type="text" value="' + escHtml(job.name||'') + '" style="' + _fieldInputStyle + '"></div>' +
+      '<div><label style="' + _fieldLabelStyle + '">General Contractor</label><input id="_editJobGC" type="text" list="_editJobGCList" value="' + escHtml(job.gc||'') + '" style="' + _fieldInputStyle + '"><datalist id="_editJobGCList">' + _gcOptionsHtml + '</datalist></div>' +
+      '<div><label style="' + _fieldLabelStyle + '">Location / Address</label><input id="_editJobLocation" type="text" value="' + escHtml(job.location||'') + '" style="' + _fieldInputStyle + '"></div>' +
+      '<button onclick="_saveJobFolderEdit(\'' + jobId + '\')" style="width:100%;min-height:48px;margin-top:4px;background:#a78bfa;border:none;border-radius:8px;color:#1a1a1a;font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">💾 Save Changes</button>' +
+      '<button onclick="document.getElementById(\'_editJobModal\')?.remove()" style="width:100%;min-height:44px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">Cancel</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function _saveJobFolderEdit(jobId) {
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  if (!job) return;
+  var newNum  = (document.getElementById('_editJobNum')||{}).value || '';
+  var newName = (document.getElementById('_editJobName')||{}).value || '';
+  var newGC   = (document.getElementById('_editJobGC')||{}).value || '';
+  var newLoc  = (document.getElementById('_editJobLocation')||{}).value || '';
+  newNum  = newNum.trim();
+  newName = newName.trim();
+  newGC   = newGC.trim();
+  newLoc  = newLoc.trim();
+  if (!newName) { document.getElementById('_editJobName').focus(); return; }
+
+  var oldNum = job.num || '';
+  job.num      = newNum;
+  job.name     = newName;
+  job.gc       = newGC;
+  job.location = newLoc;
+  saveBacklog();
+
+  // Propagate the new job name into any schedule chip still tagged with the job's old number
+  if (oldNum) {
+    var _schedChanged = false;
+    Object.keys(schedData||{}).forEach(function(dateKey){
+      var dayData = schedData[dateKey] || {};
+      ['top','bottom'].forEach(function(slot){
+        var bdata = dayData[slot];
+        if (bdata && bdata.fields && bdata.fields.jobNum === oldNum && bdata.fields.jobName !== newName) {
+          bdata.fields.jobName = newName;
+          _schedChanged = true;
+        }
+      });
+      (dayData.extras||[]).forEach(function(ex){
+        var bdata = ex && ex.data;
+        if (bdata && bdata.fields && bdata.fields.jobNum === oldNum && bdata.fields.jobName !== newName) {
+          bdata.fields.jobName = newName;
+          _schedChanged = true;
+        }
+      });
+    });
+    if (_schedChanged && typeof saveSchedDataDirect === 'function') saveSchedDataDirect();
+  }
+
+  document.getElementById('_editJobModal')?.remove();
+  openJobFolder(jobId);
 }
 
 function switchJfTab(jobId, tab) {
