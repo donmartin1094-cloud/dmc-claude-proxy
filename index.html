@@ -31898,6 +31898,8 @@ function switchRosterTab(type) {
     const supEl = document.getElementById('stng-suppliers-roster');
     if (supEl) {
       supEl.style.display = '';
+      // Render suppliers first so the content is populated
+      if (typeof renderSettingsPlants === 'function') renderSettingsPlants();
       // Render suppliers list inline (reuse existing stng-suppliers-list content)
       supEl.innerHTML = document.getElementById('stng-content-plants')?.innerHTML || '<div style="padding:12px;color:var(--concrete-dim);">No suppliers data.</div>';
     }
