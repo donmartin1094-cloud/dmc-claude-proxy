@@ -5039,9 +5039,9 @@ function renderSchedule() {
       console.log('[extraRow] html preview:', _extraRowHtml.substring(0, 200));
     }
 
-    const { colW, blockH } = getWeekMetrics(week);
+    const { colW, blockH, bannerH } = getWeekMetrics(week);
     var _fullHtml = daysHtml + (_hasWeekExtras ? _extraRowHtml : '');
-    return `<div class="sched-week"><div class="sched-week-days" style="--col-w:${colW}px;--block-h:${blockH}px;">${_fullHtml}</div></div>`;
+    return `<div class="sched-week"><div class="sched-week-days" style="--col-w:${colW}px;--block-h:${blockH}px;--banner-h:${bannerH}px;">${_fullHtml}</div></div>`;
   }).join('');
 
   // ── Mobile: queue-style foreman rows per day ────────────────────────────
@@ -9020,11 +9020,14 @@ function getWeekMetrics(week) {
 
   let maxChips = 0;
   let maxBlockH = BASE_H;
+  var _maxSACount = 0;
 
   week.forEach(d => {
     if (!d) return;
     const key = dk(d);
     const dayData = schedData[key] || {};
+    var _saCount = (dayData.dayNoteSA || []).length;
+    if (_saCount > _maxSACount) _maxSACount = _saCount;
     const allSlots = ['top','bottom'];
     const extras = dayData.extras || [];
     extras.forEach((_, i) => allSlots.push('extra_' + i));
@@ -9080,7 +9083,8 @@ function getWeekMetrics(week) {
   });
 
   const colW = maxChips <= CHIPS_BEFORE_EXPAND ? BASE_W : BASE_W + (maxChips - CHIPS_BEFORE_EXPAND) * CHIP_W;
-  return { colW, blockH: maxBlockH };
+  var _bannerH = _maxSACount <= 1 ? 28 : 28 + (_maxSACount - 1) * 22;
+  return { colW, blockH: maxBlockH, bannerH: _bannerH };
 }
 
 // Kept for backwards compat
