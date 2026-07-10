@@ -3198,13 +3198,17 @@ function openAddForemanModal(key) {
 // ─────────────────────────────────────────────────────────────────────────────
 // UNIFIED SCHEDULE PICKER
 // A single consistent modal used by every + button on the schedule.
-// type: 'foreman' | 'operators' | 'equipment' | 'material' | 'mixtype' | 'plant'
+// type: 'foreman' | 'operators' | 'equipment' | 'material' | 'mixtype' | 'plant' | 'plantmaterial'
 // ─────────────────────────────────────────────────────────────────────────────
 var _uspmMat4Pool = [];  // sorted mixTypes for the four-col material picker
 var _uspmMat4Ctr  = 0;  // row ID counter
+var _uspmComboKey = null, _uspmComboSlot = null; // set only while the combined plant+material picker is open
+var _uspmComboSelectedPlant = '';
 
-function openUnifiedSchedPicker({ type, title, key, slot, field }) {
+function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection }) {
   document.getElementById('unifiedSchedPicker')?.remove();
+  if (type === 'plantmaterial') { _uspmComboKey = key; _uspmComboSlot = slot; }
+  else { _uspmComboKey = null; _uspmComboSlot = null; }
 
   const overlay = document.createElement('div');
   overlay.id = 'unifiedSchedPicker';
@@ -3402,6 +3406,55 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
           <button class="uspm-add-btn" onclick="uspmAddNewPlant('${key}','${slot}')">Add</button>
         </div>
       </div>`;
+
+  } else if (type === 'plantmaterial') {
+    _uspmComboSelectedPlant = (() => {
+      if (slot.startsWith('extra_')) { const i=parseInt(slot.replace('extra_','')); return schedData[key]?.extras?.[i]?.data?.fields?.plant||''; }
+      return ((schedData[key]||{})[slot]||{}).fields?.plant||'';
+    })();
+
+    const rawMatVal = (() => {
+      if (slot.startsWith('extra_')) { const i=parseInt(slot.replace('extra_','')); return schedData[key]?.extras?.[i]?.data?.fields?.material||''; }
+      return ((schedData[key]||{})[slot]||{}).fields?.material||'';
+    })();
+    const currentMat = parseMaterialField(rawMatVal);
+    _uspmMat4Pool = mixTypesList
+      .filter(m => m.desc)
+      .sort((a, b) => (a.displayName||a.desc).localeCompare(b.displayName||b.desc));
+    _uspmMat4Ctr = 0;
+    let matGridHtml = '';
+    if (_uspmMat4Pool.length) {
+      const rowsArr = currentMat.length ? currentMat : [null];
+      const colHeader = `<div class="uspm-mat4-header"><span>Mix Type</span><span>Tons</span><span>Gyr</span><span>RAP%</span><span></span></div>`;
+      const rowsHtml = rowsArr.map(item => _uspmBuildMat4Row(_uspmMat4Ctr++, item)).join('');
+      matGridHtml = `<datalist id="uspmRapOpts"><option value="10"><option value="15"><option value="20"><option value="25"><option value="30"></datalist>${colHeader}<div id="uspmMatRows">${rowsHtml}</div>
+        <div class="uspm-add-row" style="padding:8px 14px;">
+          <button class="uspm-add-btn" style="width:100%;justify-content:center;" onclick="uspmAddMatRow4('${key}','${slot}')">+ Add Row</button>
+        </div>`;
+    } else {
+      matGridHtml = `<div class="uspm-empty">No mix types defined yet.<br><span style="font-size:11px;"><a href="#" onclick="openSettings('rosters');document.getElementById('unifiedSchedPicker')?.remove();" style="color:var(--blue);">Add them in ⚙️ Settings → Mix &amp; Materials</a></span></div>`;
+    }
+
+    listHtml = `
+      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;">🏭 Plant</div>
+      <div id="uspmComboPlantChip" style="padding:2px 14px 8px;">${_uspmComboChipHtml()}</div>
+      <div id="uspmComboPlantList">${_uspmComboBuildPlantListHtml(key, slot)}</div>
+      <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0;"></div>
+      <div id="uspmComboMatLabel" style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;">🪨 Material &amp; Tonnage</div>
+      ${matGridHtml}`;
+
+    addSectionHtml = `
+      <div class="uspm-add-section">
+        <div class="uspm-add-label">Add New Supplier / Location</div>
+        <div class="uspm-add-row">
+          <input class="uspm-add-input" id="uspmNewPlant" placeholder="Supplier — Location…" />
+          <button class="uspm-add-btn" onclick="uspmAddNewPlant('${key}','${slot}')">Add</button>
+        </div>
+      </div>`;
+    footerHtml = `<div class="uspm-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('unifiedSchedPicker').remove()">Cancel</button>
+      <button class="btn btn-primary" onclick="uspmSaveComboPlantMaterial('${key}','${slot}')">💾 Save</button>
+    </div>`;
   }
 
   // ── Search bar only for multi-item lists ──────────────────────────────────
@@ -3412,8 +3465,9 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
       <input class="uspm-search" id="uspmSearch" placeholder="Search…" oninput="uspmFilter(this.value)" autocomplete="off" />
     </div>` : '';
 
+  const boxWideClass = type === 'material' ? ' uspm-box--wide' : (type === 'plantmaterial' ? ' uspm-box--combo' : '');
   overlay.innerHTML = `
-    <div class="uspm-box${type === 'material' ? ' uspm-box--wide' : ''}">
+    <div class="uspm-box${boxWideClass}">
       <div class="uspm-header">
         <div class="uspm-title">${title}</div>
         <button class="uspm-close" onclick="document.getElementById('unifiedSchedPicker').remove()">✕</button>
@@ -3429,6 +3483,10 @@ function openUnifiedSchedPicker({ type, title, key, slot, field }) {
 
   // Auto-focus search or first input
   setTimeout(() => {
+    if (type === 'plantmaterial' && focusSection === 'material') {
+      document.getElementById('uspmComboMatLabel')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     const s = document.getElementById('uspmSearch');
     if (s) { s.focus(); return; }
     const a = document.getElementById('uspmNewForeman') || document.getElementById('uspmNewItem') || document.getElementById('uspmNewMat') || document.getElementById('uspmNewPlant');
@@ -3786,8 +3844,70 @@ function uspmAddNewPlant(key, slot) {
   if (!sup) { sup = { name: supName, plants: loc ? [loc] : [] }; suppliersList.push(sup); }
   else if (loc && !sup.plants.includes(loc)) { sup.plants.push(loc); }
   saveSuppliersList();
+  if (_uspmComboKey !== null) {
+    // Combined plant+material picker is open — refresh the plant section in place
+    // so any unsaved material rows the admin already entered aren't lost.
+    if (inp) inp.value = '';
+    _uspmComboRefreshPlantList(key, slot);
+    return;
+  }
   document.getElementById('unifiedSchedPicker')?.remove();
   openUnifiedSchedPicker({ type: 'plant', title: '🏭 Supplier Plant', key, slot, field: 'plant' });
+}
+
+// ── Combined Plant + Material picker helpers ────────────────────────────────
+
+function _uspmComboChipHtml() {
+  return _uspmComboSelectedPlant
+    ? '<span class="op-chip" style="color:#111;border-color:rgba(0,0,0,0.18);background:#fff;">🏭 ' + escHtml(_uspmComboSelectedPlant) +
+      '<button class="op-chip-del" style="color:#888;" onclick="uspmComboClearPlant()" title="Clear plant">✕</button></span>'
+    : '<span style="font-size:11px;color:var(--concrete-dim);font-style:italic;">No plant selected</span>';
+}
+
+function _uspmComboBuildPlantListHtml(key, slot) {
+  var html = '';
+  if (!suppliersList.length) {
+    return '<div class="uspm-empty">No suppliers yet.<br><span style="font-size:11px;"><a href="#" onclick="openSettings(\'plants\');document.getElementById(\'unifiedSchedPicker\')?.remove();" style="color:var(--blue);">⚙️ Add them in Settings → Suppliers</a></span></div>';
+  }
+  suppliersList.forEach(function(sup) {
+    html += '<div class="uspm-group-header">🏭 ' + sup.name + '</div>';
+    if (sup.plants.length) {
+      sup.plants.forEach(function(loc) {
+        var fullVal = sup.name + ' — ' + loc;
+        var sel = _uspmComboSelectedPlant === fullVal;
+        html += '<div class="uspm-item' + (sel ? ' selected' : '') + '" onclick="uspmComboPickPlant(\'' +
+          key.replace(/'/g,"\\'") + '\',\'' + slot.replace(/'/g,"\\'") + '\',\'' +
+          fullVal.replace(/'/g,"\\'").replace(/"/g,'&quot;') + '\')">' +
+          '<span class="uspm-item-icon">📍</span>' + loc +
+          '</div>';
+      });
+    } else {
+      html += '<div class="uspm-empty" style="padding:6px 22px;font-size:11px;font-style:italic;">No plant locations — add in Settings</div>';
+    }
+  });
+  return html;
+}
+
+function _uspmComboRefreshPlantList(key, slot) {
+  var listEl = document.getElementById('uspmComboPlantList');
+  if (listEl) listEl.innerHTML = _uspmComboBuildPlantListHtml(key, slot);
+  var chipEl = document.getElementById('uspmComboPlantChip');
+  if (chipEl) chipEl.innerHTML = _uspmComboChipHtml();
+}
+
+function uspmComboPickPlant(key, slot, value) {
+  _uspmComboSelectedPlant = value;
+  _uspmComboRefreshPlantList(key, slot);
+}
+
+function uspmComboClearPlant() {
+  _uspmComboSelectedPlant = '';
+  _uspmComboRefreshPlantList(_uspmComboKey, _uspmComboSlot);
+}
+
+function uspmSaveComboPlantMaterial(key, slot) {
+  selectSchedPlant(key, slot, _uspmComboSelectedPlant, null);
+  uspmSaveMaterial(key, slot);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4027,7 +4147,7 @@ function closePlantPickerOutside(e) {
 
 // ── Schedule block plant picker (hierarchical supplier → plant location) ──
 function openSchedPlantPicker(key, slot, triggerBtn) {
-  openUnifiedSchedPicker({ type: 'plant', title: '🏭 Supplier Plant', key, slot, field: 'plant' });
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key, slot, field: 'plant', focusSection: 'plant' });
 }
 
 function closeSchedPlantPickerOutside(e) {
@@ -4123,21 +4243,16 @@ function addNewPlantFromPicker(itemId, e) {
 
 // Opens the material picker modal, pre-filling the search with whatever the user typed inline
 function openMatSearchFromInline(inputEl, key, slot) {
-  const query = inputEl.value || '';
   inputEl.blur(); // unfocus so it doesn't steal keys from the modal
-  openUnifiedSchedPicker({ type:'material', title:'🪨 Material & Tonnage', key, slot, field:'material' });
-  // Pre-fill search after the modal renders
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key, slot, field: 'material', focusSection: 'material' });
   setTimeout(() => {
-    const s = document.getElementById('uspmSearch');
-    if (s && query) { s.value = query; uspmFilter(query); s.focus(); }
-    else if (s) { s.focus(); }
     // Reset the inline input so it's ready for the next search
     if (inputEl && document.body.contains(inputEl)) inputEl.value = '';
   }, 80);
 }
 
 function openMixTypeChipMenu(key, slot, itemName, chipEl) {
-  openUnifiedSchedPicker({ type:'material', title:'🪨 Material & Tonnage', key:key, slot:slot, field:'material' });
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key: key, slot: slot, field: 'material', focusSection: 'material' });
 }
 
 function openPickerDropdown(key, slot, field, type) {
