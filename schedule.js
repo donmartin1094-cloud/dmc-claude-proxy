@@ -9582,6 +9582,51 @@ function _getMixTruckDrivers() {
   return drivers;
 }
 
+// Returns usernames of drivers already assigned to any OTHER slot on this day
+function _getDriversAssignedOnDay(dateKey, excludeSlot) {
+  var _assigned = [];
+  var _day = schedData[dateKey] || {};
+  ['top', 'bottom'].forEach(function(s) {
+    if (s === excludeSlot) return;
+    var _td = {};
+    try { _td = JSON.parse((_day[s] && _day[s].fields && _day[s].fields.trucking) || '{}'); } catch(e) {}
+    (_td.assignedDrivers || []).forEach(function(u){ _assigned.push(u); });
+  });
+  // Also check extras
+  (_day.extras || []).forEach(function(ex, i) {
+    if ('extra_' + i === excludeSlot) return;
+    var _td = {};
+    try { _td = JSON.parse((ex.data && ex.data.fields && ex.data.fields.trucking) || '{}'); } catch(e) {}
+    (_td.assignedDrivers || []).forEach(function(u){ _assigned.push(u); });
+  });
+  return _assigned;
+}
+
+// Returns the jobName of whichever OTHER slot on this day has the given driver assigned
+function _getDriverConflictJobName(dateKey, excludeSlot, username) {
+  var _day = schedData[dateKey] || {};
+  var _jobName = '';
+  ['top', 'bottom'].forEach(function(s) {
+    if (_jobName || s === excludeSlot) return;
+    var _td = {};
+    try { _td = JSON.parse((_day[s] && _day[s].fields && _day[s].fields.trucking) || '{}'); } catch(e) {}
+    if ((_td.assignedDrivers || []).indexOf(username) !== -1) {
+      _jobName = (_day[s].fields && _day[s].fields.jobName) || 'another job';
+    }
+  });
+  if (!_jobName) {
+    (_day.extras || []).forEach(function(ex, i) {
+      if (_jobName || 'extra_' + i === excludeSlot) return;
+      var _td = {};
+      try { _td = JSON.parse((ex.data && ex.data.fields && ex.data.fields.trucking) || '{}'); } catch(e) {}
+      if ((_td.assignedDrivers || []).indexOf(username) !== -1) {
+        _jobName = (ex.data && ex.data.fields && ex.data.fields.jobName) || 'another job';
+      }
+    });
+  }
+  return _jobName || 'another job';
+}
+
 function parseTruckingData(key, slot) {
   let fields;
   if (slot.startsWith('extra_')) {
@@ -9697,22 +9742,39 @@ function renderDriverChips() {
   if (!el) return;
   var drivers = _getMixTruckDrivers();
   if (!drivers.length) { el.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">No mix truck drivers configured</span>'; return; }
+  var _conflicted = _getDriversAssignedOnDay(_truckingKey, _truckingSlot);
   el.innerHTML = drivers.map(function(d) {
     var sel = _truckingAssignedDrivers.indexOf(d.username) !== -1;
-    return '<button onclick="toggleDriverChip(\'' + escHtml(d.username) + '\')" style="' +
-      'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;' +
-      'padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .15s;min-height:44px;' +
-      (sel
-        ? 'background:#a78bfa22;border:2px solid #a78bfa;color:#a78bfa;'
-        : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);') +
-      '">' + escHtml(d.displayName) + '</button>';
+    var isConflict = !sel && _conflicted.indexOf(d.username) !== -1;
+    var style = 'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;' +
+      'padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .15s;min-height:44px;';
+    if (sel) {
+      style += 'background:#a78bfa22;border:2px solid #a78bfa;color:#a78bfa;';
+    } else if (isConflict) {
+      style += 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.3);';
+    } else {
+      style += 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);';
+    }
+    return '<button onclick="toggleDriverChip(\'' + escHtml(d.username) + '\')" style="' + style + '">' +
+      (isConflict ? '⚠️ ' : '') + escHtml(d.displayName) + '</button>';
   }).join('');
 }
 
 function toggleDriverChip(username) {
   var idx = _truckingAssignedDrivers.indexOf(username);
-  if (idx === -1) { _truckingAssignedDrivers.push(username); }
-  else { _truckingAssignedDrivers.splice(idx, 1); }
+  if (idx === -1) {
+    var _conflict = _getDriversAssignedOnDay(_truckingKey, _truckingSlot);
+    if (_conflict.indexOf(username) !== -1) {
+      var _driver = _getMixTruckDrivers().find(function(d){ return d.username === username; });
+      var _displayName = _driver ? _driver.displayName : username;
+      var _conflictJob = _getDriverConflictJobName(_truckingKey, _truckingSlot, username);
+      alert(_displayName + ' is already assigned to ' + _conflictJob + ' today.');
+      return;
+    }
+    _truckingAssignedDrivers.push(username);
+  } else {
+    _truckingAssignedDrivers.splice(idx, 1);
+  }
   renderDriverChips();
   renderTruckingTotal();
 }
