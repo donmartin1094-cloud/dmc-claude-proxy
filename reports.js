@@ -5720,9 +5720,15 @@ function openInvoiceModal(id, prefill) {
     ? inv.mixItems
     : (p.mixItems && p.mixItems.length ? p.mixItems : [{ mixType: '', mixPrice: '', itemTotal: '' }]);
 
-  // ── Supplier options: unique names from existing invoices (normalized dedupe) ──
+  // ── Supplier options: suppliersList/plantsList (primary) + invoiceList history (fallback) ──
   var _invSupNames = [];
   var _invSupSeen  = {};
+  (typeof plantsList !== 'undefined' ? plantsList : []).forEach(function(p) {
+    var _supRaw = (p || '').trim();
+    if (!_supRaw) return;
+    var _supNorm = _normalizeSupplierName(_supRaw);
+    if (!_invSupSeen[_supNorm]) { _invSupSeen[_supNorm] = true; _invSupNames.push(_supRaw); }
+  });
   (typeof invoiceList !== 'undefined' ? invoiceList : []).forEach(function(iv) {
     var _supRaw = (iv.supplier || '').trim();
     if (!_supRaw) return;
