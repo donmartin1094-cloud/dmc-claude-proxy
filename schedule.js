@@ -3422,35 +3422,42 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
       .filter(m => m.desc)
       .sort((a, b) => (a.displayName||a.desc).localeCompare(b.displayName||b.desc));
     _uspmMat4Ctr = 0;
-    let matGridHtml = '';
+    let matBodyHtml = '';
+    let matAddRowHtml = '';
     if (_uspmMat4Pool.length) {
       const rowsArr = currentMat.length ? currentMat : [null];
       const colHeader = `<div class="uspm-mat4-header"><span>Mix Type</span><span>Tons</span><span>Gyr</span><span>RAP%</span><span></span></div>`;
       const rowsHtml = rowsArr.map(item => _uspmBuildMat4Row(_uspmMat4Ctr++, item)).join('');
-      matGridHtml = `<datalist id="uspmRapOpts"><option value="10"><option value="15"><option value="20"><option value="25"><option value="30"></datalist>${colHeader}<div id="uspmMatRows">${rowsHtml}</div>
-        <div class="uspm-add-row" style="padding:8px 14px;">
+      matBodyHtml = `<datalist id="uspmRapOpts"><option value="10"><option value="15"><option value="20"><option value="25"><option value="30"></datalist>${colHeader}<div id="uspmMatRows">${rowsHtml}</div>`;
+      matAddRowHtml = `<div class="uspm-add-row" style="padding:8px 14px;flex-shrink:0;">
           <button class="uspm-add-btn" style="width:100%;justify-content:center;" onclick="uspmAddMatRow4('${key}','${slot}')">+ Add Row</button>
         </div>`;
     } else {
-      matGridHtml = `<div class="uspm-empty">No mix types defined yet.<br><span style="font-size:11px;"><a href="#" onclick="openSettings('rosters');document.getElementById('unifiedSchedPicker')?.remove();" style="color:var(--blue);">Add them in ⚙️ Settings → Mix &amp; Materials</a></span></div>`;
+      matBodyHtml = `<div class="uspm-empty">No mix types defined yet.<br><span style="font-size:11px;"><a href="#" onclick="openSettings('rosters');document.getElementById('unifiedSchedPicker')?.remove();" style="color:var(--blue);">Add them in ⚙️ Settings → Mix &amp; Materials</a></span></div>`;
     }
 
     listHtml = `
-      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;">🏭 Plant</div>
-      <div id="uspmComboPlantChip" style="padding:2px 14px 8px;">${_uspmComboChipHtml()}</div>
-      <div id="uspmComboPlantList">${_uspmComboBuildPlantListHtml(key, slot)}</div>
-      <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0;"></div>
-      <div id="uspmComboMatLabel" style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;">🪨 Material &amp; Tonnage</div>
-      ${matGridHtml}`;
-
-    addSectionHtml = `
-      <div class="uspm-add-section">
-        <div class="uspm-add-label">Add New Supplier / Location</div>
-        <div class="uspm-add-row">
-          <input class="uspm-add-input" id="uspmNewPlant" placeholder="Supplier — Location…" />
-          <button class="uspm-add-btn" onclick="uspmAddNewPlant('${key}','${slot}')">Add</button>
+      <div class="uspm-combo-body">
+        <div class="uspm-combo-left">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;flex-shrink:0;">🏭 Plant</div>
+          <div id="uspmComboPlantChip" style="padding:2px 14px 8px;flex-shrink:0;">${_uspmComboChipHtml()}</div>
+          <div id="uspmComboPlantList" style="flex:1;overflow-y:auto;">${_uspmComboBuildPlantListHtml(key, slot)}</div>
+          <div class="uspm-add-section" style="flex-shrink:0;">
+            <div class="uspm-add-label">Add New Supplier / Location</div>
+            <div class="uspm-add-row">
+              <input class="uspm-add-input" id="uspmNewPlant" placeholder="Supplier — Location…" />
+              <button class="uspm-add-btn" onclick="uspmAddNewPlant('${key}','${slot}')">Add</button>
+            </div>
+          </div>
+        </div>
+        <div class="uspm-combo-right">
+          <div id="uspmComboMatLabel" style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;flex-shrink:0;">🪨 Material &amp; Tonnage</div>
+          <div style="flex:1;overflow-y:auto;">${matBodyHtml}</div>
+          ${matAddRowHtml}
         </div>
       </div>`;
+
+    addSectionHtml = '';
     footerHtml = `<div class="uspm-footer">
       <button class="btn btn-ghost" onclick="document.getElementById('unifiedSchedPicker').remove()">Cancel</button>
       <button class="btn btn-primary" onclick="uspmSaveComboPlantMaterial('${key}','${slot}')">💾 Save</button>
