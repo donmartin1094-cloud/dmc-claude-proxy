@@ -29396,6 +29396,11 @@ async function initApp(username) {
         timeout
       ]).catch(e => { console.warn('Firebase load:', e.message); });
 
+      if (!localStorage.getItem('dmc_supplier_migration_v1')) {
+        try { if (typeof _migrateSupplierNames === 'function') _migrateSupplierNames(); } catch(e) {}
+        localStorage.setItem('dmc_supplier_migration_v1', '1');
+      }
+
       setSyncBadge('synced');
   applyTabPermissions();
 

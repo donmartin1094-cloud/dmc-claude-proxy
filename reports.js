@@ -5665,6 +5665,52 @@ function _invAutoFillFromSchedule(date, foreman) {
   if (typeof _invModalRecalcTotal === 'function') _invModalRecalcTotal();
 }
 
+// ── Supplier name normalization ─────────────────────────────────────────────
+// Handles variants like "Amrize Wrentham" vs "Amrize-Wrentham" being treated
+// as the same supplier for dropdowns and KPI grouping.
+function _normalizeSupplierName(name) {
+  return (name || '').trim().replace(/-/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+}
+
+function _buildSupplierCanonicalMap() {
+  var _counts = {};
+  var _canonical = {};
+  (invoiceList||[]).forEach(function(inv){
+    var _raw = (inv.supplier || '').trim();
+    if (!_raw) return;
+    var _norm = _normalizeSupplierName(_raw);
+    _counts[_norm] = _counts[_norm] || {};
+    _counts[_norm][_raw] = (_counts[_norm][_raw] || 0) + 1;
+  });
+  Object.keys(_counts).forEach(function(norm){
+    var _variants = _counts[norm];
+    // Pick the variant with the highest count as canonical
+    _canonical[norm] = Object.keys(_variants).sort(function(a,b){
+      return _variants[b] - _variants[a];
+    })[0];
+  });
+  return _canonical;
+}
+
+function _migrateSupplierNames() {
+  var _map = _buildSupplierCanonicalMap();
+  var _changed = false;
+  (invoiceList||[]).forEach(function(inv){
+    var _raw = (inv.supplier || '').trim();
+    if (!_raw) return;
+    var _norm = _normalizeSupplierName(_raw);
+    var _canon = _map[_norm];
+    if (_canon && _canon !== _raw) {
+      inv.supplier = _canon;
+      _changed = true;
+    }
+  });
+  if (_changed) {
+    saveInvoiceList();
+    console.log('[DMC] Supplier names normalized');
+  }
+}
+
 // ── Modal (initial creation only — all editing is inline on cards) ─────────────
 function openInvoiceModal(id, prefill) {
   var isEdit  = !!id;
@@ -5674,11 +5720,14 @@ function openInvoiceModal(id, prefill) {
     ? inv.mixItems
     : (p.mixItems && p.mixItems.length ? p.mixItems : [{ mixType: '', mixPrice: '', itemTotal: '' }]);
 
-  // ── Supplier options: unique names from existing invoices ──────────────────
+  // ── Supplier options: unique names from existing invoices (normalized dedupe) ──
   var _invSupNames = [];
   var _invSupSeen  = {};
   (typeof invoiceList !== 'undefined' ? invoiceList : []).forEach(function(iv) {
-    if (iv.supplier && !_invSupSeen[iv.supplier]) { _invSupSeen[iv.supplier] = true; _invSupNames.push(iv.supplier); }
+    var _supRaw = (iv.supplier || '').trim();
+    if (!_supRaw) return;
+    var _supNorm = _normalizeSupplierName(_supRaw);
+    if (!_invSupSeen[_supNorm]) { _invSupSeen[_supNorm] = true; _invSupNames.push(_supRaw); }
   });
   _invSupNames.sort();
 
@@ -6380,16 +6429,19 @@ function _buildARKPIDashboardHtml() {
 
   // ── Sales KPIs by Mix / Supplier ─────────────────────────────────────────
   var byMix={}, bySupplier={};
+  var _supCanonMap = _buildSupplierCanonicalMap();
   invs.forEach(function(inv) {
-    var sup = inv.supplier || 'Unknown';
+    var _supRaw  = (inv.supplier||'').trim();
+    var _supKey  = _supRaw ? _normalizeSupplierName(_supRaw) : '__unknown__';
+    var _supDisp = _supRaw ? (_supCanonMap[_supKey] || _supRaw) : 'Unknown';
     (inv.mixItems||[]).forEach(function(m) {
       var mt = m.mixType || 'Unknown';
       var total = parseFloat(m.itemTotal)||0;
       var tons  = parseFloat(m.tonQty)||0;
       if (!byMix[mt]) byMix[mt]={tons:0,billed:0,loads:0};
       byMix[mt].tons+=tons; byMix[mt].billed+=total; byMix[mt].loads++;
-      if (!bySupplier[sup]) bySupplier[sup]=0;
-      bySupplier[sup]+=total;
+      if (!bySupplier[_supKey]) bySupplier[_supKey] = { name: _supDisp, total: 0 };
+      bySupplier[_supKey].total += total;
     });
   });
 
@@ -6410,12 +6462,12 @@ function _buildARKPIDashboardHtml() {
       +'</div>';
   }).join('');
 
-  var supNames = Object.keys(bySupplier).sort(function(a,b){ return bySupplier[b]-bySupplier[a]; });
-  var totalSupBilled = supNames.reduce(function(s,n){ return s+bySupplier[n]; },0);
-  var topSups = supNames.slice(0,6);
+  var supKeys = Object.keys(bySupplier).sort(function(a,b){ return bySupplier[b].total-bySupplier[a].total; });
+  var totalSupBilled = supKeys.reduce(function(s,k){ return s+bySupplier[k].total; },0);
+  var topSups = supKeys.slice(0,6);
   var supPieLabels=[], supPieData=[], supPieColors=[];
-  topSups.forEach(function(sup,i){ supPieLabels.push(sup); supPieData.push(bySupplier[sup]); supPieColors.push(_ARKPI_PALETTE[(i+3)%_ARKPI_PALETTE.length]); });
-  var supOtherAmt = supNames.slice(6).reduce(function(s,n){ return s+bySupplier[n]; },0);
+  topSups.forEach(function(k,i){ supPieLabels.push(bySupplier[k].name); supPieData.push(bySupplier[k].total); supPieColors.push(_ARKPI_PALETTE[(i+3)%_ARKPI_PALETTE.length]); });
+  var supOtherAmt = supKeys.slice(6).reduce(function(s,k){ return s+bySupplier[k].total; },0);
   if (supOtherAmt>0){ supPieLabels.push('Other'); supPieData.push(supOtherAmt); supPieColors.push('#555'); }
 
   var supLegendHtml = supPieLabels.map(function(sup,i) {
@@ -6591,16 +6643,19 @@ function _mountARKPICharts() {
   var supEl = document.getElementById('arKpiSupPie');
   if (supEl) {
     var byS = {};
+    var _supCanonMap2 = _buildSupplierCanonicalMap();
     invs.forEach(function(inv){
-      var sup=inv.supplier||'Unknown';
+      var _supRaw  = (inv.supplier||'').trim();
+      var _supKey  = _supRaw ? _normalizeSupplierName(_supRaw) : '__unknown__';
+      var _supDisp = _supRaw ? (_supCanonMap2[_supKey] || _supRaw) : 'Unknown';
       (inv.mixItems||[]).forEach(function(m){
-        if (!byS[sup]) byS[sup]=0;
-        byS[sup]+=parseFloat(m.itemTotal)||0;
+        if (!byS[_supKey]) byS[_supKey] = { name: _supDisp, total: 0 };
+        byS[_supKey].total += parseFloat(m.itemTotal)||0;
       });
     });
-    var sNames=Object.keys(byS).sort(function(a,b){ return byS[b]-byS[a]; });
-    var sTop=sNames.slice(0,6), sOther=sNames.slice(6).reduce(function(s,n){ return s+byS[n]; },0);
-    var sL=sTop.slice(), sD=sTop.map(function(s){ return byS[s]; }), sC=sTop.map(function(s,i){ return _ARKPI_PALETTE[(i+3)%_ARKPI_PALETTE.length]; });
+    var sNames=Object.keys(byS).sort(function(a,b){ return byS[b].total-byS[a].total; });
+    var sTop=sNames.slice(0,6), sOther=sNames.slice(6).reduce(function(s,n){ return s+byS[n].total; },0);
+    var sL=sTop.map(function(k){ return byS[k].name; }), sD=sTop.map(function(k){ return byS[k].total; }), sC=sTop.map(function(s,i){ return _ARKPI_PALETTE[(i+3)%_ARKPI_PALETTE.length]; });
     if (sOther>0){ sL.push('Other'); sD.push(sOther); sC.push('#555'); }
     _arKpiCharts.push(new Chart(supEl, chartCfg(sL, sD, sC, fmtD)));
   }
