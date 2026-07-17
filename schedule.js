@@ -11467,47 +11467,33 @@ function saveBacklog() {
   if (hv && hv.style.display !== 'none') try { renderHomeView(hv); } catch(e) {}
 }
 
+var _jdSelectedJobId  = null;   // job id currently shown in the right panel
+var _jdFolderActiveTab = 'overview'; // active tab within the embedded right-panel folder
+var _jdMobileShowFolder = false; // mobile only: true = show right panel full-width
+
 function renderBacklog() {
   const wrap = document.getElementById('backlogView');
   if (!wrap) return;
   const count = backlogJobs.length;
 
-  // Build folder tiles — all jobs sorted by job number, 5 per row
   const sorted = [...backlogJobs].sort((a,b)=>{
     const na=parseFloat(a.num)||0, nb=parseFloat(b.num)||0;
     if(na!==nb) return na-nb;
     return (a.num||'').localeCompare(b.num||'');
   });
 
-  const folderTiles = sorted.map(j => {
-    const folder = j.jobFolder || {};
-    const hasPO   = (folder.purchaseOrders||[]).length > 0;
-    const hasTax  = (folder.taxCerts||[]).length > 0;
-    const numVal  = parseFloat(j.num)||0;
-    const needsCompliance = numVal > 3899;
-    const missingDocs = needsCompliance && (!hasPO || !hasTax);
-
-    // Doc count badges
-    const linked = _jfLinkedCounts(j);
-    const badges = [];
-    if (linked.foremanReports > 0) badges.push(`<span class="jd-folder-badge" style="background:rgba(245,197,24,0.15);color:var(--stripe);">FR×${linked.foremanReports}</span>`);
-    if (linked.dailyOrders > 0)    badges.push(`<span class="jd-folder-badge" style="background:rgba(90,180,245,0.12);color:#5ab4f5;">DO×${linked.dailyOrders}</span>`);
-    if (hasPO)   badges.push(`<span class="jd-folder-badge" style="background:rgba(126,203,143,0.15);color:#7ecb8f;">PO</span>`);
-    if (hasTax)  badges.push(`<span class="jd-folder-badge" style="background:rgba(126,203,143,0.15);color:#7ecb8f;">TAX</span>`);
-
-    return `<div class="jd-folder" onclick="openJobFolder('${j.id}')">
-      <div class="jd-folder-tab" style="background:${missingDocs?'rgba(217,79,61,0.5)':hasPO&&hasTax&&needsCompliance?'rgba(126,203,143,0.4)':'var(--asphalt-light)'};"></div>
-      ${missingDocs?`<div class="jd-folder-warn" title="Missing PO or Tax Cert">⚠️</div>`:''}
-      <div class="jd-folder-body">
-        <div class="jd-folder-num">${escHtml(j.num||'—')}</div>
-        <div class="jd-folder-gc">${escHtml(j.gc||'')}</div>
-        <div class="jd-folder-name">${escHtml(j.name||'Unnamed')}</div>
-        ${badges.length ? `<div class="jd-folder-badges">${badges.join('')}</div>` : ''}
-      </div>
+  const jobRowsHtml = sorted.length ? sorted.map(j => {
+    const active = _jdSelectedJobId === j.id;
+    return `<div class="jd-split-row${active?' active':''}" onclick="_jdSelectJob('${j.id}')">
+      <div class="jd-split-num">${escHtml(j.num||'—')}</div>
+      <div class="jd-split-name">${escHtml(j.name||'Unnamed')}</div>
+      <div class="jd-split-gc">${escHtml(j.gc||'')}</div>
     </div>`;
-  }).join('');
+  }).join('') : `<div style="padding:24px 12px;text-align:center;color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;">No jobs in the directory yet.<br><span style="color:var(--stripe);cursor:pointer;" onclick="openBacklogModal()">+ Add your first job</span></div>`;
 
-  const emptyFolders = sorted.length === 0 ? `<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:13px;">No jobs in the directory yet.<br><span style="color:var(--stripe);cursor:pointer;" onclick="openBacklogModal()">+ Add your first job</span></div>` : '';
+  const rightPanelHtml = _jdSelectedJobId
+    ? _jdRenderFolderPanelHtml(_jdSelectedJobId)
+    : `<div class="jd-right-empty">← Select a job to view its folder</div>`;
 
   wrap.innerHTML = `
     <div class="backlog-wrap">
@@ -11518,37 +11504,79 @@ function renderBacklog() {
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
           <button class="backlog-toggle-btn" onclick="openAddGCModal()" style="padding:5px 14px;font-size:11px;">+ Add GC</button>
-          <button class="backlog-toggle-btn" onclick="openBacklogModal()" style="padding:5px 14px;font-size:11px;background:var(--stripe);color:var(--asphalt);">+ Add Job</button>
         </div>
       </div>
-      <div class="backlog-scroll">
-
-        <!-- Job Folders card -->
-        <div class="jd-folders-card">
-          <div class="jd-folders-header">
-            <div class="jd-folders-title">📁 Job Folders</div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">Click a folder to open documents &amp; reports</div>
+      <div class="jf-split-wrap${_jdMobileShowFolder ? ' jd-mobile-show-folder' : ''}">
+        <div class="jf-left-panel">
+          <div class="jd-split-search-wrap">
+            <input class="jd-split-search" id="jdJobSearch" placeholder="Search jobs..." oninput="_jdFilterJobList(this.value)" autocomplete="off" />
           </div>
-          <div class="jd-folders-grid">
-            ${folderTiles}${emptyFolders}
+          <div class="jf-left-list" id="jdJobList">${jobRowsHtml}</div>
+          <div class="jd-split-addjob">
+            <button class="backlog-toggle-btn" onclick="openBacklogModal()" style="width:100%;justify-content:center;background:var(--stripe);color:var(--asphalt);">+ New Job</button>
           </div>
         </div>
-
-        <!-- Backlog List card -->
-        <div class="jd-backlog-card">
-          <div class="jd-backlog-card-header">
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1.2px;color:var(--white);">📋 Backlog List</div>
-            <div style="display:flex;align-items:center;gap:4px;">
-              <button class="backlog-toggle-btn ${backlogView==='list'?'active':''}" onclick="setBacklogView('list')" style="padding:4px 12px;font-size:10px;">≡ List</button>
-              <button class="backlog-toggle-btn ${backlogView==='gc'?'active':''}" onclick="setBacklogView('gc')" style="padding:4px 12px;font-size:10px;">🏢 By GC</button>
-            </div>
-          </div>
-          <div id="backlogContent" style="padding:0;">
-            ${backlogView === 'list' ? renderBacklogList() : renderBacklogGC()}
-          </div>
+        <div class="jf-right-panel" id="jdRightPanel">
+          ${rightPanelHtml}
         </div>
-
       </div>
+    </div>`;
+}
+
+function _jdSelectJob(jobId) {
+  _jdSelectedJobId = jobId;
+  _jdFolderActiveTab = 'overview';
+  _jdMobileShowFolder = true;
+  renderBacklog();
+}
+
+function _jdBackToList() {
+  _jdMobileShowFolder = false;
+  renderBacklog();
+}
+
+function _jdFilterJobList(q) {
+  const list = document.getElementById('jdJobList');
+  if (!list) return;
+  const lq = (q||'').toLowerCase();
+  list.querySelectorAll('.jd-split-row').forEach(el => {
+    el.style.display = (!lq || el.textContent.toLowerCase().indexOf(lq) !== -1) ? '' : 'none';
+  });
+}
+
+function _jdRenderFolderPanelHtml(jobId) {
+  const job = (backlogJobs||[]).find(j => j.id === jobId);
+  if (!job) return `<div class="jd-right-empty">← Select a job to view its folder</div>`;
+
+  _slipsLoad();
+  const _jfSlipCount = pavingSlips.filter(sl =>
+    (job.id   && sl.jobId   === job.id)   ||
+    (job.num  && sl.jobNum  === job.num)   ||
+    (job.name && sl.jobName && sl.jobName.toLowerCase() === job.name.toLowerCase())
+  ).length;
+  const _slipTabLabel = '📄 Paving Slips' + (_jfSlipCount > 0 ? ` <span style="background:rgba(245,197,24,0.2);color:var(--stripe);font-size:8px;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle;">${_jfSlipCount}</span>` : '');
+
+  return `
+    <div class="jf-panel-header">
+      <button class="jd-mobile-back-btn" onclick="_jdBackToList()">← Jobs</button>
+      <div class="jf-panel-num">${escHtml(job.num||'—')}</div>
+      <div class="jf-panel-info">
+        <div class="jf-panel-name">${escHtml(job.name||'Unnamed Job')}</div>
+        <div class="jf-panel-gc">${escHtml(job.gc||'')}${job.awardingAuthority?' · '+escHtml(job.awardingAuthority):''}</div>
+      </div>
+      ${isAdmin() ? `<button onclick="_editJobFolderModal('${escHtml(job.id||'')}')" style="background:none;border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;margin-right:4px;">✏️ Edit</button>` : ''}
+      <button onclick="_scanSlipForJob('${escHtml(job.id||'')}','${escHtml(job.name||'')}','${escHtml(job.num||'')}')" style="background:rgba(245,197,24,0.08);border:1px solid rgba(245,197,24,0.3);border-radius:var(--radius);color:var(--stripe);font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📷 Scan Slip</button>
+      <button onclick="_openARKPIs({jobId:'${escHtml(job.id||'')}',jobNum:'${escHtml(job.num||'')}'});" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:var(--radius);color:#a78bfa;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">📊 View KPIs</button>
+      ${isAdmin() ? `<button onclick="_deleteJobFolderModal('${escHtml(job.id||'')}')" style="background:rgba(232,85,85,0.1);border:1px solid rgba(232,85,85,0.35);border-radius:var(--radius);color:#e85555;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">🗑️ Delete</button>` : ''}
+    </div>
+    <div class="jf-tabs" id="jdFolderTabs">
+      ${['overview','foreman','daily','equipment','aia','bills','compliance','fieldintel','slips','other','takeoffs'].map(t=>`
+        <button class="jf-tab${_jdFolderActiveTab===t?' active':''}" onclick="switchJfTab('${jobId}','${t}')">${
+          t === 'slips' ? _slipTabLabel : {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',other:'📎 Other Docs',takeoffs:'📐 Takeoffs'}[t]
+        }</button>`).join('')}
+    </div>
+    <div class="jf-body" id="jdFolderBody">
+      ${_jfRenderTab(job, _jdFolderActiveTab)}
     </div>`;
 }
 
