@@ -23665,6 +23665,8 @@ function saveForemanReport(report) {
 }
 
 async function openForemanReport() {
+  console.log('[FR] openForemanReport called');
+  console.log('[FR] current user:', localStorage.getItem('dmc_u'));
   document.getElementById('_frDlg')?.remove();
   var u = localStorage.getItem('dmc_u') || '';
   // Refresh employees straight from Firestore before checking crew — the bulk
@@ -23677,8 +23679,23 @@ async function openForemanReport() {
       localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
       _checkLocalStorageSize();
     }
-  } catch(e) {}
+  } catch(e) { console.log('[FR] fbGet employees refresh failed:', e && e.message); }
+  console.log('[FR] employees after refresh:', employees.length);
+
+  var _uLc = (localStorage.getItem('dmc_u') || '').toLowerCase().trim();
+  console.log('[FR] looking up crew for:', _uLc);
   var crewMembers = getCrewForForeman(u);
+  console.log('[FR] crew result:', JSON.stringify(crewMembers));
+  console.log('[FR] crew length:', crewMembers ? crewMembers.length : 'null');
+
+  var _manual = employees.filter(function(e){
+    return (e.crewForeman||'').toLowerCase() === 'fjoaquim';
+  });
+  console.log('[FR] manual filter for fjoaquim:', _manual.length);
+  if (_manual.length) console.log('[FR] first match:', JSON.stringify(_manual[0]));
+
+  var _cfVals = employees.map(function(e){ return e.crewForeman || 'none'; });
+  console.log('[FR] all crewForeman values:', JSON.stringify([...new Set(_cfVals)]));
   // No hard block here — step 0 already shows "No laborers assigned to you yet"
   // when crewMembers is empty, and submitting with zero crew is valid.
 
