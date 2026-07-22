@@ -2367,6 +2367,73 @@ function deleteForemanReport(id) {
   if (el) renderForemanReports(el);
 }
 
+// ── Auto-populate labor rows from roster crew + schedule operators ─────────
+// Resolves which schedule slot ('top' | 'bottom' | 'extra_N') belongs to a foreman display name.
+function _frResolveScheduleSlot(dateKey, foremanDisplayName) {
+  var fmLc = (foremanDisplayName || '').toLowerCase().trim();
+  if (!fmLc || !dateKey) return null;
+  var day = (typeof schedData !== 'undefined' ? schedData[dateKey] : null) || {};
+  var roster = (typeof foremanRoster !== 'undefined' ? foremanRoster : []);
+  if (roster[0] && roster[0].toLowerCase().trim() === fmLc) return 'top';
+  if (roster[1] && roster[1].toLowerCase().trim() === fmLc) return 'bottom';
+  var extras = day.extras || [];
+  for (var i = 0; i < extras.length; i++) {
+    if ((extras[i].foreman || '').toLowerCase().trim() === fmLc) return 'extra_' + i;
+  }
+  return null;
+}
+
+function _frAutoPopulateLabor(reportDate, foremanDisplayName) {
+  var _empty = { operators: [], laborers: [], rakers: [] };
+  var _displayName = (foremanDisplayName || '').trim();
+
+  // No foreman name on the report yet (brand new blank report) — fall back to the logged-in session
+  if (!_displayName) {
+    var _u = (localStorage.getItem('dmc_u') || '').trim().toLowerCase();
+    if (!_u) return _empty;
+    var _allAccts = (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') ? DEFAULT_TEAM_ACCOUNTS.slice() : [];
+    try {
+      var _dynAccts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
+      if (Array.isArray(_dynAccts)) _allAccts = _allAccts.concat(_dynAccts);
+    } catch(e) {}
+    var _acct = _allAccts.find(function(a){ return (a.username||'').toLowerCase() === _u && a.role === 'foreman'; });
+    if (!_acct) return _empty;
+    _displayName = _acct.displayName || _acct.username;
+  }
+  if (!_displayName) return _empty;
+
+  var _username = (typeof _deriveCrewUsername === 'function') ? _deriveCrewUsername(_displayName) : '';
+  var _buckets = { operator: [], laborer: [], raker: [] };
+
+  // Source 1 — regular crew from the employee roster (crewForeman assignment)
+  var _crew = (_username && typeof getCrewForForeman === 'function') ? getCrewForForeman(_username) : [];
+  _crew.forEach(function(c) {
+    var _roleLc = (c.role || '').toLowerCase();
+    var _bucket = _roleLc.indexOf('operator') !== -1 ? 'operator' : (_roleLc.indexOf('raker') !== -1 ? 'raker' : 'laborer');
+    _buckets[_bucket].push({ name: c.displayName, _source: 'roster' });
+  });
+
+  // Source 2 — operators assigned to this foreman's schedule slot for the report date
+  var _slot = _frResolveScheduleSlot(reportDate, _displayName);
+  if (_slot) {
+    var _day = (typeof schedData !== 'undefined' ? schedData[reportDate] : null) || {};
+    var _bdata = _slot.indexOf('extra_') === 0
+      ? ((_day.extras || [])[parseInt(_slot.replace('extra_',''), 10)] || {}).data
+      : _day[_slot];
+    var _opsStr = (_bdata && _bdata.fields && _bdata.fields.operators) || '';
+    var _seenLc = {};
+    ['operator','laborer','raker'].forEach(function(b){ _buckets[b].forEach(function(m){ _seenLc[(m.name||'').toLowerCase()] = true; }); });
+    _opsStr.split(',').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(name) {
+      var _lc = name.toLowerCase();
+      if (_seenLc[_lc]) return; // already covered by roster crew — avoid duplicate
+      _seenLc[_lc] = true;
+      _buckets.operator.push({ name: name, _source: 'schedule' });
+    });
+  }
+
+  return { operators: _buckets.operator, laborers: _buckets.laborer, rakers: _buckets.raker };
+}
+
 // ── Form (create / edit) ─────────────────────────────────────────────────────
 function openForemanReportForm(id) {
   var existing = id ? foremanReports.find(function(r){ return r.id === id; }) : null;
@@ -2384,9 +2451,13 @@ function openForemanReportForm(id) {
   // Build labor rows HTML
   function laborRow(role, data) {
     data = data || {};
+    var _srcLabel = data._source === 'roster' ? '👷 Regular Crew' : (data._source === 'schedule' ? '🔧 On Schedule' : '');
     return '<div style="display:grid;grid-template-columns:120px 1fr 70px 70px 70px 70px;gap:4px;margin-bottom:3px;align-items:center;">'+
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:var(--concrete-dim);">'+escHtml(role)+'</div>'+
-      '<input class="form-input" style="font-size:11px;padding:4px 8px;" placeholder="Name" value="'+escHtml(data.name||'')+'"/>'+
+      '<div style="display:flex;flex-direction:column;gap:1px;min-width:0;">'+
+        '<input class="form-input" style="font-size:11px;padding:4px 8px;" placeholder="Name" value="'+escHtml(data.name||'')+'"/>'+
+        (_srcLabel ? '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--concrete-dim);padding-left:2px;">'+_srcLabel+'</span>' : '')+
+      '</div>'+
       '<input class="form-input" style="font-size:11px;padding:4px 8px;text-align:center;" type="number" step="0.5" min="0" placeholder="Mach" value="'+(data.machineHours!=null?data.machineHours:'')+'"/>'+
       '<input class="form-input" style="font-size:11px;padding:4px 8px;text-align:center;" type="number" step="0.5" min="0" placeholder="Hand" value="'+(data.handHours!=null?data.handHours:'')+'"/>'+
       '<input class="form-input" style="font-size:11px;padding:4px 8px;text-align:center;" type="number" step="0.5" min="0" placeholder="Total" value="'+(data.totalHours!=null?data.totalHours:'')+'"/>'+
@@ -2457,6 +2528,16 @@ function openForemanReportForm(id) {
   var laborOps      = (r.labor||[]).filter(function(l){ return l.role==='operator'; });
   var laborLabs     = (r.labor||[]).filter(function(l){ return l.role==='laborer'; });
   var laborRakers   = (r.labor||[]).filter(function(l){ return l.role==='raker'; });
+
+  // Auto-populate crew/operator rows from roster + schedule — only if nothing has been entered yet
+  var _frHasCrewEntries = laborOps.concat(laborLabs, laborRakers).some(function(l){ return l && l.name; });
+  if (!_frHasCrewEntries) {
+    var _frAuto = _frAutoPopulateLabor(r.date || new Date().toISOString().slice(0,10), r.foreman);
+    if (_frAuto.operators.length) laborOps    = _frAuto.operators.slice(0, 5);
+    if (_frAuto.laborers.length)  laborLabs   = _frAuto.laborers.slice(0, 6);
+    if (_frAuto.rakers.length)    laborRakers = _frAuto.rakers.slice(0, 4);
+  }
+
   while (laborOps.length    < 5) laborOps.push({});
   while (laborLabs.length   < 6) laborLabs.push({});
   while (laborRakers.length < 4) laborRakers.push({});
