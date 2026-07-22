@@ -23668,7 +23668,8 @@ function openForemanReport() {
   document.getElementById('_frDlg')?.remove();
   var u = localStorage.getItem('dmc_u') || '';
   var crewMembers = getCrewForForeman(u);
-  if (!crewMembers.length) { alert('No crew found for your account.'); return; }
+  // No hard block here — step 0 already shows "No laborers assigned to you yet"
+  // when crewMembers is empty, and submitting with zero crew is valid.
 
   // State
   var step = 0; // 0=full crew?, 1=attendance, 2=hours, 3=confirm
