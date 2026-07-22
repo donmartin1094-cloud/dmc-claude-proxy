@@ -29221,6 +29221,7 @@ async function fbLoadAll() {
                 else if (key === 'invoices')    { invoiceList = val; localStorage.setItem(INVOICES_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
                 else if (key === 'qc_reports')  { qcReports = val; localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
                 else if (key === 'job_mix_formulas') { jobMixFormulas = Array.isArray(val) ? val : jobMixFormulas; localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(jobMixFormulas));  _checkLocalStorageSize();}
+                else if (key === 'job_plans')   { jobPlans = Array.isArray(val) ? val : jobPlans; localStorage.setItem(JOB_PLANS_KEY, JSON.stringify(jobPlans));  _checkLocalStorageSize();}
                 else if (key === 'awarding_authorities') { awardingAuthorities = val; }
                 else if (key === 'truck_pricing') { truckPricing = { ...truckPricing, ...val }; }
                 else if (key === 'aia_reqs') { aiaReqs = Array.isArray(val) ? val : aiaReqs; }
@@ -29797,6 +29798,12 @@ async function initApp(username) {
               else if (key === 'invoices')         { invoiceList = val; localStorage.setItem(INVOICES_KEY, JSON.stringify(val)); if (activeTab === 'apMix') renderInvoiceTracker();  _checkLocalStorageSize();}
               else if (key === 'qc_reports')       { qcReports = val; localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(val)); if (activeTab === 'reports') renderReports();  _checkLocalStorageSize();}
               else if (key === 'job_mix_formulas') { jobMixFormulas = Array.isArray(val) ? val : jobMixFormulas; localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(jobMixFormulas)); if (activeTab === 'reports' || activeTab === 'reportsJobMix') renderReports();  _checkLocalStorageSize();}
+              else if (key === 'job_plans') {
+                jobPlans = Array.isArray(val) ? val : jobPlans;
+                localStorage.setItem(JOB_PLANS_KEY, JSON.stringify(jobPlans));
+                _checkLocalStorageSize();
+                if (_jdSelectedJobId && _jdFolderActiveTab === 'plans') _jfRefreshOpenFolder(_jdSelectedJobId);
+              }
               else if (key === 'special_actions')  { if (Array.isArray(val) && val.length) { specialActions = val; localStorage.setItem(SPECIAL_ACTIONS_KEY, JSON.stringify(val)); }  _checkLocalStorageSize();}
               else if (key === 'rental_crews')     { if (Array.isArray(val)) { rentalCrews = val; localStorage.setItem(RENTAL_CREWS_KEY, JSON.stringify(val)); }  _checkLocalStorageSize();}
               else if (key === 'mix_types')        { mixTypesList = val; localStorage.setItem(MIX_TYPES_KEY, JSON.stringify(val)); if (typeof syncMixTypeDisplayNames === 'function') syncMixTypeDisplayNames(); _settingsRefreshPanel('rosters');  _checkLocalStorageSize();}
