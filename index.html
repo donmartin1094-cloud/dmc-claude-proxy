@@ -23664,9 +23664,20 @@ function saveForemanReport(report) {
   try { fbSet(EMPLOYEE_HOURS_KEY, hoursMap); } catch(e) {}
 }
 
-function openForemanReport() {
+async function openForemanReport() {
   document.getElementById('_frDlg')?.remove();
   var u = localStorage.getItem('dmc_u') || '';
+  // Refresh employees straight from Firestore before checking crew — the bulk
+  // fbLoadAll() sync on login can still be in flight (up to 10s) by the time a
+  // foreman taps this, which would otherwise show stale/empty crewForeman data.
+  try {
+    var _freshEmployees = await fbGet('employees', employees);
+    if (Array.isArray(_freshEmployees)) {
+      employees = _freshEmployees;
+      localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
+      _checkLocalStorageSize();
+    }
+  } catch(e) {}
   var crewMembers = getCrewForForeman(u);
   // No hard block here — step 0 already shows "No laborers assigned to you yet"
   // when crewMembers is empty, and submitting with zero crew is valid.
