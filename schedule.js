@@ -11471,6 +11471,24 @@ var _jdSelectedJobId  = null;   // job id currently shown in the right panel
 var _jdFolderActiveTab = 'overview'; // active tab within the embedded right-panel folder
 var _jdMobileShowFolder = false; // mobile only: true = show right panel full-width
 
+// ── Job Plans (📋 Plans tab) ────────────────────────────────────────────────
+var JOB_PLANS_KEY = 'pavescope_job_plans';
+// Shape: [{ id, jobId, jobNum, fileName, fileUrl, storagePath, fileType, uploadedBy, uploadedAt }]
+var jobPlans = (function(){ try { const p = JSON.parse(localStorage.getItem(JOB_PLANS_KEY)); return Array.isArray(p) ? p : []; } catch(e) { return []; } })();
+
+function saveJobPlans() {
+  localStorage.setItem(JOB_PLANS_KEY, JSON.stringify(jobPlans));
+  _checkLocalStorageSize();
+  try { if (db) fbSet('job_plans', jobPlans); } catch(e) { _logFbError('saveJobPlans', e); }
+}
+
+function _jfPlansForJob(job) {
+  if (!job) return [];
+  return jobPlans.filter(function(p) {
+    return (job.id && p.jobId === job.id) || (job.num && p.jobNum === job.num);
+  }).sort(function(a,b){ return (b.uploadedAt||0) - (a.uploadedAt||0); });
+}
+
 function renderBacklog() {
   const wrap = document.getElementById('backlogView');
   if (!wrap) return;
@@ -11484,16 +11502,26 @@ function renderBacklog() {
 
   const jobRowsHtml = sorted.length ? sorted.map(j => {
     const active = _jdSelectedJobId === j.id;
+    const items = j.items || [];
+    const contractVal = parseFloat((j.value||'').toString().replace(/[$,]/g,'')) || 0;
+    let contractPreviewHtml = '';
+    if (contractVal > 0) {
+      contractPreviewHtml = `<div class="jd-split-contract">$${contractVal.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>`;
+    } else if (items.length) {
+      const names = items.slice(0,2).map(i => i.displayName || i.desc || '').filter(Boolean).join(', ');
+      if (names) contractPreviewHtml = `<div class="jd-split-items">${escHtml(names)}</div>`;
+    }
     return `<div class="jd-split-row${active?' active':''}" onclick="_jdSelectJob('${j.id}')">
       <div class="jd-split-num">${escHtml(j.num||'—')}</div>
       <div class="jd-split-name">${escHtml(j.name||'Unnamed')}</div>
       <div class="jd-split-gc">${escHtml(j.gc||'')}</div>
+      ${contractPreviewHtml}
     </div>`;
   }).join('') : `<div style="padding:24px 12px;text-align:center;color:var(--concrete-dim);font-family:'DM Sans',sans-serif;font-size:12px;">No jobs in the directory yet.<br><span style="color:var(--stripe);cursor:pointer;" onclick="openBacklogModal()">+ Add your first job</span></div>`;
 
   const rightPanelHtml = _jdSelectedJobId
     ? _jdRenderFolderPanelHtml(_jdSelectedJobId)
-    : `<div class="jd-right-empty">← Select a job to view its folder</div>`;
+    : `<div class="jd-right-empty">← Select a job from the list</div>`;
 
   wrap.innerHTML = `
     <div class="backlog-wrap">
@@ -11508,13 +11536,16 @@ function renderBacklog() {
       </div>
       <div class="jf-split-wrap${_jdMobileShowFolder ? ' jd-mobile-show-folder' : ''}">
         <div class="jf-left-panel">
-          <div class="jd-split-search-wrap">
-            <input class="jd-split-search" id="jdJobSearch" placeholder="Search jobs..." oninput="_jdFilterJobList(this.value)" autocomplete="off" />
+          <div class="jd-split-header">
+            <div class="jd-split-search-wrap">
+              <input class="jd-split-search" id="jdJobSearch" placeholder="Search jobs..." oninput="_jdFilterJobList(this.value)" autocomplete="off" />
+            </div>
+            <div class="jd-split-addjob" style="border-top:none;">
+              <button class="backlog-toggle-btn" onclick="openBacklogModal()" style="width:100%;justify-content:center;background:var(--stripe);color:var(--asphalt);">+ New Job</button>
+            </div>
+            <div class="jd-split-count">${count} job${count!==1?'s':''}</div>
           </div>
           <div class="jf-left-list" id="jdJobList">${jobRowsHtml}</div>
-          <div class="jd-split-addjob">
-            <button class="backlog-toggle-btn" onclick="openBacklogModal()" style="width:100%;justify-content:center;background:var(--stripe);color:var(--asphalt);">+ New Job</button>
-          </div>
         </div>
         <div class="jf-right-panel" id="jdRightPanel">
           ${rightPanelHtml}
@@ -11546,7 +11577,7 @@ function _jdFilterJobList(q) {
 
 function _jdRenderFolderPanelHtml(jobId) {
   const job = (backlogJobs||[]).find(j => j.id === jobId);
-  if (!job) return `<div class="jd-right-empty">← Select a job to view its folder</div>`;
+  if (!job) return `<div class="jd-right-empty">← Select a job from the list</div>`;
 
   _slipsLoad();
   const _jfSlipCount = pavingSlips.filter(sl =>
@@ -11555,6 +11586,8 @@ function _jdRenderFolderPanelHtml(jobId) {
     (job.name && sl.jobName && sl.jobName.toLowerCase() === job.name.toLowerCase())
   ).length;
   const _slipTabLabel = '📄 Paving Slips' + (_jfSlipCount > 0 ? ` <span style="background:rgba(245,197,24,0.2);color:var(--stripe);font-size:8px;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle;">${_jfSlipCount}</span>` : '');
+  const _jfPlansCount = _jfPlansForJob(job).length;
+  const _plansTabLabel = '📋 Plans' + (_jfPlansCount > 0 ? ` <span style="background:rgba(167,139,250,0.2);color:#a78bfa;font-size:8px;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle;">${_jfPlansCount}</span>` : '');
 
   return `
     <div class="jf-panel-header">
@@ -11570,9 +11603,9 @@ function _jdRenderFolderPanelHtml(jobId) {
       ${isAdmin() ? `<button onclick="_deleteJobFolderModal('${escHtml(job.id||'')}')" style="background:rgba(232,85,85,0.1);border:1px solid rgba(232,85,85,0.35);border-radius:var(--radius);color:#e85555;font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;margin-right:4px;">🗑️ Delete</button>` : ''}
     </div>
     <div class="jf-tabs" id="jdFolderTabs">
-      ${['overview','foreman','daily','equipment','aia','bills','compliance','fieldintel','slips','other','takeoffs'].map(t=>`
+      ${['overview','plans','foreman','daily','equipment','aia','bills','compliance','fieldintel','slips','other','takeoffs'].map(t=>`
         <button class="jf-tab${_jdFolderActiveTab===t?' active':''}" onclick="switchJfTab('${jobId}','${t}')">${
-          t === 'slips' ? _slipTabLabel : {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',other:'📎 Other Docs',takeoffs:'📐 Takeoffs'}[t]
+          t === 'slips' ? _slipTabLabel : t === 'plans' ? _plansTabLabel : {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',other:'📎 Other Docs',takeoffs:'📐 Takeoffs'}[t]
         }</button>`).join('')}
     </div>
     <div class="jf-body" id="jdFolderBody">

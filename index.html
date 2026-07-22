@@ -1078,18 +1078,22 @@
   .jf-body { flex:1; overflow-y:auto; padding:16px 18px; }
   /* Job Directory — split layout: backlog list left, folder content right */
   .jf-split-wrap { display:flex; flex-direction:row; flex:1; min-height:0; overflow:hidden; }
-  .jf-left-panel { width:280px; flex-shrink:0; border-right:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; overflow:hidden; background:var(--asphalt-mid); }
+  .jf-left-panel { width:30%; flex-shrink:0; border-right:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; overflow:hidden; background:var(--asphalt-mid); }
   .jf-right-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
-  .jd-split-search-wrap { padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.08); flex-shrink:0; }
+  .jd-split-header { flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.08); }
+  .jd-split-search-wrap { padding:8px 12px 0; flex-shrink:0; }
   .jd-split-search { width:100%; box-sizing:border-box; background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius); color:var(--white); font-family:'DM Sans',sans-serif; font-size:13px; padding:7px 10px; outline:none; }
   .jd-split-search:focus { border-color:var(--stripe); }
+  .jd-split-count { font-family:'DM Mono',monospace; font-size:10px; color:var(--concrete-dim); padding:8px 12px; }
   .jf-left-list { flex:1; overflow-y:auto; }
-  .jd-split-row { padding:10px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.1s; }
+  .jd-split-row { padding:10px 12px; min-height:64px; box-sizing:border-box; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.1s; display:flex; flex-direction:column; justify-content:center; gap:1px; }
   .jd-split-row:hover { background:rgba(255,255,255,0.04); }
   .jd-split-row.active { background:rgba(167,139,250,0.12); border-left:3px solid #a78bfa; }
-  .jd-split-num { font-family:'DM Mono',monospace; font-size:11px; color:#a78bfa; }
+  .jd-split-num { font-family:'DM Mono',monospace; font-size:11px; font-weight:700; color:#a78bfa; }
   .jd-split-name { font-family:'DM Sans',sans-serif; font-size:12px; color:var(--white); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px; }
   .jd-split-gc { font-family:'DM Sans',sans-serif; font-size:11px; color:var(--concrete-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px; }
+  .jd-split-contract { font-family:'DM Mono',monospace; font-size:10px; color:#7ecb8f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
+  .jd-split-items { font-family:'DM Sans',sans-serif; font-size:10px; color:var(--concrete-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
   .jd-split-addjob { padding:10px 12px; border-top:1px solid rgba(255,255,255,0.08); flex-shrink:0; }
   .jd-right-empty { flex:1; display:flex; align-items:center; justify-content:center; color:var(--concrete-dim); font-family:'DM Sans',sans-serif; font-size:13px; text-align:center; padding:24px; }
   .jd-mobile-back-btn { display:none; background:none; border:1px solid var(--asphalt-light); border-radius:var(--radius); color:var(--concrete-dim); font-family:'DM Mono',monospace; font-size:11px; padding:4px 10px; cursor:pointer; margin-right:8px; flex-shrink:0; }
@@ -1100,7 +1104,10 @@
     .jf-split-wrap.jd-mobile-show-folder .jf-left-panel { display:none; }
     .jf-split-wrap.jd-mobile-show-folder .jf-right-panel { display:flex; }
     .jd-mobile-back-btn { display:inline-flex !important; align-items:center; }
+    .jf-plans-grid { grid-template-columns:repeat(2,1fr) !important; }
   }
+  .jf-plans-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .jf-plan-card { background:var(--asphalt); border:1px solid var(--asphalt-light); border-radius:var(--radius); padding:12px; display:flex; flex-direction:column; }
   .jf-section { margin-bottom:20px; }
   .jf-section-title { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid var(--asphalt-light); }
   .jf-doc-row { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--asphalt-light); border-radius:var(--radius); margin-bottom:6px; background:var(--asphalt); }
@@ -15262,6 +15269,8 @@ function openJobFolder(jobId) {
     (job.name && sl.jobName && sl.jobName.toLowerCase() === job.name.toLowerCase())
   ).length;
   const _slipTabLabel = '📄 Paving Slips' + (_jfSlipCount > 0 ? ` <span style="background:rgba(245,197,24,0.2);color:var(--stripe);font-size:8px;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle;">${_jfSlipCount}</span>` : '');
+  const _jfPlansCount = _jfPlansForJob(job).length;
+  const _plansTabLabel = '📋 Plans' + (_jfPlansCount > 0 ? ` <span style="background:rgba(167,139,250,0.2);color:#a78bfa;font-size:8px;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle;">${_jfPlansCount}</span>` : '');
 
   ov.innerHTML = `
     <div class="jf-panel">
@@ -15278,9 +15287,9 @@ function openJobFolder(jobId) {
         <button onclick="closeJobFolder()" style="background:none;border:none;color:var(--concrete-dim);font-size:18px;cursor:pointer;padding:4px 8px;">✕</button>
       </div>
       <div class="jf-tabs" id="jfTabs">
-        ${['overview','foreman','daily','equipment','aia','bills','compliance','fieldintel','slips','other','takeoffs'].map(t=>`
+        ${['overview','plans','foreman','daily','equipment','aia','bills','compliance','fieldintel','slips','other','takeoffs'].map(t=>`
           <button class="jf-tab${_jfActiveTab===t?' active':''}" onclick="switchJfTab('${jobId}','${t}')">${
-            t === 'slips' ? _slipTabLabel : {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',other:'📎 Other Docs',takeoffs:'📐 Takeoffs'}[t]
+            t === 'slips' ? _slipTabLabel : t === 'plans' ? _plansTabLabel : {overview:'📋 Overview',foreman:'📝 Foreman Reports',daily:'📅 Daily Orders',equipment:'🔧 Equip. Logs',aia:'🏗 AIA',bills:'🧾 Broker Bills',compliance:'📄 PO & Tax Cert',fieldintel:'📷 Field Intel',other:'📎 Other Docs',takeoffs:'📐 Takeoffs'}[t]
           }</button>`).join('')}
       </div>
       <div class="jf-body" id="jfBody">
@@ -15419,7 +15428,7 @@ function switchJfTab(jobId, tab) {
   // Update tab active state
   document.querySelectorAll('.jf-tab').forEach(b => {
     b.classList.toggle('active', b.textContent.trim().includes(
-      {overview:'Overview',foreman:'Foreman',daily:'Daily',equipment:'Equip',aia:'AIA',bills:'Broker',compliance:'PO',fieldintel:'Field Intel',slips:'Paving Slips',other:'Other',takeoffs:'Takeoffs'}[tab]||tab
+      {overview:'Overview',plans:'Plans',foreman:'Foreman',daily:'Daily',equipment:'Equip',aia:'AIA',bills:'Broker',compliance:'PO',fieldintel:'Field Intel',slips:'Paving Slips',other:'Other',takeoffs:'Takeoffs'}[tab]||tab
     ));
   });
   const body = document.getElementById('jfBody');
@@ -15481,6 +15490,7 @@ function _jfRenderTab(job, tab) {
         <div class="jf-section-title">Document Summary</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
           ${[
+            ['📋 Plans',           _jfPlansForJob(job).length, 'plans'],
             ['📝 Foreman Reports', linked.foremanReports, 'foreman'],
             ['📅 Daily Orders',    linked.dailyOrders,    'daily'],
             ['🔧 Equip. Logs',     linked.equipmentLogs,  'equipment'],
@@ -15496,6 +15506,47 @@ function _jfRenderTab(job, tab) {
               <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--concrete-dim);">${label.substring(label.indexOf(' ')+1)}</div>
             </div>`).join('')}
         </div>
+      </div>`;
+  }
+
+  if (tab === 'plans') {
+    const plans = _jfPlansForJob(job);
+    const canManage = isAdmin();
+    const typeOf = p => {
+      const fn = (p.fileName||'').toLowerCase();
+      if (p.fileType === 'application/pdf' || /\.pdf$/.test(fn)) return 'PDF';
+      if (/\.dwg$/.test(fn)) return 'DWG';
+      if (/\.dxf$/.test(fn)) return 'DXF';
+      if (/\.png$/.test(fn) || p.fileType === 'image/png') return 'PNG';
+      if (/\.jpe?g$/.test(fn) || (p.fileType||'').indexOf('jpeg') !== -1) return 'JPG';
+      return (fn.split('.').pop()||'FILE').toUpperCase();
+    };
+    const typeColors = { PDF:'#e85555', DWG:'#5ab4f5', DXF:'#5ab4f5', PNG:'#7ecb8f', JPG:'#7ecb8f' };
+    return `
+      <div class="jf-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div class="jf-section-title" style="margin:0;border:none;padding:0;">📋 Job Plans</div>
+          ${canManage ? `<button onclick="openUploadPlanModal('${job.id}')" style="background:none;border:1px solid rgba(167,139,250,0.4);color:#a78bfa;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:6px 14px;border-radius:var(--radius);cursor:pointer;">+ Upload Plan</button>` : ''}
+        </div>
+        ${!plans.length ? `<div style="color:var(--concrete-dim);font-size:13px;padding:20px 0;">No plans uploaded for this job yet.</div>` : `
+        <div class="jf-plans-grid">
+          ${plans.map(p => {
+            const t = typeOf(p);
+            const col = typeColors[t] || 'var(--concrete-dim)';
+            return `<div class="jf-plan-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <span style="font-family:'DM Mono',monospace;font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:${typeColors[t] ? col+'22' : 'rgba(155,148,136,0.15)'};color:${col};">${t}</span>
+                <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--concrete-dim);">${fmtDate(p.uploadedAt)}</span>
+              </div>
+              <div style="font-size:12px;color:var(--white);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:10px;" title="${esc(p.fileName)}">${esc(p.fileName)}</div>
+              <div style="display:flex;gap:6px;">
+                <button onclick="openPlanViewer('${p.id}')" style="flex:1;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:var(--radius);color:#a78bfa;font-family:'DM Mono',monospace;font-size:9px;padding:6px 4px;cursor:pointer;">👁 View</button>
+                <a href="${esc(p.fileUrl)}" download="${esc(p.fileName)}" target="_blank" style="flex:1;text-align:center;background:rgba(90,180,245,0.1);border:1px solid rgba(90,180,245,0.3);border-radius:var(--radius);color:#5ab4f5;font-family:'DM Mono',monospace;font-size:9px;padding:6px 4px;cursor:pointer;text-decoration:none;">⬇️ Download</a>
+                ${canManage ? `<button onclick="deleteJobPlan('${p.id}','${job.id}')" style="flex:1;background:rgba(232,85,85,0.1);border:1px solid rgba(232,85,85,0.3);border-radius:var(--radius);color:#e85555;font-family:'DM Mono',monospace;font-size:9px;padding:6px 4px;cursor:pointer;">🗑️ Delete</button>` : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`}
       </div>`;
   }
 
@@ -15864,6 +15915,208 @@ function _jfRenderTab(job, tab) {
   }
 
   return '';
+}
+
+// ── Job Plans tab helpers ───────────────────────────────────────────────────────
+
+function _jfRefreshOpenFolder(jobId) {
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  if (!job) return;
+  var body = document.getElementById('jfBody');
+  if (body) body.innerHTML = _jfRenderTab(job, 'plans');
+  var bodyEmbedded = document.getElementById('jdFolderBody');
+  if (bodyEmbedded) bodyEmbedded.innerHTML = _jfRenderTab(job, 'plans');
+}
+
+function openUploadPlanModal(jobId) {
+  if (!isAdmin()) return;
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  if (!job) return;
+  document.getElementById('_uploadPlanModal')?.remove();
+  var modal = document.createElement('div');
+  modal.id = '_uploadPlanModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+  modal.innerHTML =
+    '<div style="background:var(--asphalt);border-radius:12px;padding:24px;width:90vw;max-width:420px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:1.2px;color:var(--white);">📋 Upload Job Plan — ' + escHtml(job.name||'') + '</div>' +
+      '<input id="_planFileInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style="width:100%;box-sizing:border-box;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:6px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:13px;padding:10px;" />' +
+      '<button id="_planUploadBtn" onclick="_doUploadJobPlan(\'' + jobId + '\')" style="width:100%;min-height:48px;background:#a78bfa;border:none;border-radius:8px;color:#1a1a1a;font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">💾 Upload</button>' +
+      '<button onclick="document.getElementById(\'_uploadPlanModal\')?.remove()" style="width:100%;min-height:44px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;cursor:pointer;">Cancel</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+async function _doUploadJobPlan(jobId) {
+  if (!isAdmin()) return;
+  var job = (backlogJobs||[]).find(function(j){ return j.id === jobId; });
+  if (!job) return;
+  var fileInput = document.getElementById('_planFileInput');
+  var file = fileInput && fileInput.files && fileInput.files[0];
+  if (!file) { alert('Please select a file to upload.'); return; }
+  var btn = document.getElementById('_planUploadBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⬆ Uploading…'; }
+  var currentUser = localStorage.getItem('dmc_u') || 'unknown';
+  try {
+    var result = await uploadFileToStorage(file, 'job_plans/' + (job.num || jobId), function(pct) {
+      if (btn) btn.textContent = '⬆ ' + Math.round(pct * 100) + '%';
+    });
+    var rec = {
+      id: 'plan_' + Date.now(),
+      jobId: job.id, jobNum: job.num || '',
+      fileName: file.name, fileUrl: result.url, storagePath: result.path, fileType: file.type,
+      uploadedBy: currentUser, uploadedAt: Date.now()
+    };
+    jobPlans.unshift(rec);
+    saveJobPlans();
+    document.getElementById('_uploadPlanModal')?.remove();
+    var lbl = [job.gc, job.name].filter(Boolean).join(' — ') || ('Job #' + (job.num||''));
+    (typeof ADMIN_USERS !== 'undefined' ? ADMIN_USERS : []).forEach(function(u) {
+      pushNotif('info', '📋 Plan Uploaded', file.name + ' uploaded to ' + lbl, job.id, u);
+    });
+    _jfRefreshOpenFolder(jobId);
+  } catch(e) {
+    _logFbError('_doUploadJobPlan', e);
+    alert('Upload failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Upload'; }
+  }
+}
+
+function deleteJobPlan(planId, jobId) {
+  if (!isAdmin()) return;
+  var plan = jobPlans.find(function(p){ return p.id === planId; });
+  if (!plan) return;
+  if (!confirm('Delete "' + plan.fileName + '"? This cannot be undone.')) return;
+  jobPlans = jobPlans.filter(function(p){ return p.id !== planId; });
+  saveJobPlans();
+  _jfRefreshOpenFolder(jobId);
+}
+
+var _pvPlan = null;
+var _pvZoom = 1;
+var _pvRotate = 0;
+var _pvPanX = 0;
+var _pvPanY = 0;
+var _pvDragging = false;
+var _pvDragStartX = 0;
+var _pvDragStartY = 0;
+var _pvPanStartX = 0;
+var _pvPanStartY = 0;
+var _pvKeyHandler = null;
+
+function _pvBtn(icon, fn, title) {
+  return '<button onclick="' + fn + '" title="' + title + '" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:13px;padding:5px 10px;cursor:pointer;">' + icon + '</button>';
+}
+
+function openPlanViewer(planId) {
+  var plan = jobPlans.find(function(p){ return p.id === planId; });
+  if (!plan) return;
+  _pvPlan = plan;
+  _pvZoom = 1; _pvRotate = 0; _pvPanX = 0; _pvPanY = 0;
+  document.getElementById('_pvOverlay')?.remove();
+
+  var fn = (plan.fileName||'').toLowerCase();
+  var isPdf = plan.fileType === 'application/pdf' || /\.pdf$/.test(fn);
+  var isImg = /\.(png|jpe?g)$/.test(fn) || (plan.fileType||'').indexOf('image/') === 0;
+
+  var bodyHtml;
+  if (isPdf) {
+    bodyHtml = '<iframe id="_pvIframe" src="https://docs.google.com/viewer?url=' + encodeURIComponent(plan.fileUrl) + '&embedded=true" style="width:100%;height:100%;border:none;background:#fff;" allowfullscreen></iframe>';
+  } else if (isImg) {
+    bodyHtml = '<img id="_pvImg" src="' + escHtml(plan.fileUrl) + '" style="max-width:100%;max-height:100%;object-fit:contain;" draggable="false" />';
+  } else {
+    bodyHtml = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:14px;text-align:center;padding:20px;">' +
+      '<div>Cannot preview inline — download to open in CAD software.</div>' +
+      '<a href="' + escHtml(plan.fileUrl) + '" download="' + escHtml(plan.fileName) + '" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.4);border-radius:var(--radius);color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:12px;padding:8px 16px;text-decoration:none;">⬇️ Download ' + escHtml(plan.fileName) + '</a>' +
+    '</div>';
+  }
+
+  var ov = document.createElement('div');
+  ov.id = '_pvOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML =
+    '<div style="width:95vw;max-width:1200px;height:90vh;background:var(--asphalt-mid);border-radius:var(--radius-lg);display:flex;flex-direction:column;overflow:hidden;">' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--asphalt-light);flex-wrap:wrap;">' +
+        '<span style="flex:1;min-width:120px;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(plan.fileName||'') + '</span>' +
+        _pvBtn('🔍+', '_pvZoomIn()', 'Zoom In') +
+        _pvBtn('🔍-', '_pvZoomOut()', 'Zoom Out') +
+        _pvBtn('↺', '_pvRotateLeft()', 'Rotate Left') +
+        _pvBtn('↻', '_pvRotateRight()', 'Rotate Right') +
+        _pvBtn('⤢', '_pvFit()', 'Fit to Screen') +
+        '<a href="' + escHtml(plan.fileUrl) + '" download="' + escHtml(plan.fileName) + '" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 10px;cursor:pointer;text-decoration:none;">⬇️ Download</a>' +
+        '<button onclick="closePlanViewer()" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 10px;cursor:pointer;">✕ Close</button>' +
+      '</div>' +
+      '<div id="_pvViewport" style="flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#1a1a1a;">' +
+        '<div id="_pvContent" style="transform-origin:center center;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">' + bodyHtml + '</div>' +
+      '</div>' +
+    '</div>';
+  ov.addEventListener('click', function(e){ if (e.target === ov) closePlanViewer(); });
+  document.body.appendChild(ov);
+
+  var vp = document.getElementById('_pvViewport');
+  vp.addEventListener('mousedown', _pvDragStart);
+  vp.addEventListener('mousemove', _pvDragMove);
+  vp.addEventListener('mouseup', _pvDragEnd);
+  vp.addEventListener('mouseleave', _pvDragEnd);
+  vp.addEventListener('touchstart', _pvDragStart, {passive:true});
+  vp.addEventListener('touchmove', _pvDragMove, {passive:false});
+  vp.addEventListener('touchend', _pvDragEnd);
+
+  _pvKeyHandler = function(e) {
+    if (e.key === '+' || e.key === '=') { _pvZoomIn(); }
+    else if (e.key === '-') { _pvZoomOut(); }
+    else if (e.key === 'r' || e.key === 'R') { _pvRotateRight(); }
+    else if (e.key === 'Escape') { closePlanViewer(); }
+  };
+  document.addEventListener('keydown', _pvKeyHandler);
+
+  _pvSetTransform();
+}
+
+function _pvSetTransform() {
+  var el = document.getElementById('_pvContent');
+  if (!el) return;
+  el.style.transform = 'translate(' + _pvPanX + 'px,' + _pvPanY + 'px) scale(' + _pvZoom + ') rotate(' + _pvRotate + 'deg)';
+}
+
+function _pvZoomIn()  { _pvZoom = Math.min(4, +(_pvZoom + 0.1).toFixed(2)); _pvSetTransform(); }
+function _pvZoomOut() { _pvZoom = Math.max(0.25, +(_pvZoom - 0.1).toFixed(2)); _pvSetTransform(); }
+function _pvRotateLeft()  { _pvRotate -= 90; _pvSetTransform(); }
+function _pvRotateRight() { _pvRotate += 90; _pvSetTransform(); }
+function _pvFit() { _pvZoom = 1; _pvRotate = 0; _pvPanX = 0; _pvPanY = 0; _pvSetTransform(); }
+
+function _pvDragStart(e) {
+  var isTouch = e.type === 'touchstart';
+  if (isTouch) {
+    if (e.touches.length !== 1) return;
+  } else if (e.button !== 1) {
+    return;
+  }
+  var point = isTouch ? e.touches[0] : e;
+  _pvDragging = true;
+  _pvDragStartX = point.clientX;
+  _pvDragStartY = point.clientY;
+  _pvPanStartX = _pvPanX;
+  _pvPanStartY = _pvPanY;
+  if (!isTouch) e.preventDefault();
+}
+
+function _pvDragMove(e) {
+  if (!_pvDragging) return;
+  var isTouch = e.type === 'touchmove';
+  if (isTouch && e.touches.length !== 1) return;
+  var point = isTouch ? e.touches[0] : e;
+  _pvPanX = _pvPanStartX + (point.clientX - _pvDragStartX);
+  _pvPanY = _pvPanStartY + (point.clientY - _pvDragStartY);
+  if (isTouch) e.preventDefault();
+  _pvSetTransform();
+}
+
+function _pvDragEnd() { _pvDragging = false; }
+
+function closePlanViewer() {
+  document.getElementById('_pvOverlay')?.remove();
+  if (_pvKeyHandler) { document.removeEventListener('keydown', _pvKeyHandler); _pvKeyHandler = null; }
 }
 
 // ── Takeoffs tab helpers ───────────────────────────────────────────────────────
