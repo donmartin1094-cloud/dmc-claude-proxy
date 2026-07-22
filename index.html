@@ -5273,8 +5273,96 @@ function _toNtStart() {
   _toNtMode = null;
   var modal = document.getElementById('toNewTakeoffModal');
   if (modal) modal.remove();
+
+  // Awarded jobs may already have plans on file in the Job Directory —
+  // offer to reuse one instead of asking for a fresh upload.
+  var _toNtMatchingPlans = (folder.linkedJobNum && typeof jobPlans !== 'undefined')
+    ? jobPlans.filter(function(p) { return p.jobNum === folder.linkedJobNum; })
+    : [];
+  if (_toNtMatchingPlans.length) {
+    _toNtShowPlanPickerModal(folder, _toNtMatchingPlans);
+    return;
+  }
+
   var container = document.getElementById('secPopupBody');
   if (container) _renderTakeoffPortal(container);
+}
+
+// ── Reuse an existing Job Directory plan for a new takeoff session ──────────
+
+function _toNtShowPlanPickerModal(folder, plans) {
+  document.getElementById('toNtPlanPickerModal')?.remove();
+  var fmtDate = function(t) { if (!t) return '—'; try { return new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); } catch(e) { return ''; } };
+  var typeOf = function(p) {
+    var fn = (p.fileName||'').toLowerCase();
+    if (p.fileType === 'application/pdf' || /\.pdf$/.test(fn)) return 'PDF';
+    if (/\.dwg$/.test(fn)) return 'DWG';
+    if (/\.dxf$/.test(fn)) return 'DXF';
+    if (/\.png$/.test(fn) || p.fileType === 'image/png') return 'PNG';
+    if (/\.jpe?g$/.test(fn) || (p.fileType||'').indexOf('jpeg') !== -1) return 'JPG';
+    return (fn.split('.').pop()||'FILE').toUpperCase();
+  };
+  var rowsHtml = plans.map(function(p) {
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #333;border-radius:6px;margin-bottom:8px;background:#1c1c1c;">' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:#f9f7f3;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(p.fileName||'') + '</div>' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#9b9488;margin-top:2px;">' + escHtml(typeOf(p)) + ' · ' + fmtDate(p.uploadedAt) + '</div>' +
+      '</div>' +
+      '<button onclick="_toNtUsePlan(\'' + folder.id + '\',\'' + p.id + '\')" style="background:rgba(245,197,24,0.15);border:1px solid #f5c518;border-radius:4px;color:#f5c518;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:8px 14px;cursor:pointer;white-space:nowrap;flex-shrink:0;">Use This Plan</button>' +
+    '</div>';
+  }).join('');
+  var d = document.createElement('div');
+  d.id = 'toNtPlanPickerModal';
+  d.style.cssText = 'position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);';
+  d.innerHTML =
+    '<div style="background:#252525;border:2px solid #f5c518;border-radius:12px;padding:28px 32px;width:min(480px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.85);">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:2px;color:#f5c518;margin-bottom:8px;">📋 Plans Available for ' + escHtml(folder.name||'') + '</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:#c9c4bb;margin-bottom:16px;line-height:1.5;">Plans have already been uploaded for this job. Would you like to use one of them or upload a new plan?</div>' +
+      '<div id="toNtPlanList">' + rowsHtml + '</div>' +
+      '<button onclick="_toNtUploadNew(\'' + folder.id + '\')" style="width:100%;background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.4);border-radius:6px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:10px;cursor:pointer;margin-top:4px;">+ Upload New Plan</button>' +
+      '<button onclick="_toNtCancelPlanPicker(\'' + folder.id + '\')" style="width:100%;background:none;border:1px solid #555;border-radius:6px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;padding:10px;cursor:pointer;margin-top:8px;">Cancel</button>' +
+    '</div>';
+  document.body.appendChild(d);
+}
+
+function _toNtCancelPlanPicker(folderId) {
+  document.getElementById('toNtPlanPickerModal')?.remove();
+  _toFoldersLoad();
+  takeoffFolders = takeoffFolders.filter(function(f) { return f.id !== folderId; });
+  _toFoldersSave();
+  if (_toSessionFolderId === folderId) _toSessionFolderId = null;
+}
+
+function _toNtUploadNew(folderId) {
+  document.getElementById('toNtPlanPickerModal')?.remove();
+  var container = document.getElementById('secPopupBody');
+  if (container) _renderTakeoffPortal(container);
+}
+
+async function _toNtUsePlan(folderId, planId) {
+  var plan = (typeof jobPlans !== 'undefined' ? jobPlans : []).find(function(p) { return p.id === planId; });
+  document.getElementById('toNtPlanPickerModal')?.remove();
+  var container = document.getElementById('secPopupBody');
+  if (container) _renderTakeoffPortal(container);
+  if (!plan) { _toUpdateStatus('⚠ Could not load plan — please upload manually'); return; }
+  try {
+    var resp = await fetch(plan.fileUrl);
+    if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+    var blob = await resp.blob();
+    var file = new File([blob], plan.fileName || 'plan.pdf', { type: 'application/pdf' });
+    // Feed the fetched file through the existing #toWinFile input/handler
+    // unchanged — same code path as a manual upload, no portal changes needed.
+    var input = document.getElementById('toWinFile');
+    if (input) {
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change'));
+    }
+  } catch(e) {
+    _logFbError('_toNtUsePlan', e);
+    _toUpdateStatus('⚠ Could not load plan — please upload manually');
+  }
 }
 
 // ── Link Bid Folder to Job Directory ─────────────────────────────────────────
