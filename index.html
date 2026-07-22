@@ -16003,27 +16003,37 @@ var _pvDragStartY = 0;
 var _pvPanStartX = 0;
 var _pvPanStartY = 0;
 var _pvKeyHandler = null;
+var _pvFileKind = null;     // 'pdf' | 'img' | 'other'
+var _pvPdfDoc = null;       // PDF.js document, when _pvFileKind === 'pdf'
+var _pvPdfPage = 1;
+var _pvPdfNumPages = 1;
 
 function _pvBtn(icon, fn, title) {
   return '<button onclick="' + fn + '" title="' + title + '" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:13px;padding:5px 10px;cursor:pointer;">' + icon + '</button>';
 }
 
-function openPlanViewer(planId) {
+async function openPlanViewer(planId) {
   var plan = jobPlans.find(function(p){ return p.id === planId; });
   if (!plan) return;
   _pvPlan = plan;
   _pvZoom = 1; _pvRotate = 0; _pvPanX = 0; _pvPanY = 0;
+  _pvPdfDoc = null; _pvPdfPage = 1; _pvPdfNumPages = 1;
   document.getElementById('_pvOverlay')?.remove();
 
   var fn = (plan.fileName||'').toLowerCase();
   var isPdf = plan.fileType === 'application/pdf' || /\.pdf$/.test(fn);
   var isImg = /\.(png|jpe?g)$/.test(fn) || (plan.fileType||'').indexOf('image/') === 0;
+  _pvFileKind = isPdf ? 'pdf' : (isImg ? 'img' : 'other');
 
   var bodyHtml;
   if (isPdf) {
-    bodyHtml = '<iframe id="_pvIframe" src="https://docs.google.com/viewer?url=' + encodeURIComponent(plan.fileUrl) + '&embedded=true" style="width:100%;height:100%;border:none;background:#fff;" allowfullscreen></iframe>';
+    // PDF.js canvas render (reuses the same library the takeoff portal loads) —
+    // re-rendered at each zoom step so plans stay sharp instead of CSS-stretched.
+    bodyHtml = '<canvas id="_pvCanvas"></canvas>';
   } else if (isImg) {
-    bodyHtml = '<img id="_pvImg" src="' + escHtml(plan.fileUrl) + '" style="max-width:100%;max-height:100%;object-fit:contain;" draggable="false" />';
+    bodyHtml = '<div id="_pvImgWrap" style="width:100%;flex-shrink:0;">' +
+      '<img id="_pvImg" src="' + escHtml(plan.fileUrl) + '" style="width:100%;height:auto;display:block;image-rendering:high-quality;image-rendering:-webkit-optimize-contrast;" draggable="false" />' +
+    '</div>';
   } else {
     bodyHtml = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:14px;text-align:center;padding:20px;">' +
       '<div>Cannot preview inline — download to open in CAD software.</div>' +
@@ -16038,6 +16048,9 @@ function openPlanViewer(planId) {
     '<div style="width:95vw;max-width:1200px;height:90vh;background:var(--asphalt-mid);border-radius:var(--radius-lg);display:flex;flex-direction:column;overflow:hidden;">' +
       '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--asphalt-light);flex-wrap:wrap;">' +
         '<span style="flex:1;min-width:120px;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(plan.fileName||'') + '</span>' +
+        (isPdf ? ('<span id="_pvPageInfo" style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">Page 1/1</span>' +
+          _pvBtn('‹', '_pvChangePage(-1)', 'Previous Page') +
+          _pvBtn('›', '_pvChangePage(1)', 'Next Page')) : '') +
         _pvBtn('🔍+', '_pvZoomIn()', 'Zoom In') +
         _pvBtn('🔍-', '_pvZoomOut()', 'Zoom Out') +
         _pvBtn('↺', '_pvRotateLeft()', 'Rotate Left') +
@@ -16071,19 +16084,69 @@ function openPlanViewer(planId) {
   document.addEventListener('keydown', _pvKeyHandler);
 
   _pvSetTransform();
+
+  if (isPdf) {
+    try {
+      await _toLoadPdfJs(); // reuse the takeoff portal's PDF.js loader — do not load it twice
+      _pvPdfDoc = await pdfjsLib.getDocument(plan.fileUrl).promise;
+      _pvPdfNumPages = _pvPdfDoc.numPages;
+      _pvPdfPage = 1;
+      await _pvRenderPdfPage();
+    } catch(e) { _logFbError('openPlanViewer:pdf', e); }
+  }
+}
+
+// Re-renders the PDF.js canvas at 2x the current zoom (device-pixel-ratio
+// compensation) and displays it at the true on-screen size via CSS width/height —
+// crisp at any zoom level instead of CSS-stretching a fixed-resolution raster.
+async function _pvRenderPdfPage() {
+  if (!_pvPdfDoc) return;
+  var canvas = document.getElementById('_pvCanvas');
+  if (!canvas) return;
+  var page = await _pvPdfDoc.getPage(_pvPdfPage);
+  var _renderScale = _pvZoom * 2;
+  var _viewport = page.getViewport({ scale: _renderScale });
+  canvas.width = _viewport.width;
+  canvas.height = _viewport.height;
+  canvas.style.width = (_viewport.width / 2) + 'px';
+  canvas.style.height = (_viewport.height / 2) + 'px';
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: _viewport }).promise;
+  var pi = document.getElementById('_pvPageInfo');
+  if (pi) pi.textContent = 'Page ' + _pvPdfPage + '/' + _pvPdfNumPages;
+}
+
+async function _pvChangePage(delta) {
+  if (!_pvPdfDoc) return;
+  var np = _pvPdfPage + delta;
+  if (np < 1 || np > _pvPdfNumPages) return;
+  _pvPdfPage = np;
+  await _pvRenderPdfPage();
 }
 
 function _pvSetTransform() {
   var el = document.getElementById('_pvContent');
   if (!el) return;
-  el.style.transform = 'translate(' + _pvPanX + 'px,' + _pvPanY + 'px) scale(' + _pvZoom + ') rotate(' + _pvRotate + 'deg)';
+  // Zoom is applied per file-type in _pvApplyZoom() (canvas re-render for PDFs,
+  // container width for images) — this only ever carries pan + rotation so the
+  // already-sharp content never gets CSS-stretched.
+  el.style.transform = 'translate(' + _pvPanX + 'px,' + _pvPanY + 'px) rotate(' + _pvRotate + 'deg)';
 }
 
-function _pvZoomIn()  { _pvZoom = Math.min(4, +(_pvZoom + 0.1).toFixed(2)); _pvSetTransform(); }
-function _pvZoomOut() { _pvZoom = Math.max(0.25, +(_pvZoom - 0.1).toFixed(2)); _pvSetTransform(); }
+function _pvApplyZoom() {
+  if (_pvFileKind === 'pdf') {
+    _pvRenderPdfPage();
+  } else if (_pvFileKind === 'img') {
+    var wrap = document.getElementById('_pvImgWrap');
+    if (wrap) wrap.style.width = (100 * _pvZoom) + '%';
+  }
+  _pvSetTransform();
+}
+
+function _pvZoomIn()  { _pvZoom = Math.min(4, +(_pvZoom + 0.1).toFixed(2)); _pvApplyZoom(); }
+function _pvZoomOut() { _pvZoom = Math.max(0.25, +(_pvZoom - 0.1).toFixed(2)); _pvApplyZoom(); }
 function _pvRotateLeft()  { _pvRotate -= 90; _pvSetTransform(); }
 function _pvRotateRight() { _pvRotate += 90; _pvSetTransform(); }
-function _pvFit() { _pvZoom = 1; _pvRotate = 0; _pvPanX = 0; _pvPanY = 0; _pvSetTransform(); }
+function _pvFit() { _pvZoom = 1; _pvRotate = 0; _pvPanX = 0; _pvPanY = 0; _pvApplyZoom(); }
 
 function _pvDragStart(e) {
   var isTouch = e.type === 'touchstart';
