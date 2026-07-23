@@ -24196,13 +24196,21 @@ function saveForemanReport(report) {
   _checkLocalStorageSize();
   try { fbSet('foreman_reports', reports); } catch(e) {}
 
-  // Update per-employee weekly hours
+  // Update per-employee weekly hours — use each crew member's individual
+  // hours when the report carries them (per-row hours form), else fall back
+  // to a single shared hours value applied to every present member (legacy shape).
   var hoursMap = {};
   try { hoursMap = JSON.parse(localStorage.getItem(EMPLOYEE_HOURS_KEY) || '{}'); } catch(e) {}
-  (report.presentMembers || []).forEach(function(username) {
+  var _frCrewHours = Array.isArray(report.crew)
+    ? report.crew.filter(function(c){ return !c.absent; })
+    : (report.presentMembers || []).map(function(username){ return { username: username, hours: report.hours || 0 }; });
+  _frCrewHours.forEach(function(c) {
+    var username = c.username;
+    var hrs = parseFloat(c.hours) || 0;
+    if (!username || !hrs) return;
     if (!hoursMap[username]) hoursMap[username] = {};
     if (!hoursMap[username][report.weekKey]) hoursMap[username][report.weekKey] = { hours: 0, reportIds: [], verified: false };
-    hoursMap[username][report.weekKey].hours += report.hours;
+    hoursMap[username][report.weekKey].hours += hrs;
     hoursMap[username][report.weekKey].reportIds.push(report.id);
   });
   localStorage.setItem(EMPLOYEE_HOURS_KEY, JSON.stringify(hoursMap));
@@ -24225,180 +24233,246 @@ async function openForemanReport() {
     }
   } catch(e) {}
   var crewMembers = getCrewForForeman(u);
-  // No hard block here — step 0 already shows "No laborers assigned to you yet"
-  // when crewMembers is empty, and submitting with zero crew is valid.
+  // No hard block here — an empty crew still renders (with a friendly notice)
+  // and submitting with zero crew is valid.
 
-  // State
-  var step = 0; // 0=full crew?, 1=attendance, 2=hours, 3=confirm
-  var absentUsernames = new Set();
-  var selectedHours = 8;
-  var customHours = '';
+  var today = new Date();
+  var todayLabel = today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+
+  var foremanAcct = DEFAULT_TEAM_ACCOUNTS.find(function(a){ return a.username.toLowerCase() === u.toLowerCase(); });
+  var foremanDisplay = foremanAcct ? foremanAcct.displayName : u;
+  var slot = foremanDisplay.toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom';
+  var schedSlot = (typeof schedData !== 'undefined' && schedData[todayKey]) ? schedData[todayKey][slot] : null;
+  var f = (schedSlot && schedSlot.fields) ? schedSlot.fields : {};
+  var _bj = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j){
+    return f.jobNum && (j.num||'').toString().trim() === (f.jobNum||'').toString().trim();
+  });
+  var gcName = f.gcName || (_bj && _bj.gc) || '';
+
+  // ── Form state ───────────────────────────────────────────────────────────
+  var laborRows = crewMembers.map(function(m) {
+    return { username: m.username, displayName: m.displayName || m.username, role: m.role || '', hours: '', absent: false };
+  });
+  var wheelHours = '';
+  var opsRaw = (f.operators || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var operatorRows = opsRaw.map(function(name){ return { name: name, hours: '' }; });
+  var mixItemsFromSched = (typeof parseMaterialField === 'function') ? parseMaterialField(f.material || '') : [];
+  var mixRows = mixItemsFromSched.map(function(item) {
+    var label = (typeof matDisplayName === 'function' ? matDisplayName(item.name) : item.name) || item.name || '';
+    return { name: label, qty: '' };
+  });
   var jobNote = '';
+
+  var _frHoursOptions = [];
+  for (var _fhI = 1; _fhI <= 32; _fhI++) { _frHoursOptions.push(_fhI * 0.5); }
+
+  var isMobile = window.innerWidth <= 600;
 
   var dlg = document.createElement('div');
   dlg.id = '_frDlg';
-  dlg.style.cssText = 'position:fixed;inset:0;z-index:9500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.72);';
+  dlg.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);';
 
-  function render() {
-    var today = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-    var stepHtml = '';
-
-    if (step === 0) {
-      var crewNames = crewMembers.map(function(m){ return m.displayName||m.username; }).join(', ');
-      stepHtml = '<div style="padding:24px 16px;display:flex;flex-direction:column;gap:14px;align-items:center;">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;color:var(--white);text-align:center;">Did you have a full crew today?</div>' +
-        (crewMembers.length ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);text-align:center;max-width:280px;">Expected crew: ' + escHtml(crewNames) + '</div>' : '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#f59e0b;text-align:center;">No laborers assigned to you yet.<br>Add them in Settings → Roster → Employees.</div>') +
-        '<div style="display:flex;gap:12px;width:100%;max-width:280px;">' +
-          '<button onclick="window._frFullCrew(true)" style="flex:1;padding:16px;background:rgba(126,203,143,0.12);border:2px solid rgba(126,203,143,0.4);border-radius:8px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;cursor:pointer;">✓ Yes</button>' +
-          '<button onclick="window._frFullCrew(false)" style="flex:1;padding:16px;background:rgba(255,100,100,0.08);border:2px solid rgba(255,100,100,0.3);border-radius:8px;color:#ff6464;font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;cursor:pointer;">✕ No</button>' +
-        '</div>' +
-      '</div>';
-    }
-
-    if (step === 1) {
-      var memberRows = crewMembers.map(function(m) {
-        var absent = absentUsernames.has(m.username);
-        return '<div onclick="window._frToggleAbsent(\'' + m.username + '\')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;background:' + (absent ? 'rgba(255,100,100,0.06)' : 'transparent') + ';">' +
-          '<div style="width:20px;height:20px;border-radius:4px;border:2px solid ' + (absent ? '#ff6464' : '#7ecb8f') + ';background:' + (absent ? 'rgba(255,100,100,0.15)' : 'rgba(126,203,143,0.12)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;">' + (absent ? '✕' : '✓') + '</div>' +
-          '<div style="font-family:\'DM Mono\',monospace;font-size:12px;color:' + (absent ? '#ff6464' : 'var(--white)') + ';font-weight:600;">' + escHtml(m.displayName || m.username) + '</div>' +
-          '<div style="margin-left:auto;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + escHtml(m.role || '') + '</div>' +
-        '</div>';
-      }).join('');
-      var presentCount = crewMembers.length - absentUsernames.size;
-      stepHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);padding:10px 16px 6px;border-bottom:1px solid rgba(255,255,255,0.06);">Tap a name to mark absent · ' + presentCount + '/' + crewMembers.length + ' present</div>' +
-        '<div style="overflow-y:auto;max-height:40vh;WebkitOverflowScrolling:touch;">' + memberRows + '</div>';
-    }
-
-    if (step === 2) {
-      var hrs = [6,7,8,9,10,11,12];
-      var hBtns = hrs.map(function(h) {
-        return '<button onclick="window._frSetHours(' + h + ')" style="flex:1;padding:10px 4px;background:' + (selectedHours===h ? 'rgba(245,197,24,0.2)' : 'rgba(255,255,255,0.05)') + ';border:2px solid ' + (selectedHours===h ? 'var(--stripe)' : 'rgba(255,255,255,0.1)') + ';border-radius:6px;color:' + (selectedHours===h ? 'var(--stripe)' : 'var(--concrete)') + ';font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;">' + h + '</button>';
-      }).join('');
-      var presentNames = crewMembers.filter(function(m){ return !absentUsernames.has(m.username); }).map(function(m){ return m.displayName||m.username; }).join(', ');
-      stepHtml = '<div style="padding:14px 16px;">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Hours Worked Today</div>' +
-        '<div style="display:flex;gap:6px;margin-bottom:12px;">' + hBtns + '</div>' +
-        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
-          '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">Other:</span>' +
-          '<input id="_frCustomHrs" type="number" min="1" max="16" placeholder="e.g. 9.5" value="' + (customHours||'') + '" oninput="window._frSetCustomHours(this.value)" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:14px;padding:7px 10px;">' +
-        '</div>' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Job / Notes (optional)</div>' +
-        '<input id="_frJobNote" type="text" placeholder="Job name or site notes…" value="' + escHtml(jobNote) + '" oninput="window._frSetNote(this.value)" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:14px;padding:8px 10px;box-sizing:border-box;margin-bottom:10px;">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:rgba(126,203,143,0.7);margin-top:2px;">Present: ' + escHtml(presentNames) + '</div>' +
-      '</div>';
-    }
-
-    if (step === 3) {
-      var present = crewMembers.filter(function(m){ return !absentUsernames.has(m.username); });
-      var absent  = crewMembers.filter(function(m){ return absentUsernames.has(m.username); });
-      var hrs3 = customHours ? parseFloat(customHours) : selectedHours;
-      stepHtml = '<div style="padding:14px 16px;">' +
-        '<div style="display:flex;flex-direction:column;gap:8px;">' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 10px;background:rgba(245,197,24,0.06);border:1px solid rgba(245,197,24,0.2);border-radius:6px;">' +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">Date</span>' +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);">' + today + '</span>' +
-          '</div>' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 10px;background:rgba(126,203,143,0.06);border:1px solid rgba(126,203,143,0.2);border-radius:6px;">' +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">Hours</span>' +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#7ecb8f;">' + hrs3 + ' hrs</span>' +
-          '</div>' +
-          '<div style="padding:8px 10px;background:rgba(90,180,245,0.06);border:1px solid rgba(90,180,245,0.2);border-radius:6px;">' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:4px;">Present (' + present.length + ')</div>' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#7ecb8f;">' + present.map(function(m){return m.displayName||m.username;}).join(' · ') + '</div>' +
-          '</div>' +
-          (absent.length ? '<div style="padding:8px 10px;background:rgba(255,100,100,0.06);border:1px solid rgba(255,100,100,0.2);border-radius:6px;">' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:4px;">Absent (' + absent.length + ')</div>' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#ff6464;">' + absent.map(function(m){return m.displayName||m.username;}).join(' · ') + '</div>' +
-          '</div>' : '') +
-          (jobNote ? '<div style="padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);">📝 ' + escHtml(jobNote) + '</div>' : '') +
-        '</div>' +
-      '</div>';
-    }
-
-    var stepLabels = ['Full Crew?','Attendance','Hours','Review'];
-    var stepDots = stepLabels.map(function(l,i){
-      var active = i === step;
-      return '<div style="display:flex;align-items:center;gap:4px;"><div style="width:6px;height:6px;border-radius:50%;background:' + (active?'var(--stripe)':'rgba(255,255,255,0.2)') + ';"></div><span style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + (active?'var(--stripe)':'rgba(255,255,255,0.3)') + ';">' + l + '</span></div>';
-    }).join('');
-
-    var backBtn = step > 0 ? '<button onclick="window._frStep(-1)" style="flex:1;padding:12px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">← Back</button>' : '<button onclick="document.getElementById(\'_frDlg\').remove()" style="flex:1;padding:12px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">Cancel</button>';
-    var nextLabel = step === 3 ? '✓ Submit Report' : 'Next →';
-    var nextColor = step === 3 ? '#7ecb8f' : 'var(--stripe)';
-    var nextBg    = step === 3 ? 'rgba(126,203,143,0.15)' : 'rgba(245,197,24,0.12)';
-    var nextBorder= step === 3 ? 'rgba(126,203,143,0.4)' : 'rgba(245,197,24,0.4)';
-    // Step 0 has its own Yes/No buttons — hide the generic Next button
-    if (step === 0) { nextLabel = ''; }
-
-    dlg.innerHTML = '<div style="background:var(--asphalt-mid);border-radius:16px 16px 0 0;border-top:3px solid var(--stripe);width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,0.6);">' +
-      '<div style="padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
-        '<div>' +
-          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--stripe);">📋 Foreman Report</div>' +
-          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-top:2px;">' + today + '</div>' +
-        '</div>' +
-        '<div style="display:flex;gap:8px;align-items:center;">' + stepDots + '</div>' +
-      '</div>' +
-      '<div style="flex:1;overflow-y:auto;WebkitOverflowScrolling:touch;">' + stepHtml + '</div>' +
-      '<div style="display:flex;gap:8px;padding:12px 16px 20px;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;">' +
-        backBtn +
-        (step === 0 ? '' : '<button onclick="window._frStep(1)" style="flex:2;padding:12px;background:' + nextBg + ';border:1px solid ' + nextBorder + ';border-radius:6px;color:' + nextColor + ';font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;min-height:48px;touch-action:manipulation;">' + nextLabel + '</button>') +
-      '</div>' +
-    '</div>';
+  function _frRecalcTonnage() {
+    var total = mixRows.reduce(function(s,r){ return s + (parseFloat(r.qty)||0); }, 0);
+    var el = document.getElementById('_frTonnageTotal');
+    if (el) el.textContent = total.toFixed(1) + ' T';
   }
 
-  window._frFullCrew = function(yes) {
-    absentUsernames = new Set();
-    step = yes ? 2 : 1; // Yes → skip attendance; No → show attendance
+  function render() {
+    var laborHtml = laborRows.length ? laborRows.map(function(row, idx) {
+      var absent = row.absent;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.06);' + (absent?'opacity:0.5;':'') + '">' +
+        '<button onclick="window._frToggleAbsent(' + idx + ')" title="Tap to mark ' + (absent?'present':'absent') + '" style="width:26px;height:26px;flex-shrink:0;border-radius:5px;border:2px solid ' + (absent?'#ff6464':'#7ecb8f') + ';background:' + (absent?'rgba(255,100,100,0.15)':'rgba(126,203,143,0.12)') + ';color:' + (absent?'#ff6464':'#7ecb8f') + ';font-size:12px;cursor:pointer;">' + (absent?'✕':'✓') + '</button>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(row.displayName) + '</div>' +
+          (row.role ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + escHtml(row.role) + '</div>' : '') +
+        '</div>' +
+        '<input type="number" step="0.5" min="0" max="24" placeholder="hrs" value="' + escHtml(row.hours) + '" ' + (absent?'disabled':'') + ' oninput="window._frLaborHours(' + idx + ',this.value)" ' +
+          'style="width:70px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
+      '</div>';
+    }).join('') : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#f59e0b;padding:10px 0;">No laborers assigned to you yet.<br>Add them in Settings → Roster → Employees.</div>';
+
+    var wheelOptionsHtml = '<option value="">—</option>' + _frHoursOptions.map(function(h) {
+      return '<option value="' + h + '"' + (String(h)===String(wheelHours)?' selected':'') + '>' + h.toFixed(1) + '</option>';
+    }).join('');
+
+    var operatorsHtml = operatorRows.map(function(row, idx) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">' +
+        '<input type="text" placeholder="Operator name" value="' + escHtml(row.name) + '" oninput="window._frOperatorName(' + idx + ',this.value)" ' +
+          'style="flex:1;min-width:0;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:12px;padding:6px 10px;">' +
+        '<input type="number" step="0.5" min="0" max="24" placeholder="hrs" value="' + escHtml(row.hours) + '" oninput="window._frOperatorHours(' + idx + ',this.value)" ' +
+          'style="width:70px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
+        '<button onclick="window._frRemoveOperator(' + idx + ')" style="background:none;border:none;color:var(--concrete-dim);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button>' +
+      '</div>';
+    }).join('');
+
+    var mixHtml = mixRows.map(function(row, idx) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">' +
+        '<input type="text" placeholder="Mix type" value="' + escHtml(row.name) + '" oninput="window._frMixName(' + idx + ',this.value)" ' +
+          'style="flex:1;min-width:0;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:12px;padding:6px 10px;">' +
+        '<input type="number" step="0.1" min="0" placeholder="tons" value="' + escHtml(row.qty) + '" oninput="window._frMixQty(' + idx + ',this.value)" ' +
+          'style="width:80px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
+        '<button onclick="window._frRemoveMix(' + idx + ')" style="background:none;border:none;color:var(--concrete-dim);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button>' +
+      '</div>';
+    }).join('');
+
+    var jobChip = function(label, value) {
+      return '<div style="flex:1;min-width:0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:.6px;text-transform:uppercase;color:var(--concrete-dim);">' + label + '</div>' +
+        '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(value || '—') + '</div>' +
+      '</div>';
+    };
+
+    dlg.innerHTML =
+      '<div style="position:relative;width:' + (isMobile?'95vw':'90vw') + ';max-width:680px;max-height:90vh;overflow-y:auto;background:var(--asphalt-mid);border-radius:12px;padding:24px;z-index:9001;box-shadow:0 20px 60px rgba(0,0,0,0.6);box-sizing:border-box;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">' +
+          '<div>' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:2px;color:var(--stripe);">📋 Foreman Report</div>' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-top:2px;">' + todayLabel + '</div>' +
+          '</div>' +
+          '<button onclick="document.getElementById(\'_frDlg\').remove()" style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-size:16px;padding:6px 12px;min-height:44px;cursor:pointer;">✕</button>' +
+        '</div>' +
+
+        '<div style="display:flex;gap:8px;margin-bottom:20px;' + (isMobile?'flex-direction:column;':'') + '">' +
+          jobChip('GC Name', gcName) + jobChip('Project Name', f.jobName) + jobChip('Job #', f.jobNum) +
+        '</div>' +
+
+        '<div style="margin-bottom:20px;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Crew</div>' +
+          '<div style="text-align:center;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px;margin-bottom:10px;">' +
+            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-bottom:6px;">Set hours for all crew:</div>' +
+            '<select onchange="window._frWheelChange(this.value)" style="min-height:44px;min-width:120px;background:rgba(255,255,255,0.08);border:1px solid rgba(167,139,250,0.4);border-radius:6px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;text-align:center;padding:6px 12px;">' + wheelOptionsHtml + '</select>' +
+          '</div>' +
+          '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">' + laborHtml + '</div>' +
+        '</div>' +
+
+        '<div style="margin-bottom:20px;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Operators (enter hours individually)</div>' +
+          operatorsHtml +
+          '<button onclick="window._frAddOperator()" style="width:100%;margin-top:6px;min-height:44px;background:rgba(90,180,245,0.08);border:1px dashed rgba(90,180,245,0.35);border-radius:6px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">+ Add Operator</button>' +
+        '</div>' +
+
+        '<div style="margin-bottom:16px;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types</div>' +
+          mixHtml +
+          '<button onclick="window._frAddMix()" style="width:100%;margin-top:6px;min-height:44px;background:rgba(245,197,24,0.08);border:1px dashed rgba(245,197,24,0.35);border-radius:6px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">+ Add Mix</button>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:6px;">' +
+            '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">Total Tonnage:</span>' +
+            '<span id="_frTonnageTotal" style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;color:#a78bfa;">' + mixRows.reduce(function(s,r){ return s+(parseFloat(r.qty)||0); },0).toFixed(1) + ' T</span>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="margin-bottom:20px;">' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:6px;">Notes (optional)</div>' +
+          '<textarea oninput="window._frSetNote(this.value)" placeholder="Site notes…" style="width:100%;min-height:60px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:12px;padding:8px 10px;">' + escHtml(jobNote) + '</textarea>' +
+        '</div>' +
+
+        '<div style="display:flex;gap:8px;">' +
+          '<button onclick="document.getElementById(\'_frDlg\').remove()" style="flex:1;min-height:48px;background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">Cancel</button>' +
+          '<button onclick="window._frSubmit()" style="flex:2;min-height:48px;background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);border-radius:6px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;">✓ Submit Report</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  window._frToggleAbsent = function(idx) {
+    laborRows[idx].absent = !laborRows[idx].absent;
     render();
   };
-  window._frToggleAbsent = function(username) {
-    if (absentUsernames.has(username)) absentUsernames.delete(username);
-    else absentUsernames.add(username);
+  window._frLaborHours = function(idx, v) { laborRows[idx].hours = v; };
+  window._frWheelChange = function(v) {
+    wheelHours = v;
+    laborRows.forEach(function(row) { row.hours = v; });
     render();
   };
-  window._frStep = function(dir) {
-    if (dir === 1 && step === 3) {
-      // Submit
-      var hrs = customHours ? parseFloat(customHours) : selectedHours;
-      if (!hrs || hrs <= 0) { alert('Please enter valid hours.'); return; }
-      var present = crewMembers.filter(function(m){ return !absentUsernames.has(m.username); });
-      var absent  = crewMembers.filter(function(m){ return absentUsernames.has(m.username); });
-      var foremanAcct = DEFAULT_TEAM_ACCOUNTS.find(function(a){ return a.username.toLowerCase() === u.toLowerCase(); });
-      var report = {
-        id: 'fr_' + Date.now().toString(36),
-        foremanUsername: u,
-        foremanDisplay: foremanAcct ? foremanAcct.displayName : u,
-        crewName: foremanAcct && foremanAcct.crew ? foremanAcct.crew : u,
-        date: new Date().toISOString().slice(0, 10),
-        weekKey: getISOWeekKey(),
-        hours: hrs,
-        fullCrew: absentUsernames.size === 0,
-        presentMembers: present.map(function(m){ return m.username; }),
-        presentDisplay: present.map(function(m){ return m.displayName || m.username; }),
-        absentMembers: absent.map(function(m){ return m.username; }),
-        absentDisplay: absent.map(function(m){ return m.displayName || m.username; }),
-        notes: jobNote,
-        submittedAt: Date.now(),
-        verified: false
-      };
-      saveForemanReport(report);
-      document.getElementById('_frDlg').remove();
-      // Refresh home if visible
-      var hv = document.getElementById('homeView');
-      if (hv && hv.style.display !== 'none') { try { renderHomeView(hv); } catch(e) {} }
-      // Confirmation toast
-      var toast = document.createElement('div');
-      toast.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#7ecb8f;color:#000;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;padding:10px 20px;border-radius:20px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
-      toast.textContent = '✓ Report submitted for ' + present.length + ' crew members';
-      document.body.appendChild(toast);
-      setTimeout(function(){ toast.remove(); }, 3000);
-      return;
-    }
-    step = Math.max(0, Math.min(3, step + dir));
-    render();
+  window._frOperatorName = function(idx, v) { operatorRows[idx].name = v; };
+  window._frOperatorHours = function(idx, v) { operatorRows[idx].hours = v; };
+  window._frAddOperator = function() { operatorRows.push({ name:'', hours:'' }); render(); };
+  window._frRemoveOperator = function(idx) { operatorRows.splice(idx,1); render(); };
+  window._frMixName = function(idx, v) { mixRows[idx].name = v; };
+  window._frMixQty = function(idx, v) { mixRows[idx].qty = v; _frRecalcTonnage(); };
+  window._frAddMix = function() { mixRows.push({ name:'', qty:'' }); render(); };
+  window._frRemoveMix = function(idx) { mixRows.splice(idx,1); render(); };
+
+  window._frSubmit = function() {
+    var present = laborRows.filter(function(r){ return !r.absent; });
+    var absent  = laborRows.filter(function(r){ return r.absent; });
+    var totalTonnage = mixRows.reduce(function(s,r){ return s + (parseFloat(r.qty)||0); }, 0);
+    var _wheelHrsNum = parseFloat(wheelHours) || 0;
+
+    var report = {
+      id: 'fr_' + Date.now().toString(36),
+      foremanUsername: u,
+      foremanDisplay: foremanDisplay,
+      date: todayKey,
+      weekKey: getISOWeekKey(),
+      jobNum: f.jobNum || '',
+      jobName: f.jobName || '',
+      gcName: gcName,
+      hours: _wheelHrsNum,
+      fullCrew: absent.length === 0,
+      crew: laborRows.map(function(r){ return { username:r.username, displayName:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
+      presentMembers: present.map(function(m){ return m.username; }),
+      presentDisplay: present.map(function(m){ return m.displayName; }),
+      absentMembers: absent.map(function(m){ return m.username; }),
+      absentDisplay: absent.map(function(m){ return m.displayName; }),
+      operators: operatorRows.filter(function(r){ return r.name; }).map(function(r){ return { name:r.name, hours: parseFloat(r.hours)||0 }; }),
+      mixTypes: mixRows.filter(function(r){ return r.name; }).map(function(r){ return { name:r.name, qty: parseFloat(r.qty)||0 }; }),
+      totalTonnage: totalTonnage,
+      notes: jobNote,
+      submittedAt: Date.now(),
+      verified: false
+    };
+    saveForemanReport(report);
+
+    // ── Populate / update the AR invoice stub for today ──────────────────────
+    try {
+      var mixItemsOut = report.mixTypes.map(function(row){
+        return { mixType: row.name, tonQty: row.qty, mixPrice: 0, itemTotal: 0 };
+      });
+      var existingInv = (invoiceList || []).find(function(inv) {
+        return inv.dateOfWork === todayKey && (inv.foreman||'').toLowerCase() === foremanDisplay.toLowerCase();
+      });
+      if (existingInv) {
+        existingInv.mixItems = mixItemsOut;
+        existingInv.updatedAt = Date.now();
+      } else {
+        var _stub = {
+          id: 'inv_fr_' + Date.now(),
+          dateOfWork: todayKey,
+          foreman: foremanDisplay,
+          jobNo: f.jobNum || '',
+          jobName: f.jobName || '',
+          gcName: gcName,
+          supplier: f.plant || '',
+          invoiceNo: '',
+          mixItems: mixItemsOut,
+          actualTrucking: { dmcCount:0, dmcCost:0, brkRows:[], supCount:0, supCost:0 },
+          approvedAmount: 0,
+          approved: false,
+          billedTotal: 0,
+          invoiceNotes: '',
+          attachments: [],
+          autoGenerated: true,
+          status: 'pending',
+          createdAt: Date.now()
+        };
+        invoiceList.unshift(_stub);
+      }
+      saveInvoiceList();
+    } catch(e) { _logFbError('openForemanReport:invoice', e); }
+
+    document.getElementById('_frDlg').remove();
+    // Refresh home if visible
+    var hv = document.getElementById('homeView');
+    if (hv && hv.style.display !== 'none') { try { renderHomeView(hv); } catch(e) {} }
+    // Confirmation toast — auto-dismisses after 2s
+    var toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#7ecb8f;color:#000;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;padding:10px 20px;border-radius:20px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+    toast.textContent = '✅ Report submitted and invoice updated';
+    document.body.appendChild(toast);
+    setTimeout(function(){ toast.remove(); }, 2000);
   };
-  window._frSetHours = function(h) { selectedHours = h; customHours = ''; render(); };
-  window._frSetCustomHours = function(v) { customHours = v; selectedHours = 0; };
-  window._frSetNote = function(v) { jobNote = v; };
 
   document.body.appendChild(dlg);
   render();
