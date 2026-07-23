@@ -17707,7 +17707,23 @@ function saveInvoiceList() {
   localStorage.setItem(INVOICES_KEY, JSON.stringify(slimList));
   _checkLocalStorageSize();
   try {
-    if (db) fbSet('invoices', slimList);
+    if (db) {
+      // Never write an empty or near-empty invoice list to Firebase — real
+      // invoice lists grow over time, so a sudden drop to 0-2 is a sign of
+      // corruption (e.g. a test/dev session that cleared invoiceList locally).
+      if (invoiceList.length < 3) {
+        var _confirm = window.confirm(
+          'WARNING: Only ' + invoiceList.length + ' invoices found. ' +
+          'Writing this to Firebase will overwrite all existing invoice data. ' +
+          'Are you absolutely sure?'
+        );
+        if (!_confirm) {
+          console.warn('[saveInvoiceList BLOCKED] User cancelled near-empty list write');
+          return;
+        }
+      }
+      fbSet('invoices', slimList);
+    }
   } catch(e) {
     _logFbError('saveInvoiceList', e);
     setSyncBadge('error', e);
@@ -29274,7 +29290,8 @@ function normalizeAccountsRoster(inputAccounts) {
   return normalized;
 }
 
-const firebaseConfig = {
+// PRODUCTION config — never change this
+var _firebaseConfig = {
   apiKey: "AIzaSyA-km_fS86PCEXDpliAObRVJU34svg45Ds",
   authDomain: "dmc-estimate-assistant-bffd6.firebaseapp.com",
   projectId: "dmc-estimate-assistant-bffd6",
@@ -29282,6 +29299,24 @@ const firebaseConfig = {
   messagingSenderId: "214514640148",
   appId: "1:214514640148:web:7a3655d80b900b7a5fce01"
 };
+
+// To use a test environment: set _useTestFirebase = true and fill in a
+// separate Firebase project below — this placeholder never points to production.
+var _useTestFirebase = false;
+var _firebaseConfigTest = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+var firebaseConfig = _useTestFirebase ? _firebaseConfigTest : _firebaseConfig;
+
+// Global read-only kill switch — when true, fbSet() logs instead of writing.
+// Set this via console/test harness for safe testing; never flip the default here.
+var _fbReadOnly = false;
 
 let db = null;
 let storage = null;
@@ -29492,6 +29527,17 @@ function fbCopyErrorLog(btn) {
 
 // ── Firebase app_data helpers ──
 async function fbSet(docName, value) {
+  if (_fbReadOnly) {
+    console.log('[fbSet READ-ONLY] Would have written:', docName, value);
+    return { ok: false, error: 'read-only mode' };
+  }
+  // Block all Firebase writes from automated/headless environments —
+  // navigator.webdriver is true in every Playwright, Puppeteer, and Selenium
+  // session, and false/undefined in every real browser.
+  if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
+    console.warn('[fbSet BLOCKED] Automated browser detected — Firebase write prevented:', docName);
+    return { ok: false, error: 'automated browser blocked' };
+  }
   try {
     if (!db) {
       if (typeof firebase !== 'undefined') {
