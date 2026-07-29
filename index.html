@@ -5007,6 +5007,7 @@ var _TO_QTY_STORE        = 'dmc_to_quantities';
 var _takeoffViewerActive = false;
 var _toSelectedMeasIdx   = null; // Pointer-mode selection — index into _toMeasurements for the current page
 var _toPendingReopen     = null; // {pageNum} set by _toDirPageOpen while its PDF (re)loads, so _toWinFileChanged preserves restored data instead of wiping it
+var _toCurrentPdfFile    = null; // the File object currently loaded into the portal, so _toConfirmSavePage can upload it to Storage
 
 function _renderTakeoffsWindow(container) {
   _renderTakeoffDirectory(container);
@@ -5632,12 +5633,14 @@ async function _toDirFetchAndLoadPdf(url, name) {
     if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
     var blob = await resp.blob();
     var file = new File([blob], name || 'plan.pdf', { type: 'application/pdf' });
+    _toCurrentPdfFile = file;
     var input = document.getElementById('toWinFile');
     if (!input) return false;
     var dt = new DataTransfer();
     dt.items.add(file);
     input.files = dt.files;
     input.dispatchEvent(new Event('change'));
+    document.getElementById('toReopenWarn')?.remove();
     return true;
   } catch(e) {
     _logFbError('_toDirFetchAndLoadPdf', e);
@@ -5651,7 +5654,7 @@ function _toDirShowLoadPdfBanner() {
   _warn.id = 'toReopenWarn';
   _warn.style.cssText = 'background:rgba(90,180,245,0.15);border-bottom:2px solid #5ab4f5;padding:6px 16px;font-family:\'DM Mono\',monospace;font-size:11px;color:#5ab4f5;cursor:pointer;text-align:center;flex-shrink:0;';
   _warn.textContent = '📄 Select the original PDF to continue editing this takeoff — tap here, or use Load PDF above';
-  _warn.onclick = function(){ document.getElementById('toWinFile')?.click(); };
+  _warn.onclick = function(){ this.remove(); document.getElementById('toWinFile')?.click(); };
   var _portal = document.getElementById('toCanvasWrap');
   if (_portal && _portal.parentNode) _portal.parentNode.insertBefore(_warn, _portal);
 }
@@ -5722,7 +5725,16 @@ function _toDirPageOpen(folderId, pageId) {
       if (_linkedPlan) {
         _toDirFetchAndLoadPdf(_linkedPlan.fileUrl, _linkedPlan.fileName).then(function(ok){ if (!ok) _toDirShowLoadPdfBanner(); });
       } else {
-        _toDirShowLoadPdfBanner();
+        // jobPlans hydrates from localStorage immediately but can still be mid-sync
+        // from Firebase on a fresh load — give it one short retry before giving up.
+        setTimeout(function(){
+          var _retryPlan = _toDirFindLinkedPlan(f, p.pdfName);
+          if (_retryPlan) {
+            _toDirFetchAndLoadPdf(_retryPlan.fileUrl, _retryPlan.fileName).then(function(ok){ if (!ok) _toDirShowLoadPdfBanner(); });
+          } else {
+            _toDirShowLoadPdfBanner();
+          }
+        }, 1500);
       }
     }
   }, 100);
@@ -5783,6 +5795,7 @@ function _renderTakeoffPortal(container) {
 function _toWinFileChanged(e) {
   const f = e.target.files[0]; if (!f) return;
   _toCurrentPdfName = f.name;
+  _toCurrentPdfFile = f;
   // Reopening a saved directory page sets _toPendingReopen before this file input
   // fires (either via auto-fetch or the manual fallback picker) — in that case the
   // measurements/scale/quantities were already restored by _toDirPageOpen() and must
@@ -6194,7 +6207,7 @@ function _toQtySaveForPage() {
   } catch(e) {}
 }
 
-function _toConfirmSavePage() {
+async function _toConfirmSavePage() {
   if (!_toSaveTempData) return;
   var thumbnail    = _toSaveTempData.thumbnail;
   var measurements = _toSaveTempData.measurements;
@@ -6220,7 +6233,20 @@ function _toConfirmSavePage() {
       if (!folder) { alert('Select a folder.'); return; }
     }
   }
-  folder.pages.push({ id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), pageName:pageName, pdfName:pdfName, pageNum:pageNum, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), scale:_toScale||null, notes:notes, savedAt:Date.now() });
+  // Upload the source PDF to Storage once per folder, so _toDirPageOpen() can
+  // reload it automatically next time instead of prompting for a re-pick.
+  // Non-blocking: a failed upload just leaves pdfUrl unset and the save continues.
+  var _pdfUrl = folder.pdfUrl || null;
+  if (!_pdfUrl && _toCurrentPdfFile) {
+    try {
+      var _uploadResult = await uploadFileToStorage(_toCurrentPdfFile, 'takeoff_pdfs/' + folder.id);
+      _pdfUrl = _uploadResult.url;
+      folder.pdfUrl = _pdfUrl;
+    } catch(e) {
+      console.warn('[takeoff] PDF upload failed — save continues without URL:', e);
+    }
+  }
+  folder.pages.push({ id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), pageName:pageName, pdfName:pdfName, pageNum:pageNum, pdfUrl:_pdfUrl, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), scale:_toScale||null, notes:notes, savedAt:Date.now() });
   folder.updatedAt = Date.now();
   _toFoldersSave();
   document.getElementById('toSaveDlg').remove();
