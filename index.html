@@ -4202,6 +4202,7 @@ let _toTool         = null;
 let _toPoints       = [];
 let _toScalePoints  = [];
 let _toMeasurements = [];
+var _toPageMeasurements = {}; // keyed by page number: { 1: [...], 2: [...] } — _toMeasurements always aliases the current page's array
 let _toPdfDoc       = null;
 let _toPdfPage      = 1;
 let _toLineColor    = '#f5c518';
@@ -4314,7 +4315,7 @@ async function _toOpenPortal(file) {
   }
   ov.innerHTML = _toBuildPortalHTML();
   ov.style.display = 'flex';
-  _toMeasurements = []; _toPoints = []; _toScalePoints = []; _toScale = null; _toTool = null; _toZoom = 1.0; _toPageScales = {}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate(); _toTzScale=1; _toTzTx=0; _toTzTy=0;
+  _toMeasurements = []; _toPageMeasurements = {}; _toPoints = []; _toScalePoints = []; _toScale = null; _toTool = null; _toZoom = 1.0; _toPageScales = {}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate(); _toTzScale=1; _toTzTx=0; _toTzTy=0;
   _toUpdateStatus('Loading PDF…');
   try {
     await _toLoadPdfJs();
@@ -4357,6 +4358,13 @@ async function _toRenderPage() {
   const pi = document.getElementById('toPageInfo');
   if (pi) pi.textContent = `Page ${_toPdfPage} / ${_toPdfDoc.numPages}`;
   _toPoints = []; _toScalePoints = []; _toUpdateGhost();
+  // Each page keeps its own measurements — swap in this page's array (creating
+  // it on first visit) instead of leaving whatever page was previously loaded.
+  // _toDrawMeasGroup() already clears #toMeasGroup's contents before redrawing,
+  // so no extra DOM clearing is needed here.
+  if (!_toPageMeasurements[_toPdfPage]) _toPageMeasurements[_toPdfPage] = [];
+  _toMeasurements = _toPageMeasurements[_toPdfPage];
+  _toDrawMeasGroup();
 }
 
 async function _toChangePage(delta) {
@@ -4835,7 +4843,9 @@ function _toUndo() {
 
 function _toClearAll() {
   if (!confirm('Clear all measurements?')) return;
-  _toMeasurements=[]; _toPoints=[]; _toScalePoints=[]; _toScale=null;
+  // Empty in place (not a reassignment) so _toPageMeasurements[_toPdfPage],
+  // which shares this same array reference, is cleared for the current page only.
+  _toMeasurements.length=0; _toPoints=[]; _toScalePoints=[]; _toScale=null;
   delete _toPageScales[_toPdfPage];
   _toDrawMeasGroup(); _toUpdateGhost();
   const d=document.getElementById('toScaleDisplay'); if(d){d.textContent='Scale: not set';d.style.color='#9b9488';}
@@ -5564,8 +5574,14 @@ function _toDirPageOpen(folderId, pageId) {
     _takeoffViewerActive = true;
     var _qov = document.getElementById('toQtyOverlay');
     if (_qov) _qov.style.display = '';
-    // Restore measurements so they're available when PDF is loaded
-    _toMeasurements = p.measurements ? JSON.parse(JSON.stringify(p.measurements)) : [];
+    // Restore every saved page's measurements (not just the one being opened)
+    // so navigating to another already-saved page still shows its own shading.
+    _toPageMeasurements = {};
+    (f.pages||[]).forEach(function(pg) {
+      if (pg.pageNum != null && pg.measurements) _toPageMeasurements[pg.pageNum] = JSON.parse(JSON.stringify(pg.measurements));
+    });
+    if (!_toPageMeasurements[p.pageNum]) _toPageMeasurements[p.pageNum] = p.measurements ? JSON.parse(JSON.stringify(p.measurements)) : [];
+    _toMeasurements = _toPageMeasurements[p.pageNum];
     _toDrawMeasGroup();
     // Restore scale
     if (p.scale) {
@@ -5648,7 +5664,7 @@ function _renderTakeoffPortal(container) {
 function _toWinFileChanged(e) {
   const f = e.target.files[0]; if (!f) return;
   _toCurrentPdfName = f.name;
-  _toMeasurements=[]; _toPoints=[]; _toScalePoints=[]; _toScale=null; _toTool=null; _toZoom=1.0; _toPageScales={}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate(); _toTzResetTransform();
+  _toMeasurements=[]; _toPageMeasurements={}; _toPoints=[]; _toScalePoints=[]; _toScale=null; _toTool=null; _toZoom=1.0; _toPageScales={}; _toLineColor='#f5c518'; _toDotColor='#ffffff'; _toFillColor='#f5c518'; _toColorDotUpdate(); _toTzResetTransform();
   const es = document.getElementById('toEmptyState'); if (es) es.style.display='none';
   const cv = document.getElementById('toCanvas'); if (cv) cv.style.display='block';
   const sv = document.getElementById('toSvgOverlay'); if (sv) sv.style.display='block';
