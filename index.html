@@ -4559,6 +4559,11 @@ function _toActivate(tool) {
   const cur = _toTool ? 'crosshair' : 'default';
   const w = document.getElementById('toCanvasWrap'); if (w) w.style.cursor = cur;
   const s = document.getElementById('toSvgOverlay'); if (s) s.style.cursor = cur;
+  // Let mouse events pass through the quantity overlay to the canvas underneath
+  // while a measurement tool is active; the mousemove listener added in
+  // _toQtyInit() already covers edge-scroll, so this is a redundant safety net.
+  const qov = document.getElementById('toQtyOverlay');
+  if (qov) qov.style.pointerEvents = _toTool ? 'none' : 'auto';
 }
 
 function _toUpdateGhost() {
@@ -5889,6 +5894,11 @@ function _toQtyInit() {
       '</table>' +
     '</div>';
   document.body.appendChild(ov);
+  // #toQtyOverlay is position:fixed at the bottom of the viewport, so it sits on
+  // top of (and swallows mousemove for) the bottom edge-scroll zone of
+  // #toCanvasWrap underneath it. Forward its mousemove into the same shared
+  // edge-scroll check so the bottom trigger still fires while hovering over it.
+  ov.addEventListener('mousemove', function(e) { _toCheckEdgeScroll(e.clientX, e.clientY); });
   _toQtyRender();
 }
 
