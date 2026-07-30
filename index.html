@@ -5888,11 +5888,18 @@ function _toWinFileChanged(e) {
     await _toRenderPage(); _toBindEvents();
     _toUpdateStatus('Ready — 📐 Set Scale first, then measure');
     if (_reopen) {
-      // Quantities/scale for this page already came from the saved folder page
-      // (restored by _toDirPageOpen) — just point the scratch qty store at this
-      // folder+page+PDF combo instead of reloading (and overwriting) from it.
-      _toQtyKey = _toQtyKeyFor(_toPdfPage);
-      _toQtySaveForPage();
+      // Re-derive quantities straight from the authoritative page record instead
+      // of trusting in-memory _toQtyRows or writing into the scratch cache —
+      // if a second folder was opened before this fetch resolved, both of those
+      // could reflect the wrong session by the time this callback finally runs.
+      // _toSessionFolderId/_toPdfPage always reflect whichever folder+page is
+      // CURRENTLY active, so re-reading takeoffFolders here can't cross-write
+      // one folder's rows into another folder's cache slot.
+      var _reopenFolder = takeoffFolders.find(function(x){ return x.id === _toSessionFolderId; });
+      var _reopenPage = _reopenFolder && (_reopenFolder.pages||[]).find(function(pg){ return pg.pageNum === _toPdfPage; });
+      _toQtyRows = (_reopenPage && _reopenPage.quantities) ? JSON.parse(JSON.stringify(_reopenPage.quantities)) : [];
+      _toQtyKey = null; // reopened sessions never read/write the scratch cache
+      _toQtyRender();
       document.getElementById('toReopenWarn')?.remove();
       _toPendingReopen = null;
     } else {
