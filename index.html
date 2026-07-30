@@ -4308,7 +4308,7 @@ function _toBuildPortalHTML() {
 async function _toOpenPortal(file) {
   if (!document.getElementById('toStyles')) {
     const s = document.createElement('style'); s.id = 'toStyles';
-    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@keyframes toAreaPulse{0%{filter:drop-shadow(0 0 4px rgba(255,255,255,0.9));}50%{filter:drop-shadow(0 0 12px rgba(167,139,250,1));}100%{filter:drop-shadow(0 0 4px rgba(255,255,255,0.9));}}.to-selected-area{animation:toAreaPulse 1.5s ease-in-out infinite;stroke:#ffffff !important;stroke-width:4 !important;}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:50vh}#toQtyBody{max-height:50vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}.to-selected-area{animation:none !important;filter:drop-shadow(0 0 8px #a78bfa) !important;}}`;
+    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:50vh}#toQtyBody{max-height:50vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}}@media(max-width:600px){.to-qty-hide-mobile{display:none}}`;
     document.head.appendChild(s);
   }
   let ov = document.getElementById('toPortalOverlay');
@@ -4658,7 +4658,6 @@ function _toDrawMeasGroup() {
       poly.setAttribute('stroke',m.color); poly.setAttribute('stroke-width','2');
       poly.setAttribute('data-meas-idx',idx);
       poly.style.pointerEvents = 'all'; poly.style.cursor = 'pointer';
-      poly.classList.toggle('to-selected-area', isSel);
       poly.style.opacity = isSel ? '1' : (_toSelectedMeasIdx !== null ? '0.4' : '1');
       poly.addEventListener('click', function(e){ if (_toTool !== 'select') return; e.stopPropagation(); _toSelectMeasurement(idx); });
       g.appendChild(poly);
@@ -4674,6 +4673,15 @@ function _toSelectMeasurement(idx) {
   var _wasSame = _toSelectedMeasIdx === idx;
   _toSelectedMeasIdx = _wasSame ? null : idx;
   _toDrawMeasGroup();
+  if (_toSelectedMeasIdx !== null) {
+    var polygon = document.querySelector('#toMeasGroup polygon[data-meas-idx="' + _toSelectedMeasIdx + '"]');
+    if (polygon) {
+      var _measColor = (_toMeasurements[_toSelectedMeasIdx] && _toMeasurements[_toSelectedMeasIdx].color) || '#a78bfa';
+      polygon.style.filter = 'drop-shadow(0 0 8px ' + _measColor + ') drop-shadow(0 0 16px ' + _measColor + ')';
+      polygon.style.stroke = '#ffffff';
+      polygon.style.strokeWidth = '3';
+    }
+  }
   _toQtyRender();
   if (_toSelectedMeasIdx !== null) {
     var _selRow = document.querySelector('#toQtyTbody tr[data-meas-idx="' + _toSelectedMeasIdx + '"]');
@@ -4693,6 +4701,7 @@ function _toDeselectAll() {
 }
 
 function _toQtyRowClick(i) {
+  if (window.innerWidth <= 600) _toQtyRowExpand(i);
   if (_toTool !== 'select') return;
   var row = _toQtyRows[i];
   if (!row || row.measIdx == null) return;
@@ -4721,15 +4730,17 @@ function _toShowAreaDetailModal(idx) {
   var binder = row ? (parseFloat(row.binder) || 0) : (m.depths?.binder || 0);
   var top = row ? (parseFloat(row.top) || 0) : (m.depths?.top || 0);
   var totalDepth = base + binder + top;
+  var baseTons = row ? (parseFloat(row.baseTons) || 0) : (m.tons?.base || 0);
+  var binderTons = row ? (parseFloat(row.binderTons) || 0) : (m.tons?.binder || 0);
+  var topTons = row ? (parseFloat(row.topTons) || 0) : (m.tons?.top || 0);
   var tons = row ? (parseFloat(row.tons) || 0) : (m.tons?.total || 0);
   var title = m.label || row?.area || ('Area ' + (idx + 1));
   var color = m.color || '#a78bfa';
   var d = document.createElement('div');
   d.id = 'toAreaDetailModal';
-  d.style.cssText = 'position:fixed;inset:0;z-index:9700;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);';
-  d.addEventListener('click', function(e) { if (e.target === d) _toDeselectAll(); });
+  d.style.cssText = 'position:fixed;inset:0;z-index:9700;display:flex;align-items:center;justify-content:center;pointer-events:none;';
   d.innerHTML =
-    '<div style="max-width:360px;width:95vw;border-radius:12px;background:var(--asphalt-mid,#252525);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.8);">' +
+    '<div style="max-width:360px;width:95vw;border-radius:12px;background:var(--asphalt-mid,#252525);border:2px solid #a78bfa;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.6);pointer-events:auto;">' +
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">' +
         '<span style="width:12px;height:12px;border-radius:50%;background:' + color + ';flex-shrink:0;display:inline-block;"></span>' +
         '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:#a78bfa;">' + escHtml(title) + '</span>' +
@@ -4741,8 +4752,11 @@ function _toShowAreaDetailModal(idx) {
         _toAreaDetailCell('Binder Depth', binder ? binder + '"' : '—') +
         _toAreaDetailCell('Top Depth', top ? top + '"' : '—') +
         _toAreaDetailCell('Total Depth', totalDepth ? totalDepth.toFixed(2) + '"' : '—') +
-        _toAreaDetailCell('Tons', tons ? tons.toFixed(1) : '—') +
+        _toAreaDetailCell('Base Tons', baseTons ? baseTons.toFixed(1) : '—') +
+        _toAreaDetailCell('Binder Tons', binderTons ? binderTons.toFixed(1) : '—') +
+        _toAreaDetailCell('Top Tons', topTons ? topTons.toFixed(1) : '—') +
       '</div>' +
+      '<div style="text-align:right;font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;color:#a78bfa;margin-bottom:20px;">Total: ' + (tons ? tons.toFixed(1) : '—') + ' tons</div>' +
       '<div style="display:flex;gap:10px;">' +
         '<button onclick="_toDeselectAll()" style="flex:1;background:none;border:1px solid #555;border-radius:6px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;padding:10px;cursor:pointer;">✕ Close</button>' +
         '<button onclick="_toEditAreaFromModal(' + idx + ')" style="flex:1;background:rgba(167,139,250,0.15);border:1px solid #a78bfa;border-radius:6px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:10px;cursor:pointer;">✏️ Edit</button>' +
@@ -4965,7 +4979,9 @@ function _toSaveArea(sqFt, sqYd) {
   // same value already previewed live in the Save Area dialog, so the saved row
   // never drifts from what the user was shown moments earlier.
   var _aqTons = tons.total ? parseFloat(tons.total.toFixed(2)) : 0;
-  _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', base: _aqBase || '', binder: _aqBinder || '', top: _aqTop || '', tons: _aqTons || '', color: color, measIdx: _toMeasurements.length - 1 });
+  _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', base: _aqBase || '', binder: _aqBinder || '', top: _aqTop || '',
+    baseTons: tons.base ? parseFloat(tons.base.toFixed(2)) : '', binderTons: tons.binder ? parseFloat(tons.binder.toFixed(2)) : '', topTons: tons.top ? parseFloat(tons.top.toFixed(2)) : '',
+    tons: _aqTons || '', color: color, measIdx: _toMeasurements.length - 1 });
   _toQtyRender();
   _toQtySaveForPage();
   const tonsSuffix = tons.total ? ' / ' + tons.total.toFixed(1) + 'T total' : '';
@@ -6124,16 +6140,26 @@ function _toQtyInit() {
     '</div>' +
     '<div id="toQtyBody" style="background:#252525;max-height:40vh;overflow-y:auto;">' +
       '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
-        '<thead><tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
-          '<th style="padding:5px 8px;text-align:left;color:#9b9488;font-weight:700;min-width:120px;">Area / Section</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Sq Ft</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:55px;">Sq Yds</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:58px;">Base (in)</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Binder (in)</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:52px;">Top (in)</th>' +
-          '<th style="padding:5px 8px;text-align:right;color:#9b9488;font-weight:700;min-width:60px;">Tons</th>' +
-          '<th style="padding:5px 4px;width:24px;"></th>' +
-        '</tr></thead>' +
+        '<thead>' +
+          '<tr style="background:#1a1a1a;">' +
+            '<th colspan="6"></th>' +
+            '<th colspan="4" style="padding:2px 8px 0;text-align:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;font-weight:400;border-left:2px solid rgba(167,139,250,0.3);">Tonnage</th>' +
+            '<th></th>' +
+          '</tr>' +
+          '<tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
+            '<th style="padding:5px 8px;text-align:left;color:var(--concrete-dim);font-weight:700;min-width:120px;">Area / Section</th>' +
+            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:60px;">Sq Ft</th>' +
+            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:55px;">Sq Yds</th>' +
+            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:58px;">Base (in)</th>' +
+            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:60px;">Binder (in)</th>' +
+            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:52px;">Top (in)</th>' +
+            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:60px;border-left:2px solid rgba(167,139,250,0.3);">Base Tons</th>' +
+            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:64px;">Binder Tons</th>' +
+            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:58px;">Top Tons</th>' +
+            '<th style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:64px;">Total Tons</th>' +
+            '<th style="padding:5px 4px;width:24px;"></th>' +
+          '</tr>' +
+        '</thead>' +
         '<tbody id="toQtyTbody"></tbody>' +
         '<tfoot id="toQtyFoot"></tfoot>' +
       '</table>' +
@@ -6225,6 +6251,9 @@ function _toQtyDock(position) {
   if (!ov) return;
   var bar = document.getElementById('toQtyBar');
   var body = document.getElementById('toQtyBody');
+  var canvasWrap = document.getElementById('toCanvasWrap');
+  var toolbar = document.getElementById('toToolbar') || document.querySelector('.to-toolbar');
+  var toolbarH = toolbar ? toolbar.getBoundingClientRect().height : 48;
   var isMobile = window.innerWidth <= 768;
   var sideWidth = isMobile ? '260px' : '320px';
   ov.style.position = 'fixed';
@@ -6233,29 +6262,34 @@ function _toQtyDock(position) {
   ov.style.overflowY = '';
   if (bar) bar.style.borderTop = bar.style.borderBottom = bar.style.borderLeft = bar.style.borderRight = '';
   if (position === 'top') {
-    ov.style.top = '0'; ov.style.left = '0'; ov.style.right = '0';
+    ov.style.top = toolbarH + 'px'; ov.style.left = '0'; ov.style.right = '0'; ov.style.bottom = 'auto';
     ov.style.width = '100%'; ov.style.maxHeight = '40vh';
-    var toolbar = document.getElementById('toToolbar');
-    ov.style.marginTop = (toolbar ? toolbar.offsetHeight : 0) + 'px';
+    ov.style.borderBottom = '2px solid #a78bfa'; ov.style.borderTop = 'none';
     if (bar) bar.style.borderBottom = '2px solid #a78bfa';
     if (body) body.style.maxHeight = '40vh';
   } else if (position === 'left') {
-    ov.style.left = '0'; ov.style.top = '0'; ov.style.bottom = '0';
-    ov.style.width = sideWidth; ov.style.height = '100%'; ov.style.maxHeight = '100vh';
+    ov.style.left = '0'; ov.style.top = toolbarH + 'px'; ov.style.bottom = '0'; ov.style.right = 'auto';
+    ov.style.width = sideWidth; ov.style.height = 'calc(100vh - ' + toolbarH + 'px)'; ov.style.maxHeight = 'calc(100vh - ' + toolbarH + 'px)';
     ov.style.overflowY = 'auto';
     if (bar) bar.style.borderRight = '2px solid #a78bfa';
     if (body) body.style.maxHeight = 'none';
   } else if (position === 'right') {
-    ov.style.right = '0'; ov.style.top = '0'; ov.style.bottom = '0';
-    ov.style.width = sideWidth; ov.style.height = '100%'; ov.style.maxHeight = '100vh';
+    ov.style.right = '0'; ov.style.top = toolbarH + 'px'; ov.style.bottom = '0'; ov.style.left = 'auto';
+    ov.style.width = sideWidth; ov.style.height = 'calc(100vh - ' + toolbarH + 'px)'; ov.style.maxHeight = 'calc(100vh - ' + toolbarH + 'px)';
     ov.style.overflowY = 'auto';
     if (bar) bar.style.borderLeft = '2px solid #a78bfa';
     if (body) body.style.maxHeight = 'none';
   } else {
-    ov.style.bottom = '0'; ov.style.left = '0'; ov.style.right = '0';
+    ov.style.bottom = '0'; ov.style.left = '0'; ov.style.right = '0'; ov.style.top = 'auto';
     ov.style.width = '100%'; ov.style.maxHeight = '40vh';
     if (bar) bar.style.borderTop = '2px solid #a78bfa';
     if (body) body.style.maxHeight = '40vh';
+  }
+  if (position === 'top') {
+    var qtyH = ov.getBoundingClientRect().height;
+    if (canvasWrap) canvasWrap.style.paddingTop = (toolbarH + qtyH) + 'px';
+  } else if (canvasWrap) {
+    canvasWrap.style.paddingTop = '0';
   }
 }
 
@@ -6265,8 +6299,9 @@ function _toQtyRender() {
   var totBar = document.getElementById('toQtyTotalsBar');
   if (!tbody) return;
   var _depInpStyle = 'background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:48px;text-align:right;display:block;margin-left:auto;';
+  var _tonInpStyle = 'background:transparent;border:none;outline:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;width:55px;text-align:right;display:block;margin-left:auto;';
   if (!_toQtyRows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:12px 8px;text-align:center;color:#555;font-size:10px;">No areas yet — measurements auto-add here, or tap + Add Row</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="padding:12px 8px;text-align:center;color:#555;font-size:10px;">No areas yet — measurements auto-add here, or tap + Add Row</td></tr>';
   } else {
     tbody.innerHTML = _toQtyRows.map(function(row, i) {
       var dotColor = row.color || '#a78bfa';
@@ -6274,6 +6309,7 @@ function _toQtyRender() {
       var _measIdx = (row.measIdx != null) ? row.measIdx : '';
       var _rowSel = (row.measIdx != null && row.measIdx === _toSelectedMeasIdx);
       var _rowStyle = 'border-bottom:1px solid #2a2a2a;' + (_rowSel ? 'background:rgba(167,139,250,0.25);border-left:3px solid #a78bfa;' : '');
+      var _totalTonsDisp = row.tons ? parseFloat(row.tons).toFixed(2) : '—';
       return '<tr data-meas-idx="' + _measIdx + '" style="' + _rowStyle + '">' +
         '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;min-width:110px;">' +
           '<div style="display:flex;align-items:center;gap:5px;">' +
@@ -6281,31 +6317,46 @@ function _toQtyRender() {
             '<input value="' + escHtml(row.area||'') + '" oninput="_toQtyUpdate(' + i + ',\'area\',this.value)" placeholder="Area name" style="background:transparent;border:none;outline:none;color:' + dotColor + ';font-family:\'DM Mono\',monospace;font-size:11px;width:100%;min-width:80px;">' +
           '</div>' +
         '</td>' +
-        '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input type="number" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
-        '<td id="toQtySY_' + i + '" onclick="_toQtyRowClick(' + i + ')" style="padding:3px 8px;text-align:right;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;">' + sqYdDisp + '</td>' +
+        '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input type="text" inputmode="decimal" value="' + (row.sqFt||'') + '" oninput="_toQtyUpdate(' + i + ',\'sqFt\',this.value)" placeholder="0" style="background:transparent;border:none;outline:none;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:11px;width:60px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td id="toQtySY_' + i + '" class="to-qty-hide-mobile" onclick="_toQtyRowClick(' + i + ')" style="padding:3px 8px;text-align:right;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;">' + sqYdDisp + '</td>' +
         '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input type="number" step="0.25" value="' + (row.base||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'base\',this.value)" placeholder="—" style="' + _depInpStyle + '"></td>' +
         '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input type="number" step="0.25" value="' + (row.binder||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'binder\',this.value)" placeholder="—" style="' + _depInpStyle + '"></td>' +
         '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input type="number" step="0.25" value="' + (row.top||'') + '" list="toQtyDepthList" oninput="_toQtyUpdate(' + i + ',\'top\',this.value)" placeholder="—" style="' + _depInpStyle + '"></td>' +
-        '<td onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input type="number" value="' + (row.tons||'') + '" oninput="_toQtyUpdate(' + i + ',\'tons\',this.value)" placeholder="0.0" style="background:transparent;border:none;outline:none;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;width:55px;text-align:right;display:block;margin-left:auto;"></td>' +
+        '<td class="to-qty-hide-mobile" onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;border-left:2px solid rgba(167,139,250,0.3);"><input id="toQtyBT_' + i + '" type="text" inputmode="decimal" value="' + (row.baseTons||'') + '" oninput="_toQtyUpdate(' + i + ',\'baseTons\',this.value)" placeholder="0.0" style="' + _tonInpStyle + '"></td>' +
+        '<td class="to-qty-hide-mobile" onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input id="toQtyBiT_' + i + '" type="text" inputmode="decimal" value="' + (row.binderTons||'') + '" oninput="_toQtyUpdate(' + i + ',\'binderTons\',this.value)" placeholder="0.0" style="' + _tonInpStyle + '"></td>' +
+        '<td class="to-qty-hide-mobile" onclick="event.stopPropagation();_toQtyRowClick(' + i + ')" style="padding:3px 4px;"><input id="toQtyTT_' + i + '" type="text" inputmode="decimal" value="' + (row.topTons||'') + '" oninput="_toQtyUpdate(' + i + ',\'topTons\',this.value)" placeholder="0.0" style="' + _tonInpStyle + '"></td>' +
+        '<td id="toQtyTotalT_' + i + '" onclick="_toQtyRowClick(' + i + ')" style="padding:3px 8px;text-align:right;color:#a78bfa;font-weight:700;font-family:\'DM Mono\',monospace;font-size:11px;">' + _totalTonsDisp + '</td>' +
         '<td style="padding:3px 4px;text-align:center;"><button onclick="event.stopPropagation();_toQtyDeleteRow(' + i + ')" style="background:none;border:none;color:#d94f3d;cursor:pointer;font-size:13px;padding:2px 4px;">✕</button></td>' +
-      '</tr>';
+      '</tr>' +
+      '<tr id="toQtyExpRow_' + i + '" class="to-qty-expand-row"><td colspan="11" style="padding:6px 12px;background:#1e1e1e;font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;">' +
+        'Sq Yds: <strong style="color:#f9f7f3;">' + (sqYdDisp||'—') + '</strong> &nbsp;·&nbsp; ' +
+        'Base Tons: <strong style="color:#a78bfa;">' + (row.baseTons ? parseFloat(row.baseTons).toFixed(2) : '—') + '</strong> &nbsp;·&nbsp; ' +
+        'Binder Tons: <strong style="color:#a78bfa;">' + (row.binderTons ? parseFloat(row.binderTons).toFixed(2) : '—') + '</strong> &nbsp;·&nbsp; ' +
+        'Top Tons: <strong style="color:#a78bfa;">' + (row.topTons ? parseFloat(row.topTons).toFixed(2) : '—') + '</strong>' +
+      '</td></tr>';
     }).join('');
   }
   var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
   var totSqYd = totSqFt / 9;
+  var totBaseTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.baseTons)||0); }, 0);
+  var totBinderTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.binderTons)||0); }, 0);
+  var totTopTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.topTons)||0); }, 0);
   var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
   if (tfoot) {
     tfoot.innerHTML = '<tr style="background:#1a1a1a;border-top:2px solid #a78bfa;">' +
       '<td style="padding:5px 8px;font-weight:700;color:#a78bfa;font-size:11px;">TOTAL</td>' +
       '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totSqFt ? totSqFt.toLocaleString() : '—') + '</td>' +
-      '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totSqYd ? totSqYd.toFixed(1) : '—') + '</td>' +
+      '<td class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totSqYd ? totSqYd.toFixed(1) : '—') + '</td>' +
       '<td></td><td></td><td></td>' +
-      '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totTons ? totTons.toFixed(1) : '—') + '</td>' +
+      '<td class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;border-left:2px solid rgba(167,139,250,0.3);">' + (totBaseTons ? totBaseTons.toFixed(1) : '—') + '</td>' +
+      '<td class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totBinderTons ? totBinderTons.toFixed(1) : '—') + '</td>' +
+      '<td class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totTopTons ? totTopTons.toFixed(1) : '—') + '</td>' +
+      '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:12px;">' + (totTons ? totTons.toFixed(1) : '—') + '</td>' +
       '<td></td>' +
     '</tr>';
     var _allTot = _toAllPagesTotals();
     if (_allTot) {
-      tfoot.innerHTML += '<tr><td colspan="8" style="padding:4px 8px;text-align:right;color:#6b6b6b;font-family:\'DM Mono\',monospace;font-size:10px;">All pages: ' +
+      tfoot.innerHTML += '<tr><td colspan="11" style="padding:4px 8px;text-align:right;color:#6b6b6b;font-family:\'DM Mono\',monospace;font-size:10px;">All pages: ' +
         _allTot.sqFt.toLocaleString() + ' sq ft · ' + _allTot.tons.toFixed(1) + ' tons total</td></tr>';
     }
   }
@@ -6344,11 +6395,11 @@ function _toQtyToggle() {
 }
 
 function _toQtyAddRow() {
-  _toQtyRows.push({ area:'', sqFt:'', sqYd:'', base:'', binder:'', top:'', tons:'', color:'' });
+  _toQtyRows.push({ area:'', sqFt:'', sqYd:'', base:'', binder:'', top:'', baseTons:'', binderTons:'', topTons:'', tons:'', color:'' });
   _toQtyRender();
   _toQtySaveForPage();
   setTimeout(function() {
-    var rows = document.querySelectorAll('#toQtyTbody tr');
+    var rows = document.querySelectorAll('#toQtyTbody tr:not(.to-qty-expand-row)');
     if (rows.length) { var inp = rows[rows.length-1].querySelector('input'); if (inp) inp.focus(); }
   }, 30);
 }
@@ -6367,6 +6418,54 @@ function _toQtyRowExpand(idx) {
   expRow.style.display = isOpen ? '' : 'table-row';
 }
 
+// Refreshes the footer totals row + the collapsed-bar summary. Shared by every
+// _toQtyUpdate() branch so the five running totals never drift out of sync.
+function _toQtyRefreshFooter() {
+  var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
+  var totSqYd = totSqFt / 9;
+  var totBaseTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.baseTons)||0); }, 0);
+  var totBinderTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.binderTons)||0); }, 0);
+  var totTopTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.topTons)||0); }, 0);
+  var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
+  var fCells = document.querySelectorAll('#toQtyFoot tr')[0] ? document.querySelectorAll('#toQtyFoot tr')[0].querySelectorAll('td') : [];
+  if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
+  if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
+  if (fCells[6]) fCells[6].textContent = totBaseTons ? totBaseTons.toFixed(1) : '—';
+  if (fCells[7]) fCells[7].textContent = totBinderTons ? totBinderTons.toFixed(1) : '—';
+  if (fCells[8]) fCells[8].textContent = totTopTons ? totTopTons.toFixed(1) : '—';
+  if (fCells[9]) fCells[9].textContent = totTons ? totTons.toFixed(1) : '—';
+  var totBar = document.getElementById('toQtyTotalsBar');
+  if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
+}
+
+// Recomputes Base/Binder/Top tons from the row's Sq Ft + depths (each lift
+// independently, per Fix 4), then re-sums them into Total Tons.
+function _toQtyRecalcRowTons(idx) {
+  var row = _toQtyRows[idx];
+  var sqFt = parseFloat(row.sqFt) || 0;
+  var _depth = { base: parseFloat(row.base) || 0, binder: parseFloat(row.binder) || 0, top: parseFloat(row.top) || 0 };
+  var _baseTons   = (sqFt && _depth.base)   ? (sqFt/9) * _depth.base   * 0.056 : 0;
+  var _binderTons = (sqFt && _depth.binder) ? (sqFt/9) * _depth.binder * 0.056 : 0;
+  var _topTons    = (sqFt && _depth.top)    ? (sqFt/9) * _depth.top    * 0.056 : 0;
+  row.baseTons   = _baseTons   ? parseFloat(_baseTons.toFixed(2))   : '';
+  row.binderTons = _binderTons ? parseFloat(_binderTons.toFixed(2)) : '';
+  row.topTons    = _topTons    ? parseFloat(_topTons.toFixed(2))    : '';
+  var bEl = document.getElementById('toQtyBT_' + idx);   if (bEl) bEl.value = row.baseTons;
+  var biEl = document.getElementById('toQtyBiT_' + idx); if (biEl) biEl.value = row.binderTons;
+  var tEl = document.getElementById('toQtyTT_' + idx);   if (tEl) tEl.value = row.topTons;
+  _toQtyRecalcTotalTons(idx);
+}
+
+// Sums whatever Base/Binder/Top tons the row currently holds (auto-calculated
+// or manually overridden) into row.tons, always read-only downstream.
+function _toQtyRecalcTotalTons(idx) {
+  var row = _toQtyRows[idx];
+  var _total = (parseFloat(row.baseTons)||0) + (parseFloat(row.binderTons)||0) + (parseFloat(row.topTons)||0);
+  row.tons = _total ? parseFloat(_total.toFixed(2)) : '';
+  var totEl = document.getElementById('toQtyTotalT_' + idx);
+  if (totEl) totEl.textContent = row.tons ? parseFloat(row.tons).toFixed(2) : '—';
+}
+
 function _toQtyUpdate(idx, field, val) {
   if (!_toQtyRows[idx]) return;
   _toQtyRows[idx][field] = val;
@@ -6376,55 +6475,13 @@ function _toQtyUpdate(idx, field, val) {
     _toQtyRows[idx].sqYd = sqYd || '';
     var syEl = document.getElementById('toQtySY_' + idx);
     if (syEl) syEl.textContent = sqYd ? sqYd.toFixed(1) : '';
-    var totalDepth = (parseFloat(_toQtyRows[idx].base) || 0) + (parseFloat(_toQtyRows[idx].binder) || 0) + (parseFloat(_toQtyRows[idx].top) || 0);
-    if (sqFt && totalDepth) {
-      // sy × 0.056 × depth per lift — matches the Save Area dialog's live preview.
-      var calc = parseFloat(((sqFt / 9) * totalDepth * 0.056).toFixed(2));
-      _toQtyRows[idx].tons = calc;
-      var tRows = document.querySelectorAll('#toQtyTbody tr');
-      if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[5]) tInps[5].value = calc; }
-    }
-    var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
-    var totSqYd = totSqFt / 9;
-    var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
-    var fCells = document.querySelectorAll('#toQtyFoot td');
-    if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
-    if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
-    if (fCells[6]) fCells[6].textContent = totTons ? totTons.toFixed(1) : '—';
-    var totBar = document.getElementById('toQtyTotalsBar');
-    if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
+    _toQtyRecalcRowTons(idx);
   } else if (field === 'base' || field === 'binder' || field === 'top') {
-    var sqFt = parseFloat(_toQtyRows[idx].sqFt) || 0;
-    var totalDepth = (parseFloat(_toQtyRows[idx].base) || 0) + (parseFloat(_toQtyRows[idx].binder) || 0) + (parseFloat(_toQtyRows[idx].top) || 0);
-    if (sqFt && totalDepth) {
-      var calc = parseFloat(((sqFt / 9) * totalDepth * 0.056).toFixed(2));
-      _toQtyRows[idx].tons = calc;
-    } else {
-      _toQtyRows[idx].tons = '';
-      calc = '';
-    }
-    var tRows = document.querySelectorAll('#toQtyTbody tr');
-    if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[5]) tInps[5].value = calc; }
-    var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
-    var totSqYd = totSqFt / 9;
-    var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
-    var fCells = document.querySelectorAll('#toQtyFoot td');
-    if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
-    if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
-    if (fCells[6]) fCells[6].textContent = totTons ? totTons.toFixed(1) : '—';
-    var totBar = document.getElementById('toQtyTotalsBar');
-    if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
-  } else if (field === 'tons') {
-    var totSqFt = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.sqFt)||0); }, 0);
-    var totSqYd = totSqFt / 9;
-    var totTons = _toQtyRows.reduce(function(s,r){ return s+(parseFloat(r.tons)||0); }, 0);
-    var fCells = document.querySelectorAll('#toQtyFoot td');
-    if (fCells[1]) fCells[1].textContent = totSqFt ? totSqFt.toLocaleString() : '—';
-    if (fCells[2]) fCells[2].textContent = totSqYd ? totSqYd.toFixed(1) : '—';
-    if (fCells[6]) fCells[6].textContent = totTons ? totTons.toFixed(1) : '—';
-    var totBar = document.getElementById('toQtyTotalsBar');
-    if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
+    _toQtyRecalcRowTons(idx);
+  } else if (field === 'baseTons' || field === 'binderTons' || field === 'topTons') {
+    _toQtyRecalcTotalTons(idx);
   }
+  _toQtyRefreshFooter();
   _toQtySaveForPage();
 }
 
