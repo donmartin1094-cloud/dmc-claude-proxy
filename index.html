@@ -4241,7 +4241,7 @@ function _toEdgeTick() {
 // Called on every mousemove — sets scroll velocity based on proximity to wrap edges
 function _toCheckEdgeScroll(clientX, clientY) {
   const wrap = document.getElementById('toCanvasWrap');
-  if (!wrap || !_toTool) { _toEdgeVx = 0; _toEdgeVy = 0; return; }
+  if (!wrap || !_toTool || _toTool === 'select') { _toEdgeVx = 0; _toEdgeVy = 0; return; }
   const ZONE = 96;        // ~1 CSS inch
   const MAX  = 20;        // max px/frame
   const r = wrap.getBoundingClientRect();
@@ -4308,7 +4308,7 @@ function _toBuildPortalHTML() {
 async function _toOpenPortal(file) {
   if (!document.getElementById('toStyles')) {
     const s = document.createElement('style'); s.id = 'toStyles';
-    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:50vh}#toQtyBody{max-height:50vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}}`;
+    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}@keyframes toAreaPulse{0%{filter:drop-shadow(0 0 4px rgba(255,255,255,0.9));}50%{filter:drop-shadow(0 0 12px rgba(167,139,250,1));}100%{filter:drop-shadow(0 0 4px rgba(255,255,255,0.9));}}.to-selected-area{animation:toAreaPulse 1.5s ease-in-out infinite;stroke:#ffffff !important;stroke-width:4 !important;}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:50vh}#toQtyBody{max-height:50vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}.to-selected-area{animation:none !important;filter:drop-shadow(0 0 8px #a78bfa) !important;}}`;
     document.head.appendChild(s);
   }
   let ov = document.getElementById('toPortalOverlay');
@@ -4658,7 +4658,8 @@ function _toDrawMeasGroup() {
       poly.setAttribute('stroke',m.color); poly.setAttribute('stroke-width','2');
       poly.setAttribute('data-meas-idx',idx);
       poly.style.pointerEvents = 'all'; poly.style.cursor = 'pointer';
-      if (isSel) { poly.style.stroke = '#ffffff'; poly.style.strokeWidth = '3'; poly.style.filter = 'drop-shadow(0 0 6px rgba(255,255,255,0.8))'; }
+      poly.classList.toggle('to-selected-area', isSel);
+      poly.style.opacity = isSel ? '1' : (_toSelectedMeasIdx !== null ? '0.4' : '1');
       poly.addEventListener('click', function(e){ if (_toTool !== 'select') return; e.stopPropagation(); _toSelectMeasurement(idx); });
       g.appendChild(poly);
       for (const p of m.points) _toCircle(g,p.x,p.y,4,'#fff',m.color);
@@ -5088,6 +5089,7 @@ var _toQtyRows           = [];
 var _toQtyExpanded       = true;
 var _toQtyKey            = '';
 var _TO_QTY_STORE        = 'dmc_to_quantities';
+var _toQtyDockPosition   = localStorage.getItem('dmc_to_qty_dock') || 'bottom';
 var _takeoffViewerActive = false;
 var _toSelectedMeasIdx   = null; // Pointer-mode selection — index into _toMeasurements for the current page
 var _toPendingReopen     = null; // {pageNum} set by _toDirPageOpen while its PDF (re)loads, so _toWinFileChanged preserves restored data instead of wiping it
@@ -6114,6 +6116,7 @@ function _toQtyInit() {
   ov.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:8900;display:none;font-family:\'DM Mono\',monospace;';
   ov.innerHTML =
     '<div id="toQtyBar" onclick="_toQtyToggle()" style="background:#1a1a1a;border-top:2px solid #a78bfa;display:flex;align-items:center;padding:5px 12px;gap:8px;cursor:pointer;">' +
+      '<span id="toQtyDragHandle" onclick="event.stopPropagation();" style="cursor:grab;padding:0 8px;color:var(--concrete-dim);font-size:16px;user-select:none;">⠿</span>' +
       '<span style="font-size:12px;font-weight:700;color:#a78bfa;flex:1;">📐<span class="to-qty-label"> Quantities</span></span>' +
       '<span id="toQtyTotalsBar" style="font-size:10px;color:#9b9488;margin-right:8px;"></span>' +
       '<button onclick="event.stopPropagation();_toQtyAddRow();" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Row</button>' +
@@ -6141,7 +6144,119 @@ function _toQtyInit() {
   // #toCanvasWrap underneath it. Forward its mousemove into the same shared
   // edge-scroll check so the bottom trigger still fires while hovering over it.
   ov.addEventListener('mousemove', function(e) { _toCheckEdgeScroll(e.clientX, e.clientY); });
+  var _toQtyHandle = document.getElementById('toQtyDragHandle');
+  if (_toQtyHandle) {
+    _toQtyHandle.addEventListener('mousedown', _toQtyDragStart);
+    _toQtyHandle.addEventListener('touchstart', _toQtyDragStart, { passive: false });
+  }
+  _toQtyDock(localStorage.getItem('dmc_to_qty_dock') || 'bottom');
   _toQtyRender();
+}
+
+// ── Build 1: draggable snap-to-border quantity overlay ───────────────────────
+
+function _toQtyNearestZone(x, y) {
+  var w = window.innerWidth, h = window.innerHeight;
+  var dTop = y, dBottom = h - y, dLeft = x, dRight = w - x;
+  var min = Math.min(dTop, dBottom, dLeft, dRight);
+  if (min === dTop) return 'top';
+  if (min === dBottom) return 'bottom';
+  if (min === dLeft) return 'left';
+  return 'right';
+}
+
+function _toQtyShowSnapZones() {
+  ['top', 'bottom', 'left', 'right'].forEach(function(pos) {
+    var z = document.createElement('div');
+    z.className = 'to-qty-snap-zone';
+    z.dataset.pos = pos;
+    z.style.cssText = 'position:fixed;z-index:9800;background:rgba(167,139,250,0.15);border:2px dashed #a78bfa;pointer-events:none;';
+    if (pos === 'top')    { z.style.top = '0';    z.style.left = '0'; z.style.right = '0';  z.style.height = '80px'; }
+    if (pos === 'bottom') { z.style.bottom = '0'; z.style.left = '0'; z.style.right = '0';  z.style.height = '80px'; }
+    if (pos === 'left')   { z.style.left = '0';   z.style.top = '0'; z.style.bottom = '0';  z.style.width = '80px'; }
+    if (pos === 'right')  { z.style.right = '0';  z.style.top = '0'; z.style.bottom = '0';  z.style.width = '80px'; }
+    document.body.appendChild(z);
+  });
+}
+
+function _toQtyUpdateSnapHighlight(x, y) {
+  var nearest = _toQtyNearestZone(x, y);
+  document.querySelectorAll('.to-qty-snap-zone').forEach(function(z) {
+    z.style.background = (z.dataset.pos === nearest) ? 'rgba(167,139,250,0.35)' : 'rgba(167,139,250,0.15)';
+  });
+}
+
+function _toQtyHideSnapZones() {
+  document.querySelectorAll('.to-qty-snap-zone').forEach(function(z) { z.remove(); });
+}
+
+function _toQtyDragStart(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var handle = document.getElementById('toQtyDragHandle');
+  if (handle) handle.style.cursor = 'grabbing';
+  _toQtyShowSnapZones();
+  function move(ev) {
+    var pt = ev.touches ? ev.touches[0] : ev;
+    _toQtyUpdateSnapHighlight(pt.clientX, pt.clientY);
+  }
+  function end(ev) {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('touchmove', move);
+    document.removeEventListener('mouseup', end);
+    document.removeEventListener('touchend', end);
+    var pt = (ev.changedTouches && ev.changedTouches[0]) || ev;
+    var nearest = _toQtyNearestZone(pt.clientX, pt.clientY);
+    _toQtyHideSnapZones();
+    if (handle) handle.style.cursor = 'grab';
+    _toQtyDock(nearest);
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('touchmove', move, { passive: false });
+  document.addEventListener('mouseup', end);
+  document.addEventListener('touchend', end);
+}
+
+function _toQtyDock(position) {
+  position = (position === 'top' || position === 'left' || position === 'right') ? position : 'bottom';
+  _toQtyDockPosition = position;
+  localStorage.setItem('dmc_to_qty_dock', position);
+  var ov = document.getElementById('toQtyOverlay');
+  if (!ov) return;
+  var bar = document.getElementById('toQtyBar');
+  var body = document.getElementById('toQtyBody');
+  var isMobile = window.innerWidth <= 768;
+  var sideWidth = isMobile ? '260px' : '320px';
+  ov.style.position = 'fixed';
+  ov.style.top = ov.style.bottom = ov.style.left = ov.style.right = 'auto';
+  ov.style.width = ov.style.height = ov.style.maxHeight = ov.style.marginTop = '';
+  ov.style.overflowY = '';
+  if (bar) bar.style.borderTop = bar.style.borderBottom = bar.style.borderLeft = bar.style.borderRight = '';
+  if (position === 'top') {
+    ov.style.top = '0'; ov.style.left = '0'; ov.style.right = '0';
+    ov.style.width = '100%'; ov.style.maxHeight = '40vh';
+    var toolbar = document.getElementById('toToolbar');
+    ov.style.marginTop = (toolbar ? toolbar.offsetHeight : 0) + 'px';
+    if (bar) bar.style.borderBottom = '2px solid #a78bfa';
+    if (body) body.style.maxHeight = '40vh';
+  } else if (position === 'left') {
+    ov.style.left = '0'; ov.style.top = '0'; ov.style.bottom = '0';
+    ov.style.width = sideWidth; ov.style.height = '100%'; ov.style.maxHeight = '100vh';
+    ov.style.overflowY = 'auto';
+    if (bar) bar.style.borderRight = '2px solid #a78bfa';
+    if (body) body.style.maxHeight = 'none';
+  } else if (position === 'right') {
+    ov.style.right = '0'; ov.style.top = '0'; ov.style.bottom = '0';
+    ov.style.width = sideWidth; ov.style.height = '100%'; ov.style.maxHeight = '100vh';
+    ov.style.overflowY = 'auto';
+    if (bar) bar.style.borderLeft = '2px solid #a78bfa';
+    if (body) body.style.maxHeight = 'none';
+  } else {
+    ov.style.bottom = '0'; ov.style.left = '0'; ov.style.right = '0';
+    ov.style.width = '100%'; ov.style.maxHeight = '40vh';
+    if (bar) bar.style.borderTop = '2px solid #a78bfa';
+    if (body) body.style.maxHeight = '40vh';
+  }
 }
 
 function _toQtyRender() {
@@ -6405,7 +6520,13 @@ async function _toConfirmSavePage() {
       console.warn('[takeoff] PDF upload failed — save continues without URL:', e);
     }
   }
-  folder.pages.push({ id:'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), pageName:pageName, pdfName:pdfName, pageNum:pageNum, pdfUrl:_pdfUrl, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), scale:_toScale||null, notes:notes, savedAt:Date.now() });
+  var _existingPageIdx = folder.pages.findIndex(function(p){ return p.pageNum === pageNum && p.pdfName === pdfName; });
+  var _newPageRecord = { id:(_existingPageIdx >= 0 ? folder.pages[_existingPageIdx].id : 'pg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)), pageName:pageName, pdfName:pdfName, pageNum:pageNum, pdfUrl:_pdfUrl, thumbnail:thumbnail, measurements:measurements||[], quantities:JSON.parse(JSON.stringify(_toQtyRows)), scale:_toScale||null, notes:notes, savedAt:Date.now() };
+  if (_existingPageIdx >= 0) {
+    folder.pages[_existingPageIdx] = _newPageRecord;
+  } else {
+    folder.pages.push(_newPageRecord);
+  }
   folder.updatedAt = Date.now();
   _toFoldersSave();
   document.getElementById('toSaveDlg').remove();
