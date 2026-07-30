@@ -31498,6 +31498,7 @@ function doLogin() {
       // ── Try Firebase Auth first ──
       let firebaseAuthOk = false;
       if (firebase.auth && authEmails.length) {
+        console.log('[login] attempting Firebase Auth for:', authEmails.join(', '));
         try {
           const auth = firebase.auth();
           let cred = null;
@@ -31511,6 +31512,7 @@ function doLogin() {
             }
           }
           if (!cred) throw lastAuthError || new Error('Auth sign-in failed');
+          console.log('[login] Firebase Auth result: SUCCESS uid:' + cred.user?.uid);
 
           const fbUser = cred.user;
           let appUser = inputAcct?.username || u;
@@ -31671,6 +31673,37 @@ function _updateThemeToggleBtn() {
   btn.style.borderColor = isLight ? '#cc8c00' : '';
 }
 
+// Auto-login (below) restores a session from localStorage.dmc_u with no
+// password available, so it can't call signInWithEmailAndPassword itself —
+// it can only wait and see whether Firebase Auth's own persisted session
+// restores on its own. If it doesn't within a few seconds, offer a dismissible
+// banner rather than silently leaving Storage uploads broken all session.
+function _watchAutoLoginAuthSession() {
+  if (typeof firebase === 'undefined' || !firebase.auth) return;
+  var _authTimeout = setTimeout(function() {
+    if (!firebase.auth().currentUser) {
+      console.warn('[auto-login] Firebase Auth session not restored — offering re-login for Storage access');
+      if (document.getElementById('autoLoginAuthBanner')) return;
+      var _banner = document.createElement('div');
+      _banner.id = 'autoLoginAuthBanner';
+      _banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:rgba(245,158,11,0.9);color:#000;padding:10px 16px;text-align:center;font-family:"DM Mono",monospace;font-size:12px;z-index:99999;cursor:pointer;';
+      _banner.textContent = '⚠️ File uploads require re-authentication — tap here to sign in again';
+      _banner.onclick = function(){
+        localStorage.removeItem('dmc_u');
+        location.reload();
+      };
+      document.body.appendChild(_banner);
+    }
+  }, 3000);
+  var _unsub = firebase.auth().onAuthStateChanged(function(user) {
+    if (user) {
+      clearTimeout(_authTimeout);
+      console.log('[auto-login] Firebase Auth session confirmed:', user.uid);
+      if (typeof _unsub === 'function') _unsub();
+    }
+  });
+}
+
 // ── Auto-login if session exists (runs after deferred CDN scripts are ready) ──
 document.addEventListener('DOMContentLoaded', function() {
   const savedUser = localStorage.getItem('dmc_u');
@@ -31683,6 +31716,7 @@ document.addEventListener('DOMContentLoaded', function() {
     )) || USERS[savedUser] || USERS[Object.keys(USERS).find(k => k.toLowerCase() === savedUser.toLowerCase()) || ''] || DEFAULT_TEAM_ACCOUNTS.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase());
     if (knownUser) {
       initApp(savedUser);
+      _watchAutoLoginAuthSession();
     } else {
       // Unknown user in localStorage — try Firebase before giving up
       (async () => {
@@ -31698,6 +31732,7 @@ document.addEventListener('DOMContentLoaded', function() {
               if (fbAccounts.find(a => (a.username||'').toLowerCase() === savedUser.toLowerCase())) {
                 saveAccounts(fbAccounts);
                 initApp(savedUser);
+                _watchAutoLoginAuthSession();
                 return;
               }
             }
