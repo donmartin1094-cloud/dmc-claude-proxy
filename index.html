@@ -5446,6 +5446,11 @@ function _toNtStart() {
   _toFoldersLoad();
   takeoffFolders.unshift(folder);
   _toSessionFolderId = folder.id;
+  // A brand-new folder must start with a clean quantity slate — otherwise
+  // whatever _toQtyRows was left holding from a previous folder's session in
+  // this same tab gets rendered, drawn on top of, and saved into this folder.
+  _toQtyRows = [];
+  _toQtyKey = null;
   _toFoldersSave();
   _toNtLinkedJob = null;
   _toNtMode = null;
