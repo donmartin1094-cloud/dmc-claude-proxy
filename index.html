@@ -3861,6 +3861,9 @@ function closeSecPopup() {
   const _sp = document.getElementById('secPopup');
   _sp.classList.remove('open', 'sec-popup-full');
   _secPopupCurrent = null;
+  _takeoffViewerActive = false;
+  const _qov = document.getElementById('toQtyOverlay');
+  if (_qov) _qov.style.display = 'none';
   // Restore active state based on current tab (or home)
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
     ap:'ar', apMix:'ar', apAia:'ar', chat:'chat', schedule:'schedule',
@@ -4267,7 +4270,7 @@ function _toBuildPortalHTML() {
       <button id="toBtnScale"  class="to-btn" onclick="_toActivate('scale')">📐 Set Scale</button>
       <button id="toBtnLinear" class="to-btn" onclick="_toActivate('linear')">📏 Linear</button>
       <button id="toBtnArea"   class="to-btn" onclick="_toActivate('area')">⬛ Area</button>
-      <button id="toBtnSelect" class="to-btn" onclick="_toActivate('select')">🖱 Pointer</button>
+      <button id="toBtnSelect" class="to-btn" title="Select area" onclick="_toActivate('select')">🖱 Pointer</button>
       <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
       <div id="toScaleDisplay" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;padding:4px 10px;background:#252525;border-radius:4px;border:1px solid #333;white-space:nowrap;">Scale: not set</div>
       <div id="toStatus" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;">Load a PDF to begin</div>
@@ -4332,6 +4335,9 @@ function _toClosePortal() {
   const o = document.getElementById('toPortalOverlay');
   if (o) o.style.display = 'none';
   _toTool = null; _toPoints = []; _toScalePoints = [];
+  _takeoffViewerActive = false;
+  const _qov = document.getElementById('toQtyOverlay');
+  if (_qov) _qov.style.display = 'none';
 }
 
 function _toFileChanged(e) { const f = e.target.files[0]; if (f) _toOpenPortal(f); }
@@ -4652,16 +4658,21 @@ function _toDrawMeasGroup() {
 
 // ── Pointer / select mode (Build 2) ──────────────────────────────────────────
 function _toSelectMeasurement(idx) {
-  _toSelectedMeasIdx = (_toSelectedMeasIdx === idx) ? null : idx;
+  var _wasSame = _toSelectedMeasIdx === idx;
+  _toSelectedMeasIdx = _wasSame ? null : idx;
   _toDrawMeasGroup();
   _toQtyRender();
   if (_toSelectedMeasIdx !== null) {
     var _selRow = document.querySelector('#toQtyTbody tr[data-meas-idx="' + _toSelectedMeasIdx + '"]');
     if (_selRow) _selRow.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    _toShowAreaDetailModal(_toSelectedMeasIdx);
+  } else {
+    _toCloseAreaDetailModal();
   }
 }
 
 function _toDeselectAll() {
+  _toCloseAreaDetailModal();
   if (_toSelectedMeasIdx === null) return;
   _toSelectedMeasIdx = null;
   _toDrawMeasGroup();
@@ -4673,6 +4684,64 @@ function _toQtyRowClick(i) {
   var row = _toQtyRows[i];
   if (!row || row.measIdx == null) return;
   _toSelectMeasurement(row.measIdx);
+}
+
+function _toCloseAreaDetailModal() {
+  document.getElementById('toAreaDetailModal')?.remove();
+}
+
+function _toAreaDetailCell(label, value) {
+  return '<div style="background:var(--asphalt-light,#1a1a1a);border-radius:6px;padding:10px 12px;">' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#9b9488;text-transform:uppercase;letter-spacing:0.5px;">' + label + '</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:15px;color:#f9f7f3;font-weight:700;margin-top:2px;">' + value + '</div>' +
+  '</div>';
+}
+
+function _toShowAreaDetailModal(idx) {
+  var m = _toMeasurements[idx];
+  if (!m || m.type !== 'area') return;
+  var row = _toQtyRows.find(function(r) { return r.measIdx === idx; });
+  _toCloseAreaDetailModal();
+  var sqFt = row ? (parseFloat(row.sqFt) || 0) : (parseFloat(m.sqFt) || 0);
+  var sqYd = sqFt / 9;
+  var base = row ? (parseFloat(row.base) || 0) : (m.depths?.base || 0);
+  var binder = row ? (parseFloat(row.binder) || 0) : (m.depths?.binder || 0);
+  var top = row ? (parseFloat(row.top) || 0) : (m.depths?.top || 0);
+  var totalDepth = base + binder + top;
+  var tons = row ? (parseFloat(row.tons) || 0) : (m.tons?.total || 0);
+  var title = m.label || row?.area || ('Area ' + (idx + 1));
+  var color = m.color || '#a78bfa';
+  var d = document.createElement('div');
+  d.id = 'toAreaDetailModal';
+  d.style.cssText = 'position:fixed;inset:0;z-index:9700;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);';
+  d.addEventListener('click', function(e) { if (e.target === d) _toDeselectAll(); });
+  d.innerHTML =
+    '<div style="max-width:360px;width:95vw;border-radius:12px;background:var(--asphalt-mid,#252525);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.8);">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">' +
+        '<span style="width:12px;height:12px;border-radius:50%;background:' + color + ';flex-shrink:0;display:inline-block;"></span>' +
+        '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:#a78bfa;">' + escHtml(title) + '</span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">' +
+        _toAreaDetailCell('Sq Ft', sqFt.toLocaleString()) +
+        _toAreaDetailCell('Sq Yards', sqYd.toFixed(1)) +
+        _toAreaDetailCell('Base Depth', base ? base + '"' : '—') +
+        _toAreaDetailCell('Binder Depth', binder ? binder + '"' : '—') +
+        _toAreaDetailCell('Top Depth', top ? top + '"' : '—') +
+        _toAreaDetailCell('Total Depth', totalDepth ? totalDepth.toFixed(2) + '"' : '—') +
+        _toAreaDetailCell('Tons', tons ? tons.toFixed(1) : '—') +
+      '</div>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button onclick="_toDeselectAll()" style="flex:1;background:none;border:1px solid #555;border-radius:6px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:11px;padding:10px;cursor:pointer;">✕ Close</button>' +
+        '<button onclick="_toEditAreaFromModal(' + idx + ')" style="flex:1;background:rgba(167,139,250,0.15);border:1px solid #a78bfa;border-radius:6px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:10px;cursor:pointer;">✏️ Edit</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(d);
+}
+
+function _toEditAreaFromModal(idx) {
+  _toCloseAreaDetailModal();
+  var rowEl = document.querySelector('#toQtyTbody tr[data-meas-idx="' + idx + '"]');
+  if (rowEl) { var inp = rowEl.querySelector('input'); if (inp) inp.focus(); }
 }
 
 // SVG helpers
@@ -4879,7 +4948,10 @@ function _toSaveArea(sqFt, sqYd) {
   var _aqBinder = depths.binder || 0;
   var _aqTop    = depths.top    || 0;
   var _aqTotalDepth = _aqBase + _aqBinder + _aqTop;
-  var _aqTons = (_aqTotalDepth && _aqSqFt) ? parseFloat(((_aqSqFt * _aqTotalDepth * 110) / 2000).toFixed(2)) : 0;
+  // Reuse tons.total (sy × 0.056 × depth per lift) computed above — this is the
+  // same value already previewed live in the Save Area dialog, so the saved row
+  // never drifts from what the user was shown moments earlier.
+  var _aqTons = tons.total ? parseFloat(tons.total.toFixed(2)) : 0;
   _toQtyRows.push({ area: _aqLabel, sqFt: _aqSqFt ? _aqSqFt.toFixed(0) : '', sqYd: _aqSqYd ? _aqSqYd.toFixed(2) : '', base: _aqBase || '', binder: _aqBinder || '', top: _aqTop || '', tons: _aqTons || '', color: color, measIdx: _toMeasurements.length - 1 });
   _toQtyRender();
   _toQtySaveForPage();
@@ -5753,7 +5825,7 @@ function _renderTakeoffPortal(container) {
         <button id="toBtnScale"  class="to-btn" onclick="_toActivate('scale')">📐 Set Scale</button>
         <button id="toBtnLinear" class="to-btn" onclick="_toActivate('linear')">📏 Linear</button>
         <button id="toBtnArea"   class="to-btn" onclick="_toActivate('area')">⬛ Area</button>
-        <button id="toBtnSelect" class="to-btn" onclick="_toActivate('select')">🖱 Pointer</button>
+        <button id="toBtnSelect" class="to-btn" title="Select area" onclick="_toActivate('select')">🖱 Pointer</button>
         <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
         <div id="toScaleDisplay" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;padding:4px 10px;background:#252525;border-radius:4px;border:1px solid #333;white-space:nowrap;">Scale: not set</div>
         <div id="toStatus" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;">Load a PDF to begin</div>
@@ -6093,8 +6165,36 @@ function _toQtyRender() {
       '<td style="padding:5px 8px;text-align:right;font-weight:700;color:#a78bfa;font-size:11px;">' + (totTons ? totTons.toFixed(1) : '—') + '</td>' +
       '<td></td>' +
     '</tr>';
+    var _allTot = _toAllPagesTotals();
+    if (_allTot) {
+      tfoot.innerHTML += '<tr><td colspan="8" style="padding:4px 8px;text-align:right;color:#6b6b6b;font-family:\'DM Mono\',monospace;font-size:10px;">All pages: ' +
+        _allTot.sqFt.toLocaleString() + ' sq ft · ' + _allTot.tons.toFixed(1) + ' tons total</td></tr>';
+    }
   }
   if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
+}
+
+// Sums sqFt/tons across every saved page in the current folder, using the live
+// in-memory _toQtyRows for the page being edited right now (its folder.pages
+// entry may be stale until the next Save Page) and each other page's last-saved
+// quantities. Display-only — never written back to any page record.
+function _toAllPagesTotals() {
+  if (!_toSessionFolderId || typeof takeoffFolders === 'undefined') return null;
+  var folder = takeoffFolders.find(function(f){ return f.id === _toSessionFolderId; });
+  if (!folder || !folder.pages || folder.pages.length < 2) return null;
+  var sqFt = 0, tons = 0;
+  folder.pages.forEach(function(pg) {
+    if (pg.pageNum === _toPdfPage) return;
+    (pg.quantities || []).forEach(function(r) {
+      sqFt += parseFloat(r.sqFt) || 0;
+      tons += parseFloat(r.tons) || 0;
+    });
+  });
+  _toQtyRows.forEach(function(r) {
+    sqFt += parseFloat(r.sqFt) || 0;
+    tons += parseFloat(r.tons) || 0;
+  });
+  return { sqFt: sqFt, tons: tons };
 }
 
 function _toQtyToggle() {
@@ -6140,7 +6240,8 @@ function _toQtyUpdate(idx, field, val) {
     if (syEl) syEl.textContent = sqYd ? sqYd.toFixed(1) : '';
     var totalDepth = (parseFloat(_toQtyRows[idx].base) || 0) + (parseFloat(_toQtyRows[idx].binder) || 0) + (parseFloat(_toQtyRows[idx].top) || 0);
     if (sqFt && totalDepth) {
-      var calc = parseFloat(((sqFt * totalDepth * 110) / 2000).toFixed(2));
+      // sy × 0.056 × depth per lift — matches the Save Area dialog's live preview.
+      var calc = parseFloat(((sqFt / 9) * totalDepth * 0.056).toFixed(2));
       _toQtyRows[idx].tons = calc;
       var tRows = document.querySelectorAll('#toQtyTbody tr');
       if (tRows[idx]) { var tInps = tRows[idx].querySelectorAll('input'); if (tInps[5]) tInps[5].value = calc; }
@@ -6158,7 +6259,7 @@ function _toQtyUpdate(idx, field, val) {
     var sqFt = parseFloat(_toQtyRows[idx].sqFt) || 0;
     var totalDepth = (parseFloat(_toQtyRows[idx].base) || 0) + (parseFloat(_toQtyRows[idx].binder) || 0) + (parseFloat(_toQtyRows[idx].top) || 0);
     if (sqFt && totalDepth) {
-      var calc = parseFloat(((sqFt * totalDepth * 110) / 2000).toFixed(2));
+      var calc = parseFloat(((sqFt / 9) * totalDepth * 0.056).toFixed(2));
       _toQtyRows[idx].tons = calc;
     } else {
       _toQtyRows[idx].tons = '';
@@ -6589,6 +6690,9 @@ function createJob() {
 }
 
 function switchTab(tab) {
+  _takeoffViewerActive = false;
+  var _qov = document.getElementById('toQtyOverlay');
+  if (_qov) _qov.style.display = 'none';
   activeTab = tab;
   try { sessionStorage.setItem('dmc_last_tab', tab); } catch(e) {}
   // Push a history entry so the browser back button navigates between app tabs
