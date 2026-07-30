@@ -4391,8 +4391,7 @@ async function _toChangePage(delta) {
   }
   await _toRenderPage();
   _toDrawMeasGroup();
-  _toQtyKey = _toCurrentPdfName + '::' + _toPdfPage;
-  _toQtyLoadForPage(_toQtyKey);
+  _toQtyLoadForPage(_toQtyKeyFor(_toPdfPage));
 }
 
 function _toBindEvents() {
@@ -5891,14 +5890,13 @@ function _toWinFileChanged(e) {
     if (_reopen) {
       // Quantities/scale for this page already came from the saved folder page
       // (restored by _toDirPageOpen) — just point the scratch qty store at this
-      // page/PDF combo instead of reloading (and overwriting) from it.
-      _toQtyKey = _toCurrentPdfName + '::' + _toPdfPage;
+      // folder+page+PDF combo instead of reloading (and overwriting) from it.
+      _toQtyKey = _toQtyKeyFor(_toPdfPage);
       _toQtySaveForPage();
       document.getElementById('toReopenWarn')?.remove();
       _toPendingReopen = null;
     } else {
-      _toQtyKey = _toCurrentPdfName + '::1';
-      _toQtyLoadForPage(_toQtyKey);
+      _toQtyLoadForPage(_toQtyKeyFor(1));
     }
     _takeoffViewerActive = true;
     var _qov = document.getElementById('toQtyOverlay');
@@ -6288,6 +6286,13 @@ function _toQtyUpdate(idx, field, val) {
     if (totBar) totBar.textContent = totSqFt ? totSqFt.toLocaleString() + ' SF · ' + totSqYd.toFixed(0) + ' SY · ' + totTons.toFixed(1) + ' T' : '';
   }
   _toQtySaveForPage();
+}
+
+// Scratch-cache key must include the folder — two different takeoff folders can
+// use the same PDF and land on the same page number, and without the folder ID
+// their in-progress quantities collide in the shared localStorage cache.
+function _toQtyKeyFor(pageNum) {
+  return (_toSessionFolderId || 'nofolder') + '::' + _toCurrentPdfName + '::' + pageNum;
 }
 
 function _toQtyLoadForPage(key) {
