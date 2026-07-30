@@ -3421,6 +3421,30 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
     _uspmComboOperatorsSelected = getPickerItems(key, slot, 'operators');
     _uspmComboOperatorOverrides = {};
 
+    // Title: "Job Logistics" + job # / GC / project, parsed from this slot's
+    // fields.jobName — stored as "GC Name — Project Name" (same convention
+    // buildAndSaveForemansReport/buildDocxXml already split on elsewhere).
+    const _titleFields = slot.startsWith('extra_')
+      ? ((schedData[key]?.extras?.[parseInt(slot.replace('extra_',''))]?.data?.fields) || {})
+      : (((schedData[key]||{})[slot]||{}).fields || {});
+    const _titleJobNameFull = _titleFields.jobName || '';
+    let _titleGcName = '', _titleProjName = '';
+    if (_titleJobNameFull.indexOf(' — ') >= 0) {
+      _titleGcName = _titleJobNameFull.split(' — ')[0];
+      _titleProjName = _titleJobNameFull.split(' — ').slice(1).join(' — ');
+    } else {
+      _titleProjName = _titleJobNameFull;
+    }
+    const _titleDetails = [
+      _titleFields.jobNum ? '#' + _titleFields.jobNum : '',
+      _titleGcName,
+      _titleProjName,
+    ].filter(Boolean).join(' · ');
+    title = '<div style="font-family:\'DM Mono\',monospace;">' +
+      '<span style="font-size:14px;font-weight:700;color:var(--white);">Job Logistics</span>' +
+      (_titleDetails ? '<span style="font-size:11px;color:var(--concrete-dim);margin-left:8px;">' + escHtml(_titleDetails) + '</span>' : '') +
+      '</div>';
+
     const rawMatVal = (() => {
       if (slot.startsWith('extra_')) { const i=parseInt(slot.replace('extra_','')); return schedData[key]?.extras?.[i]?.data?.fields?.material||''; }
       return ((schedData[key]||{})[slot]||{}).fields?.material||'';
@@ -3951,7 +3975,7 @@ function uspmSaveComboPlantMaterial(key, slot) {
 // equipment/operator branches of openUnifiedSchedPicker() and openTruckingModal()
 // are kept intact as fallbacks, just no longer wired to the UI.
 function openSchedComboModal(key, slot, focusSection) {
-  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key, slot, field: 'plant', focusSection: focusSection || null });
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: 'Job Logistics', key, slot, field: 'plant', focusSection: focusSection || null });
 }
 
 // Plant/Material saves are called last since uspmSaveMaterial() removes the
@@ -4417,7 +4441,7 @@ function closePlantPickerOutside(e) {
 
 // ── Schedule block plant picker (hierarchical supplier → plant location) ──
 function openSchedPlantPicker(key, slot, triggerBtn) {
-  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key, slot, field: 'plant', focusSection: 'plant' });
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: 'Job Logistics', key, slot, field: 'plant', focusSection: 'plant' });
 }
 
 function closeSchedPlantPickerOutside(e) {
@@ -4514,7 +4538,7 @@ function addNewPlantFromPicker(itemId, e) {
 // Opens the material picker modal, pre-filling the search with whatever the user typed inline
 function openMatSearchFromInline(inputEl, key, slot) {
   inputEl.blur(); // unfocus so it doesn't steal keys from the modal
-  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key, slot, field: 'material', focusSection: 'material' });
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: 'Job Logistics', key, slot, field: 'material', focusSection: 'material' });
   setTimeout(() => {
     // Reset the inline input so it's ready for the next search
     if (inputEl && document.body.contains(inputEl)) inputEl.value = '';
@@ -4522,7 +4546,7 @@ function openMatSearchFromInline(inputEl, key, slot) {
 }
 
 function openMixTypeChipMenu(key, slot, itemName, chipEl) {
-  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key: key, slot: slot, field: 'material', focusSection: 'material' });
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: 'Job Logistics', key: key, slot: slot, field: 'material', focusSection: 'material' });
 }
 
 function openPickerDropdown(key, slot, field, type) {
