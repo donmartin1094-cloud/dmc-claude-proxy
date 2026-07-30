@@ -29546,6 +29546,11 @@ async function uploadFileToStorage(file, folder, onProgress) {
   const path = `${folder}/${uid}_${safeFile}`;
 
   console.log('[Storage] Uploading', path, '(' + blob.size + ' bytes, ' + contentType + ')');
+  // TEMPORARY diagnostic for the Storage permission-denied investigation — remove once resolved.
+  try {
+    var _diagUser = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : null;
+    console.log('[Storage][diag] currentUser:', _diagUser ? _diagUser.uid : 'NULL - NOT SIGNED IN', '· path:', path);
+  } catch(_diagErr) { console.log('[Storage][diag] auth check failed:', _diagErr); }
 
   const ref  = storage.ref(path);
   const task = ref.put(blob, { contentType });
