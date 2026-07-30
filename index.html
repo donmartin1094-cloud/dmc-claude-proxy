@@ -29546,11 +29546,6 @@ async function uploadFileToStorage(file, folder, onProgress) {
   const path = `${folder}/${uid}_${safeFile}`;
 
   console.log('[Storage] Uploading', path, '(' + blob.size + ' bytes, ' + contentType + ')');
-  // TEMPORARY diagnostic for the Storage permission-denied investigation — remove once resolved.
-  try {
-    var _diagUser = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : null;
-    console.log('[Storage][diag] currentUser:', _diagUser ? _diagUser.uid : 'NULL - NOT SIGNED IN', '· path:', path);
-  } catch(_diagErr) { console.log('[Storage][diag] auth check failed:', _diagErr); }
 
   const ref  = storage.ref(path);
   const task = ref.put(blob, { contentType });
@@ -30215,6 +30210,17 @@ async function initApp(username) {
     if (typeof firebase !== 'undefined') {
       db = firebase.firestore();
       storage = firebase.storage();
+
+      // Surface it if Firebase Auth's session is (or becomes) missing while the
+      // user is still logged into the app — Storage uploads silently fail in
+      // that state since rules require request.auth != null.
+      if (firebase.auth) {
+        firebase.auth().onAuthStateChanged(function(user) {
+          if (!user && localStorage.getItem('dmc_u')) {
+            console.warn('[auth] Firebase Auth session expired — Storage uploads will fail until re-login');
+          }
+        });
+      }
 
       // ── Cross-device job_photos sync: query Firestore on load, merge with local ──
       (function() {
@@ -31395,6 +31401,28 @@ document.getElementById('passToggle').addEventListener('click', () => {
   btn.textContent = inp.type==='password' ? '👁' : '🙈';
 });
 
+// Re-establishes a real Firebase Auth session for a user who logged into the
+// app via one of doLogin()'s non-Firebase fallbacks, so Storage rules that
+// require request.auth != null stop rejecting uploads for that session.
+async function _ensureFirebaseAuthSession(email, password) {
+  if (!email || !password || typeof firebase === 'undefined' || !firebase.auth) return;
+  try {
+    if (firebase.auth().currentUser) return; // already signed in
+    await firebase.auth().signInWithEmailAndPassword(email, password);
+    console.log('[auth] Firebase Auth session established for Storage');
+  } catch(e) {
+    if (e.code === 'auth/user-not-found') {
+      try {
+        await firebase.auth().createUserWithEmailAndPassword(email, password);
+      } catch(e2) {
+        console.warn('[auth] Could not create Firebase Auth user:', e2.message);
+      }
+    } else {
+      console.warn('[auth] Firebase Auth sign-in failed:', e.code, e.message);
+    }
+  }
+}
+
 function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value.trim();
@@ -31541,6 +31569,7 @@ function doLogin() {
             });
           } catch(e) { /* ignore */ }
         }
+        await _ensureFirebaseAuthSession(acctMatch.email, p);
         initApp((acctMatch.username || '').toLowerCase());
         return;
       }
@@ -31557,6 +31586,7 @@ function doLogin() {
         if (typeof firebase !== 'undefined' && firebase.auth && _hwAcct?.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(_hwAcct.email, p).catch(() => {}); } catch(e) {}
         }
+        await _ensureFirebaseAuthSession(_hwAcct?.email, p);
         initApp(hardcodedUser.toLowerCase());
         return;
       }
@@ -31572,6 +31602,7 @@ function doLogin() {
         if (typeof firebase !== 'undefined' && firebase.auth && hardcodedByEmail.email) {
           try { await firebase.auth().createUserWithEmailAndPassword(hardcodedByEmail.email, p).catch(() => {}); } catch(e) {}
         }
+        await _ensureFirebaseAuthSession(hardcodedByEmail.email, p);
         initApp((hardcodedByEmail.username || '').toLowerCase());
         return;
       }
@@ -31596,6 +31627,7 @@ function doLogin() {
             _checkLocalStorageSize();
           }
           if ((localStorage.getItem('dmc_u')||'').toLowerCase() === 'dj') { localStorage.setItem('dmc_dj_last_session', new Date().toLocaleDateString('en-CA')); try { sessionStorage.setItem('dmc_dj_first_login','1'); } catch(e) {} _djLoginVerifyTrigger(); }
+          await _ensureFirebaseAuthSession(data.email || loginEmail, p);
           initApp(localStorage.getItem('dmc_u') || (data.username || '').toLowerCase());
           return;
         }
