@@ -3862,7 +3862,7 @@ function closeSecPopup() {
   _sp.classList.remove('open', 'sec-popup-full');
   _secPopupCurrent = null;
   _takeoffViewerActive = false;
-  const _qov = document.getElementById('toQtyOverlay');
+  const _qov = document.getElementById('toUnifiedPanel');
   if (_qov) _qov.style.display = 'none';
   // Restore active state based on current tab (or home)
   const _tabToFolder = { backlog:'jobdir', bid:'bids', pricing:'bids', priced:'bids',
@@ -4308,7 +4308,7 @@ function _toBuildPortalHTML() {
 async function _toOpenPortal(file) {
   if (!document.getElementById('toStyles')) {
     const s = document.createElement('style'); s.id = 'toStyles';
-    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}@media(max-width:768px){.to-qty-d{display:none}#toQtyOverlay{max-height:50vh}#toQtyBody{max-height:50vh}#toQtyOverlay button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyBar{cursor:pointer}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}}@media(max-width:600px){.to-qty-hide-mobile{display:none}}`;
+    s.textContent = `.to-btn{background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;white-space:nowrap}.to-btn:hover{border-color:#f5c518;color:#f5c518}.to-btn.active{background:rgba(245,197,24,0.18) !important;border-color:#f5c518 !important;color:#f5c518 !important}.to-qty-expand-row{display:none}.to-qty-expand-row.to-qty-open{display:table-row}#toUnifiedToolbar.to-unified-vertical{flex-direction:column;align-items:stretch;}#toUnifiedToolbar.to-unified-vertical>.to-btn,#toUnifiedToolbar.to-unified-vertical>button{width:100%;text-align:left;justify-content:flex-start;padding:8px 12px;}#toUnifiedToolbar.to-unified-vertical>div[style*="width:1px"]{display:none;}@media(max-width:768px){.to-qty-d{display:none}#toUnifiedPanel button[onclick="_toQtyAddRow()"]{width:100%;min-height:48px;justify-content:center}#toPortalOverlay{overflow-x:hidden}#toCanvasWrap{overflow:hidden;touch-action:none}#toCanvasInner{width:100%;transform-origin:center center}#toCanvas{width:100%;height:auto}#toBtnPrev,#toBtnNext{min-width:48px !important;min-height:48px !important;display:inline-flex !important;align-items:center;justify-content:center}#toPageInfo{font-size:12px !important}.to-qty-label{display:none}#toQtyFoot tr{position:sticky;bottom:0;z-index:2}}@media(max-width:600px){.to-qty-hide-mobile{display:none}}`;
     document.head.appendChild(s);
   }
   let ov = document.getElementById('toPortalOverlay');
@@ -4336,7 +4336,7 @@ function _toClosePortal() {
   if (o) o.style.display = 'none';
   _toTool = null; _toPoints = []; _toScalePoints = [];
   _takeoffViewerActive = false;
-  const _qov = document.getElementById('toQtyOverlay');
+  const _qov = document.getElementById('toUnifiedPanel');
   if (_qov) _qov.style.display = 'none';
 }
 
@@ -4582,10 +4582,12 @@ function _toActivate(tool) {
   const cur = _toTool === 'select' ? 'default' : (_toTool ? 'crosshair' : 'default');
   const w = document.getElementById('toCanvasWrap'); if (w) w.style.cursor = cur;
   const s = document.getElementById('toSvgOverlay'); if (s) s.style.cursor = cur;
-  // Let mouse events pass through the quantity overlay to the canvas underneath
+  // Let mouse events pass through the quantity section to the canvas underneath
   // while a measurement tool is active; the mousemove listener added in
   // _toQtyInit() already covers edge-scroll, so this is a redundant safety net.
-  const qov = document.getElementById('toQtyOverlay');
+  // Scoped to the quantity section only (not the whole panel) so the toolbar
+  // buttons — including the one needed to switch tools off again — stay clickable.
+  const qov = document.getElementById('toUnifiedQtySection');
   if (qov) qov.style.pointerEvents = _toTool ? 'none' : 'auto';
 }
 
@@ -5102,10 +5104,10 @@ var _toSessionFolderId   = null;
 let _toCurrentPdfName = '';
 var _toLinkedJob         = null;
 var _toQtyRows           = [];
-var _toQtyExpanded       = true;
 var _toQtyKey            = '';
 var _TO_QTY_STORE        = 'dmc_to_quantities';
-var _toQtyDockPosition   = localStorage.getItem('dmc_to_qty_dock') || 'bottom';
+var _toUnifiedDock       = localStorage.getItem('dmc_to_unified_dock') || 'bottom';
+var _toUnifiedCollapsed  = localStorage.getItem('dmc_to_unified_collapsed') === 'true';
 var _takeoffViewerActive = false;
 var _toSelectedMeasIdx   = null; // Pointer-mode selection — index into _toMeasurements for the current page
 var _toPendingReopen     = null; // {pageNum} set by _toDirPageOpen while its PDF (re)loads, so _toWinFileChanged preserves restored data instead of wiping it
@@ -5117,7 +5119,7 @@ function _renderTakeoffsWindow(container) {
 
 function _renderTakeoffDirectory(container) {
   _takeoffViewerActive = false;
-  var _qov = document.getElementById('toQtyOverlay');
+  var _qov = document.getElementById('toUnifiedPanel');
   if (_qov) _qov.style.display = 'none';
   _toFoldersLoad();
   var _bl = typeof backlogJobs !== 'undefined' ? backlogJobs : [];
@@ -5783,8 +5785,8 @@ function _toDirPageOpen(folderId, pageId) {
     _toQtyKey = null;
     _toQtyRender();
     _takeoffViewerActive = true;
-    var _qov = document.getElementById('toQtyOverlay');
-    if (_qov) _qov.style.display = '';
+    var _qov = document.getElementById('toUnifiedPanel');
+    if (_qov) { _qov.style.display = 'flex'; _toUnifiedUpdateCanvasPadding(); }
     // Restore every saved page's measurements and scale (not just the one being
     // opened) so navigating to another already-saved page in this folder still
     // shows its own shading and calibration.
@@ -5853,37 +5855,6 @@ function _renderTakeoffPortal(container) {
   container.innerHTML=`
     <!-- Portal section -->
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0d0d0d;">
-      <div id="toToolbar" style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:#1a1a1a;border-bottom:2px solid #f5c518;flex-shrink:0;flex-wrap:wrap;">
-        <button onclick="_renderTakeoffDirectory(document.getElementById('secPopupBody'))" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;">← Back</button>
-        <span style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:#f5c518;white-space:nowrap;">📐 Takeoff Portal</span>
-        <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-        <button id="toBtnScale"  class="to-btn" onclick="_toActivate('scale')">📐 Set Scale</button>
-        <button id="toBtnLinear" class="to-btn" onclick="_toActivate('linear')">📏 Linear</button>
-        <button id="toBtnArea"   class="to-btn" onclick="_toActivate('area')">⬛ Area</button>
-        <button id="toBtnSelect" class="to-btn" title="Select area" onclick="_toActivate('select')">🖱 Pointer</button>
-        <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-        <div id="toScaleDisplay" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;padding:4px 10px;background:#252525;border-radius:4px;border:1px solid #333;white-space:nowrap;">Scale: not set</div>
-        <div id="toStatus" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;">Load a PDF to begin</div>
-        <button id="toBtnColorPicker" onclick="_toToggleColorPanel(this)" style="display:flex;align-items:center;gap:3px;background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;padding:5px 9px;cursor:pointer;" title="Measurement Colors">
-          <span id="toColorDotPt" style="width:9px;height:9px;border-radius:50%;background:#ffffff;border:1.5px solid rgba(255,255,255,0.35);flex-shrink:0;display:inline-block;"></span>
-          <span id="toColorDotLn" style="width:9px;height:9px;border-radius:50%;background:#f5c518;border:1.5px solid rgba(255,255,255,0.2);flex-shrink:0;display:inline-block;"></span>
-          <span id="toColorDotAr" style="width:9px;height:9px;border-radius:50%;background:#f5c518;border:1.5px solid rgba(255,255,255,0.2);flex-shrink:0;display:inline-block;"></span>
-        </button>
-        <button onclick="_toUndo()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">↩ Undo</button>
-        <button onclick="_toClearAll()" style="background:none;border:1px solid #444;border-radius:4px;color:#d94f3d;font-family:'DM Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">🗑 Clear</button>
-        <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-        <button id="toBtnPrev" onclick="_toChangePage(-1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">◀</button>
-        <span id="toPageInfo" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;white-space:nowrap;">— / —</span>
-        <button id="toBtnNext" onclick="_toChangePage(1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">▶</button>
-        <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-        <button onclick="_toZoomOut()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom Out">−</button>
-        <span id="toZoomDisplay" onclick="_toZoomReset()" style="font-family:'DM Mono',monospace;font-size:10px;color:#9b9488;padding:4px 8px;background:#252525;border:1px solid #333;border-radius:4px;cursor:pointer;white-space:nowrap;min-width:40px;text-align:center;" title="Click to reset zoom">100%</span>
-        <button onclick="_toZoomIn()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:'DM Mono',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom In">+</button>
-        <div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>
-        <button onclick="document.getElementById('toWinFile').click()" style="background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.4);border-radius:4px;color:#5ab4f5;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;white-space:nowrap;">📄 Load PDF</button>
-        <input type="file" id="toWinFile" accept=".pdf" style="display:none" onchange="_toWinFileChanged(event)">
-        <button onclick="_toSavePageToFolder()" style="background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.5);border-radius:4px;color:#7ecb8f;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;padding:5px 14px;cursor:pointer;white-space:nowrap;">💾 Save Page</button>
-      </div>
       <div id="toCanvasWrap" style="flex:1;overflow:auto;background:#0d0d0d;position:relative;cursor:default;min-height:0;">
         <div style="padding:60px 0;text-align:center;color:#444;font-family:'DM Mono',monospace;font-size:12px;" id="toEmptyState">Click <strong style="color:#5ab4f5;">📄 Load PDF</strong> above to open a civil plan</div>
         <div id="toCanvasInner" style="position:relative;display:inline-block;transform-origin:center center;">
@@ -5942,8 +5913,8 @@ function _toWinFileChanged(e) {
       _toQtyLoadForPage(_toQtyKeyFor(1));
     }
     _takeoffViewerActive = true;
-    var _qov = document.getElementById('toQtyOverlay');
-    if (_qov) _qov.style.display = '';
+    var _qov = document.getElementById('toUnifiedPanel');
+    if (_qov) { _qov.style.display = 'flex'; _toUnifiedUpdateCanvasPadding(); }
   }).catch(err=>_toUpdateStatus('Error: '+(err.message||err)));
 }
 
@@ -6121,65 +6092,116 @@ function _toJobSearchClear() {
 // ── Takeoff Quantity Table ────────────────────────────────────────────────────
 
 function _toQtyInit() {
-  if (document.getElementById('toQtyOverlay')) return;
+  if (document.getElementById('toUnifiedPanel')) return;
   if (!document.getElementById('toQtyDepthList')) {
     var dl = document.createElement('datalist'); dl.id = 'toQtyDepthList';
     ['1.5','2','2.5','3'].forEach(function(v){ var o=document.createElement('option'); o.value=v; dl.appendChild(o); });
     document.body.appendChild(dl);
   }
   var ov = document.createElement('div');
-  ov.id = 'toQtyOverlay';
-  ov.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:8900;display:none;font-family:\'DM Mono\',monospace;';
+  ov.id = 'toUnifiedPanel';
+  ov.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:8900;display:none;flex-direction:column;font-family:\'DM Mono\',monospace;background:#1a1a1a;';
   ov.innerHTML =
-    '<div id="toQtyBar" onclick="_toQtyToggle()" style="background:#1a1a1a;border-top:2px solid #a78bfa;display:flex;align-items:center;padding:5px 12px;gap:8px;cursor:pointer;">' +
-      '<span id="toQtyDragHandle" onclick="event.stopPropagation();" style="cursor:grab;padding:0 8px;color:var(--concrete-dim);font-size:16px;user-select:none;">⠿</span>' +
-      '<span style="font-size:12px;font-weight:700;color:#a78bfa;flex:1;">📐<span class="to-qty-label"> Quantities</span></span>' +
-      '<span id="toQtyTotalsBar" style="font-size:10px;color:#9b9488;margin-right:8px;"></span>' +
-      '<button onclick="event.stopPropagation();_toQtyAddRow();" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Row</button>' +
-      '<button id="toQtyToggleBtn" onclick="event.stopPropagation();_toQtyToggle();" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:4px 10px;cursor:pointer;">▲</button>' +
+    '<div id="toUnifiedToolbar" style="display:flex;align-items:center;gap:8px;padding:8px 12px;flex-wrap:wrap;flex-shrink:0;background:#1a1a1a;">' +
+      '<span id="toQtyDragHandle" style="cursor:grab;padding:0 8px;color:var(--concrete-dim);font-size:16px;user-select:none;flex-shrink:0;">⠿</span>' +
+      '<button onclick="_renderTakeoffDirectory(document.getElementById(\'secPopupBody\'))" style="background:none;border:1px solid #555;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;">← Back</button>' +
+      '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:3px;color:#f5c518;white-space:nowrap;">📐 Takeoff Portal</span>' +
+      '<div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>' +
+      '<button id="toBtnScale"  class="to-btn" onclick="_toActivate(\'scale\')">📐 Set Scale</button>' +
+      '<button id="toBtnLinear" class="to-btn" onclick="_toActivate(\'linear\')">📏 Linear</button>' +
+      '<button id="toBtnArea"   class="to-btn" onclick="_toActivate(\'area\')">⬛ Area</button>' +
+      '<button id="toBtnSelect" class="to-btn" title="Select area" onclick="_toActivate(\'select\')">🖱 Pointer</button>' +
+      '<div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>' +
+      '<div id="toScaleDisplay" style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;padding:4px 10px;background:#252525;border-radius:4px;border:1px solid #333;white-space:nowrap;">Scale: not set</div>' +
+      '<div id="toStatus" style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;">Load a PDF to begin</div>' +
+      '<button id="toBtnColorPicker" onclick="_toToggleColorPanel(this)" style="display:flex;align-items:center;gap:3px;background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:4px;padding:5px 9px;cursor:pointer;" title="Measurement Colors">' +
+        '<span id="toColorDotPt" style="width:9px;height:9px;border-radius:50%;background:#ffffff;border:1.5px solid rgba(255,255,255,0.35);flex-shrink:0;display:inline-block;"></span>' +
+        '<span id="toColorDotLn" style="width:9px;height:9px;border-radius:50%;background:#f5c518;border:1.5px solid rgba(255,255,255,0.2);flex-shrink:0;display:inline-block;"></span>' +
+        '<span id="toColorDotAr" style="width:9px;height:9px;border-radius:50%;background:#f5c518;border:1.5px solid rgba(255,255,255,0.2);flex-shrink:0;display:inline-block;"></span>' +
+      '</button>' +
+      '<button onclick="_toUndo()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">↩ Undo</button>' +
+      '<button onclick="_toClearAll()" style="background:none;border:1px solid #444;border-radius:4px;color:#d94f3d;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;">🗑 Clear</button>' +
+      '<div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>' +
+      '<button id="toBtnPrev" onclick="_toChangePage(-1)" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">◀</button>' +
+      '<span id="toPageInfo" style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;white-space:nowrap;">— / —</span>' +
+      '<button id="toBtnNext" onclick="_toChangePage(1)"  style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-size:13px;padding:4px 10px;cursor:pointer;line-height:1;">▶</button>' +
+      '<div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>' +
+      '<button onclick="_toZoomOut()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom Out">−</button>' +
+      '<span id="toZoomDisplay" onclick="_toZoomReset()" style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;padding:4px 8px;background:#252525;border:1px solid #333;border-radius:4px;cursor:pointer;white-space:nowrap;min-width:40px;text-align:center;" title="Click to reset zoom">100%</span>' +
+      '<button onclick="_toZoomIn()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom In">+</button>' +
+      '<div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>' +
+      '<button onclick="document.getElementById(\'toWinFile\').click()" style="background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.4);border-radius:4px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 12px;cursor:pointer;white-space:nowrap;">📄 Load PDF</button>' +
+      '<input type="file" id="toWinFile" accept=".pdf" style="display:none" onchange="_toWinFileChanged(event)">' +
+      '<button onclick="_toSavePageToFolder()" style="background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.5);border-radius:4px;color:#7ecb8f;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:5px 14px;cursor:pointer;white-space:nowrap;">💾 Save Page</button>' +
+      '<button id="toUnifiedToggleBtn" onclick="_toUnifiedToggleCollapse()" style="background:none;border:1px solid #444;border-radius:4px;color:#9b9488;font-family:\'DM Mono\',monospace;font-size:10px;padding:4px 10px;cursor:pointer;margin-left:auto;flex-shrink:0;">▼</button>' +
     '</div>' +
-    '<div id="toQtyBody" style="background:#252525;max-height:40vh;overflow-y:auto;">' +
-      '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
-        '<thead>' +
-          '<tr style="background:#1a1a1a;">' +
-            '<th colspan="6"></th>' +
-            '<th colspan="4" style="padding:2px 8px 0;text-align:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;font-weight:400;border-left:2px solid rgba(167,139,250,0.3);">Tonnage</th>' +
-            '<th></th>' +
-          '</tr>' +
-          '<tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
-            '<th style="padding:5px 8px;text-align:left;color:var(--concrete-dim);font-weight:700;min-width:120px;">Area / Section</th>' +
-            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:60px;">Sq Ft</th>' +
-            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:55px;">Sq Yds</th>' +
-            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:58px;">Base (in)</th>' +
-            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:60px;">Binder (in)</th>' +
-            '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:52px;">Top (in)</th>' +
-            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:60px;border-left:2px solid rgba(167,139,250,0.3);">Base Tons</th>' +
-            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:64px;">Binder Tons</th>' +
-            '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:58px;">Top Tons</th>' +
-            '<th style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:64px;">Total Tons</th>' +
-            '<th style="padding:5px 4px;width:24px;"></th>' +
-          '</tr>' +
-        '</thead>' +
-        '<tbody id="toQtyTbody"></tbody>' +
-        '<tfoot id="toQtyFoot"></tfoot>' +
-      '</table>' +
+    '<div id="toUnifiedDivider" style="height:1px;background:rgba(167,139,250,0.3);flex-shrink:0;"></div>' +
+    '<div id="toUnifiedQtySection" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">' +
+      '<div id="toQtyBar" style="background:#1a1a1a;display:flex;align-items:center;padding:5px 12px;gap:8px;flex-shrink:0;">' +
+        '<span style="font-size:12px;font-weight:700;color:#a78bfa;flex:1;">📐<span class="to-qty-label"> Quantities</span></span>' +
+        '<span id="toQtyTotalsBar" style="font-size:10px;color:#9b9488;margin-right:8px;"></span>' +
+        '<button onclick="_toQtyAddRow();" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);border-radius:4px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;padding:4px 12px;cursor:pointer;white-space:nowrap;">+ Add Row</button>' +
+      '</div>' +
+      '<div id="toQtyBody" style="background:#252525;flex:1;overflow-y:auto;">' +
+        '<table id="toQtyTable" style="width:100%;border-collapse:collapse;font-size:11px;">' +
+          '<thead>' +
+            '<tr style="background:#1a1a1a;">' +
+              '<th colspan="6"></th>' +
+              '<th colspan="4" style="padding:2px 8px 0;text-align:center;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;font-weight:400;border-left:2px solid rgba(167,139,250,0.3);">Tonnage</th>' +
+              '<th></th>' +
+            '</tr>' +
+            '<tr style="background:#1a1a1a;border-bottom:1px solid #333;">' +
+              '<th style="padding:5px 8px;text-align:left;color:var(--concrete-dim);font-weight:700;min-width:120px;">Area / Section</th>' +
+              '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:60px;">Sq Ft</th>' +
+              '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:55px;">Sq Yds</th>' +
+              '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:58px;">Base (in)</th>' +
+              '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:60px;">Binder (in)</th>' +
+              '<th style="padding:5px 8px;text-align:right;color:var(--concrete-dim);font-weight:700;min-width:52px;">Top (in)</th>' +
+              '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:60px;border-left:2px solid rgba(167,139,250,0.3);">Base Tons</th>' +
+              '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:64px;">Binder Tons</th>' +
+              '<th class="to-qty-hide-mobile" style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:58px;">Top Tons</th>' +
+              '<th style="padding:5px 8px;text-align:right;color:#a78bfa;font-weight:700;min-width:64px;">Total Tons</th>' +
+              '<th style="padding:5px 4px;width:24px;"></th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody id="toQtyTbody"></tbody>' +
+          '<tfoot id="toQtyFoot"></tfoot>' +
+        '</table>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(ov);
-  // #toQtyOverlay is position:fixed at the bottom of the viewport, so it sits on
-  // top of (and swallows mousemove for) the bottom edge-scroll zone of
-  // #toCanvasWrap underneath it. Forward its mousemove into the same shared
-  // edge-scroll check so the bottom trigger still fires while hovering over it.
+  // #toUnifiedPanel is position:fixed, so it sits on top of (and swallows
+  // mousemove for) whichever edge-scroll zone of #toCanvasWrap it's docked
+  // against. Forward its mousemove into the same shared edge-scroll check so
+  // that trigger still fires while hovering over the panel.
   ov.addEventListener('mousemove', function(e) { _toCheckEdgeScroll(e.clientX, e.clientY); });
   var _toQtyHandle = document.getElementById('toQtyDragHandle');
   if (_toQtyHandle) {
-    _toQtyHandle.addEventListener('mousedown', _toQtyDragStart);
-    _toQtyHandle.addEventListener('touchstart', _toQtyDragStart, { passive: false });
+    _toQtyHandle.addEventListener('mousedown', _toUnifiedDragStart);
+    _toQtyHandle.addEventListener('touchstart', _toUnifiedDragStart, { passive: false });
   }
-  _toQtyDock(localStorage.getItem('dmc_to_qty_dock') || 'bottom');
+  if (_toUnifiedCollapsed) {
+    var _divider = document.getElementById('toUnifiedDivider'); if (_divider) _divider.style.display = 'none';
+    var _qtySec = document.getElementById('toUnifiedQtySection'); if (_qtySec) _qtySec.style.display = 'none';
+    var _tglBtn = document.getElementById('toUnifiedToggleBtn'); if (_tglBtn) _tglBtn.textContent = '▶';
+  }
+  _toUnifiedApplyDock(_toUnifiedDock);
   _toQtyRender();
 }
 
-// ── Build 1: draggable snap-to-border quantity overlay ───────────────────────
+// ── Unified toolbar + quantity panel: collapse, drag, dock ───────────────────
+
+function _toUnifiedToggleCollapse() {
+  _toUnifiedCollapsed = !_toUnifiedCollapsed;
+  localStorage.setItem('dmc_to_unified_collapsed', String(_toUnifiedCollapsed));
+  var divider = document.getElementById('toUnifiedDivider');
+  var qtySection = document.getElementById('toUnifiedQtySection');
+  var btn = document.getElementById('toUnifiedToggleBtn');
+  if (divider) divider.style.display = _toUnifiedCollapsed ? 'none' : '';
+  if (qtySection) qtySection.style.display = _toUnifiedCollapsed ? 'none' : 'flex';
+  if (btn) btn.textContent = _toUnifiedCollapsed ? '▶' : '▼';
+  _toUnifiedUpdateCanvasPadding();
+}
 
 function _toQtyNearestZone(x, y) {
   var w = window.innerWidth, h = window.innerHeight;
@@ -6192,7 +6214,11 @@ function _toQtyNearestZone(x, y) {
 }
 
 function _toQtyShowSnapZones() {
+  // Mobile only ever docks to the bottom, so don't tease zones that a drop
+  // would just get clamped away from.
+  var _mobileOnly = window.innerWidth <= 600;
   ['top', 'bottom', 'left', 'right'].forEach(function(pos) {
+    if (_mobileOnly && pos !== 'bottom') return;
     var z = document.createElement('div');
     z.className = 'to-qty-snap-zone';
     z.dataset.pos = pos;
@@ -6216,7 +6242,7 @@ function _toQtyHideSnapZones() {
   document.querySelectorAll('.to-qty-snap-zone').forEach(function(z) { z.remove(); });
 }
 
-function _toQtyDragStart(e) {
+function _toUnifiedDragStart(e) {
   e.preventDefault();
   e.stopPropagation();
   var handle = document.getElementById('toQtyDragHandle');
@@ -6233,9 +6259,10 @@ function _toQtyDragStart(e) {
     document.removeEventListener('touchend', end);
     var pt = (ev.changedTouches && ev.changedTouches[0]) || ev;
     var nearest = _toQtyNearestZone(pt.clientX, pt.clientY);
+    if (window.innerWidth <= 600) nearest = 'bottom';
     _toQtyHideSnapZones();
     if (handle) handle.style.cursor = 'grab';
-    _toQtyDock(nearest);
+    _toUnifiedApplyDock(nearest);
   }
   document.addEventListener('mousemove', move);
   document.addEventListener('touchmove', move, { passive: false });
@@ -6243,54 +6270,56 @@ function _toQtyDragStart(e) {
   document.addEventListener('touchend', end);
 }
 
-function _toQtyDock(position) {
+function _toUnifiedApplyDock(position) {
+  if (window.innerWidth <= 600 && position !== 'bottom') position = 'bottom';
   position = (position === 'top' || position === 'left' || position === 'right') ? position : 'bottom';
-  _toQtyDockPosition = position;
-  localStorage.setItem('dmc_to_qty_dock', position);
-  var ov = document.getElementById('toQtyOverlay');
-  if (!ov) return;
-  var bar = document.getElementById('toQtyBar');
-  var body = document.getElementById('toQtyBody');
-  var canvasWrap = document.getElementById('toCanvasWrap');
-  var toolbar = document.getElementById('toToolbar') || document.querySelector('.to-toolbar');
-  var toolbarH = toolbar ? toolbar.getBoundingClientRect().height : 48;
+  _toUnifiedDock = position;
+  localStorage.setItem('dmc_to_unified_dock', position);
+  var panel = document.getElementById('toUnifiedPanel');
+  if (!panel) return;
+  var toolbar = document.getElementById('toUnifiedToolbar');
   var isMobile = window.innerWidth <= 768;
-  var sideWidth = isMobile ? '260px' : '320px';
-  ov.style.position = 'fixed';
-  ov.style.top = ov.style.bottom = ov.style.left = ov.style.right = 'auto';
-  ov.style.width = ov.style.height = ov.style.maxHeight = ov.style.marginTop = '';
-  ov.style.overflowY = '';
-  if (bar) bar.style.borderTop = bar.style.borderBottom = bar.style.borderLeft = bar.style.borderRight = '';
+  var sideWidth = isMobile ? '260px' : '300px';
+  panel.style.top = panel.style.bottom = panel.style.left = panel.style.right = 'auto';
+  panel.style.width = panel.style.height = panel.style.maxHeight = '';
+  panel.style.borderTop = panel.style.borderBottom = panel.style.borderLeft = panel.style.borderRight = '';
+  if (toolbar) toolbar.classList.remove('to-unified-vertical');
   if (position === 'top') {
-    ov.style.top = toolbarH + 'px'; ov.style.left = '0'; ov.style.right = '0'; ov.style.bottom = 'auto';
-    ov.style.width = '100%'; ov.style.maxHeight = '40vh';
-    ov.style.borderBottom = '2px solid #a78bfa'; ov.style.borderTop = 'none';
-    if (bar) bar.style.borderBottom = '2px solid #a78bfa';
-    if (body) body.style.maxHeight = '40vh';
+    panel.style.top = '0'; panel.style.left = '0'; panel.style.right = '0';
+    panel.style.width = '100%'; panel.style.maxHeight = '50vh';
+    panel.style.borderBottom = '2px solid #a78bfa';
   } else if (position === 'left') {
-    ov.style.left = '0'; ov.style.top = toolbarH + 'px'; ov.style.bottom = '0'; ov.style.right = 'auto';
-    ov.style.width = sideWidth; ov.style.height = 'calc(100vh - ' + toolbarH + 'px)'; ov.style.maxHeight = 'calc(100vh - ' + toolbarH + 'px)';
-    ov.style.overflowY = 'auto';
-    if (bar) bar.style.borderRight = '2px solid #a78bfa';
-    if (body) body.style.maxHeight = 'none';
+    panel.style.left = '0'; panel.style.top = '0'; panel.style.bottom = '0';
+    panel.style.width = sideWidth; panel.style.height = '100vh';
+    panel.style.borderRight = '2px solid #a78bfa';
+    if (toolbar) toolbar.classList.add('to-unified-vertical');
   } else if (position === 'right') {
-    ov.style.right = '0'; ov.style.top = toolbarH + 'px'; ov.style.bottom = '0'; ov.style.left = 'auto';
-    ov.style.width = sideWidth; ov.style.height = 'calc(100vh - ' + toolbarH + 'px)'; ov.style.maxHeight = 'calc(100vh - ' + toolbarH + 'px)';
-    ov.style.overflowY = 'auto';
-    if (bar) bar.style.borderLeft = '2px solid #a78bfa';
-    if (body) body.style.maxHeight = 'none';
+    panel.style.right = '0'; panel.style.top = '0'; panel.style.bottom = '0';
+    panel.style.width = sideWidth; panel.style.height = '100vh';
+    panel.style.borderLeft = '2px solid #a78bfa';
+    if (toolbar) toolbar.classList.add('to-unified-vertical');
   } else {
-    ov.style.bottom = '0'; ov.style.left = '0'; ov.style.right = '0'; ov.style.top = 'auto';
-    ov.style.width = '100%'; ov.style.maxHeight = '40vh';
-    if (bar) bar.style.borderTop = '2px solid #a78bfa';
-    if (body) body.style.maxHeight = '40vh';
+    panel.style.bottom = '0'; panel.style.left = '0'; panel.style.right = '0';
+    panel.style.width = '100%'; panel.style.maxHeight = '50vh';
+    panel.style.borderTop = '2px solid #a78bfa';
   }
-  if (position === 'top') {
-    var qtyH = ov.getBoundingClientRect().height;
-    if (canvasWrap) canvasWrap.style.paddingTop = (toolbarH + qtyH) + 'px';
-  } else if (canvasWrap) {
-    canvasWrap.style.paddingTop = '0';
-  }
+  _toUnifiedUpdateCanvasPadding();
+}
+
+// Keeps #toCanvasWrap padded on whichever side the unified panel is docked
+// against, so the plan is never permanently hidden underneath it — recomputed
+// after every dock change and every collapse/expand toggle.
+function _toUnifiedUpdateCanvasPadding() {
+  var canvasWrap = document.getElementById('toCanvasWrap');
+  if (!canvasWrap) return;
+  canvasWrap.style.paddingTop = canvasWrap.style.paddingBottom = canvasWrap.style.paddingLeft = canvasWrap.style.paddingRight = '0';
+  var panel = document.getElementById('toUnifiedPanel');
+  if (!panel || panel.style.display === 'none') return;
+  var rect = panel.getBoundingClientRect();
+  if (_toUnifiedDock === 'top') canvasWrap.style.paddingTop = rect.height + 'px';
+  else if (_toUnifiedDock === 'bottom') canvasWrap.style.paddingBottom = rect.height + 'px';
+  else if (_toUnifiedDock === 'left') canvasWrap.style.paddingLeft = rect.width + 'px';
+  else if (_toUnifiedDock === 'right') canvasWrap.style.paddingRight = rect.width + 'px';
 }
 
 function _toQtyRender() {
@@ -6384,14 +6413,6 @@ function _toAllPagesTotals() {
     tons += parseFloat(r.tons) || 0;
   });
   return { sqFt: sqFt, tons: tons };
-}
-
-function _toQtyToggle() {
-  _toQtyExpanded = !_toQtyExpanded;
-  var body = document.getElementById('toQtyBody');
-  var btn  = document.getElementById('toQtyToggleBtn');
-  if (body) body.style.display = _toQtyExpanded ? '' : 'none';
-  if (btn)  btn.textContent = _toQtyExpanded ? '▲' : '▼';
 }
 
 function _toQtyAddRow() {
@@ -6927,7 +6948,7 @@ function createJob() {
 
 function switchTab(tab) {
   _takeoffViewerActive = false;
-  var _qov = document.getElementById('toQtyOverlay');
+  var _qov = document.getElementById('toUnifiedPanel');
   if (_qov) _qov.style.display = 'none';
   activeTab = tab;
   try { sessionStorage.setItem('dmc_last_tab', tab); } catch(e) {}
