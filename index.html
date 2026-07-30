@@ -2567,10 +2567,10 @@
   .uspm-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:7800;display:flex;align-items:center;justify-content:center;padding:20px; }
   .uspm-box { background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);width:100%;max-width:420px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.8);overflow:hidden; }
   .uspm-box--wide { max-width:760px; height:56vh; max-height:56vh; overflow-y:hidden; }
-  .uspm-box--combo { max-width:900px; height:70vh; max-height:70vh; display:flex; flex-direction:column; }
+  .uspm-box--combo { max-width:960px; height:88vh; max-height:88vh; display:flex; flex-direction:column; }
   .uspm-combo-body { display:flex; flex-direction:row; height:100%; overflow:hidden; }
   .uspm-combo-left { width:40%; border-right:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; overflow:hidden; }
-  .uspm-combo-right { width:60%; display:flex; flex-direction:column; overflow:hidden; }
+  .uspm-combo-right { width:60%; flex:1; display:flex; flex-direction:column; overflow-y:auto; }
   @media (max-width:600px) {
     .uspm-combo-body { flex-direction:column; }
     .uspm-combo-left, .uspm-combo-right { width:100%; border-right:none; }

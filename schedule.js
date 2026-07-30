@@ -504,10 +504,10 @@ function openMobBlockDetail(key, slot) {
       <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--stripe);padding-bottom:6px;">✏️ Edit Fields</div>
       ${_editRow('✏️','Job / Type', btype.label, `document.getElementById('_mobSheet')?.remove();cycleBlockType('${key}','${slot}');`)}
       ${_editRow('🪨','Mix Types', matStr, `document.getElementById('_mobSheet')?.remove();openMixTypeChipMenu('${key}','${slot}',null,null);`)}
-      ${_editRow('👷','Operators', opList.join(', '), `document.getElementById('_mobSheet')?.remove();openPickerDropdown('${key}','${slot}','operators','operators');`)}
-      ${_editRow('🚜','Equipment', eqList.join(', '), `document.getElementById('_mobSheet')?.remove();openPickerDropdown('${key}','${slot}','equipment','equipment');`)}
+      ${_editRow('👷','Operators', opList.join(', '), `document.getElementById('_mobSheet')?.remove();openSchedComboModal('${key}','${slot}','operators');`)}
+      ${_editRow('🚜','Equipment', eqList.join(', '), `document.getElementById('_mobSheet')?.remove();openSchedComboModal('${key}','${slot}','equipment');`)}
       ${_editRow('🌱','Plant', fields.plant, `document.getElementById('_mobSheet')?.remove();openSchedPlantPicker('${key}','${slot}',null);`)}
-      ${_editRow('🚛','Trucking', truckPreview, `document.getElementById('_mobSheet')?.remove();openTruckingModal('${key}','${slot}');`)}
+      ${_editRow('🚛','Trucking', truckPreview, `document.getElementById('_mobSheet')?.remove();openSchedComboModal('${key}','${slot}','trucking');`)}
       <div class="sched-mob-sheet-row" style="flex-direction:column;gap:6px;align-items:stretch;border-bottom:none;">
         <span class="sched-mob-sheet-lbl">📝 Notes</span>
         <textarea data-key="${key}" data-slot="${slot}" data-field="notes"
@@ -2862,7 +2862,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
             ? `<input class="mat-inline-search" placeholder="Search mix…" autocomplete="off"
                 onfocus="openMatSearchFromInline(this,'${key}','${slot}')"
                 oninput="openMatSearchFromInline(this,'${key}','${slot}')" />`
-            : `<button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openPickerDropdown('${key}','${slot}','${f.key}','${f.type}')">+</button>`}
+            : `<button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openSchedComboModal('${key}','${slot}','${f.type}')">+</button>`}
         </div>
       </div>`;
     }
@@ -2902,7 +2902,7 @@ function renderExtraBlock(key, idx, ex, isLast) {
       const hasAny = trucks || load || space;
       return `<div class="sched-field sched-field-operators">
         <button class="sched-field-label-btn" style="color:${fcDim};"
-          onclick="openTruckingModal('${key}','${slot}')"
+          onclick="openSchedComboModal('${key}','${slot}','trucking')"
           onmouseenter="showTruckingTooltip(event,'${key}','${slot}')"
           onmouseleave="hideTruckingTooltip()"
           title="Hover to see trucks · Click to edit">${f.label}</button>
@@ -3204,6 +3204,10 @@ var _uspmMat4Pool = [];  // sorted mixTypes for the four-col material picker
 var _uspmMat4Ctr  = 0;  // row ID counter
 var _uspmComboKey = null, _uspmComboSlot = null; // set only while the combined plant+material picker is open
 var _uspmComboSelectedPlant = '';
+var _uspmComboEquipSelected = [];       // staged equipment names for the combo modal — committed on Save
+var _uspmComboEquipCat = null;          // null = category grid; else 'paver'|'roller'|'skid_steer'|'mtv'
+var _uspmComboOperatorsSelected = [];   // staged operator display names for the combo modal — committed on Save
+var _uspmComboOperatorOverrides = {};   // { displayName: true } — same-shift conflicts accepted this session
 
 function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection }) {
   document.getElementById('unifiedSchedPicker')?.remove();
@@ -3412,6 +3416,10 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
       if (slot.startsWith('extra_')) { const i=parseInt(slot.replace('extra_','')); return schedData[key]?.extras?.[i]?.data?.fields?.plant||''; }
       return ((schedData[key]||{})[slot]||{}).fields?.plant||'';
     })();
+    _uspmComboEquipSelected = getPickerItems(key, slot, 'equipment');
+    _uspmComboEquipCat = null;
+    _uspmComboOperatorsSelected = getPickerItems(key, slot, 'operators');
+    _uspmComboOperatorOverrides = {};
 
     const rawMatVal = (() => {
       if (slot.startsWith('extra_')) { const i=parseInt(slot.replace('extra_','')); return schedData[key]?.extras?.[i]?.data?.fields?.material||''; }
@@ -3452,15 +3460,32 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
         </div>
         <div class="uspm-combo-right">
           <div id="uspmComboMatLabel" style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--stripe);padding:8px 14px 4px;flex-shrink:0;">🪨 Material &amp; Tonnage</div>
-          <div style="flex:1;overflow-y:auto;">${matBodyHtml}</div>
+          <div>${matBodyHtml}</div>
           ${matAddRowHtml}
+          <div id="uspmComboEquipSection" style="border-top:1px solid rgba(255,255,255,0.08);padding:12px 14px 0;margin-top:12px;flex-shrink:0;">
+            <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">🚧 Equipment</div>
+            <div id="uspmComboEquipBody">${_uspmComboEquipSectionHtml(key, slot)}</div>
+          </div>
+          <div id="uspmComboOperatorsSection" style="border-top:1px solid rgba(255,255,255,0.08);padding:12px 14px 0;margin-top:12px;flex-shrink:0;">
+            <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">👷 Operators</div>
+            <div id="uspmComboOperatorsBody">${_uspmComboOperatorsSectionHtml(key, slot)}</div>
+          </div>
+          <div id="uspmComboTruckingSection" style="border-top:1px solid rgba(255,255,255,0.08);padding:12px 14px 14px;margin-top:12px;flex-shrink:0;">
+            <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">🚛 Trucking</div>
+            <div id="uspmComboTruckingBody">${_uspmComboTruckingSectionHtml(key, slot)}</div>
+          </div>
         </div>
       </div>`;
 
     addSectionHtml = '';
-    footerHtml = `<div class="uspm-footer">
+    footerHtml = `<div class="uspm-footer" style="justify-content:space-between;">
       <button class="btn btn-ghost" onclick="document.getElementById('unifiedSchedPicker').remove()">Cancel</button>
-      <button class="btn btn-primary" onclick="uspmSaveComboPlantMaterial('${key}','${slot}')">💾 Save</button>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-ghost" title="Equipment" onclick="document.getElementById('uspmComboEquipSection')?.scrollIntoView({block:'start',behavior:'smooth'})">🚧</button>
+        <button class="btn btn-ghost" title="Operators" onclick="document.getElementById('uspmComboOperatorsSection')?.scrollIntoView({block:'start',behavior:'smooth'})">👷${_uspmComboOperatorsSelected.length ? ' ('+_uspmComboOperatorsSelected.length+')' : ''}</button>
+        <button class="btn btn-ghost" title="Trucking" onclick="document.getElementById('uspmComboTruckingSection')?.scrollIntoView({block:'start',behavior:'smooth'})">🚛</button>
+      </div>
+      <button class="btn btn-primary" onclick="uspmSaveComboAll('${key}','${slot}')">💾 Save</button>
     </div>`;
   }
 
@@ -3488,10 +3513,13 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 
+  if (type === 'plantmaterial') _uspmComboTruckingInit(key, slot);
+
   // Auto-focus search or first input
   setTimeout(() => {
-    if (type === 'plantmaterial' && focusSection === 'material') {
-      document.getElementById('uspmComboMatLabel')?.scrollIntoView({ block: 'start' });
+    if (type === 'plantmaterial' && focusSection) {
+      const _sectionIds = { material:'uspmComboMatLabel', equipment:'uspmComboEquipSection', operators:'uspmComboOperatorsSection', trucking:'uspmComboTruckingSection' };
+      document.getElementById(_sectionIds[focusSection])?.scrollIntoView({ block: 'start' });
       return;
     }
     const s = document.getElementById('uspmSearch');
@@ -3915,6 +3943,241 @@ function uspmComboClearPlant() {
 function uspmSaveComboPlantMaterial(key, slot) {
   selectSchedPlant(key, slot, _uspmComboSelectedPlant, null);
   uspmSaveMaterial(key, slot);
+}
+
+// ── Combined modal: entry point + all-sections save ─────────────────────────
+
+// All equipment/operator/trucking triggers redirect here now — the standalone
+// equipment/operator branches of openUnifiedSchedPicker() and openTruckingModal()
+// are kept intact as fallbacks, just no longer wired to the UI.
+function openSchedComboModal(key, slot, focusSection) {
+  openUnifiedSchedPicker({ type: 'plantmaterial', title: '🏭 Plant & Material', key, slot, field: 'plant', focusSection: focusSection || null });
+}
+
+// Plant/Material saves are called last since uspmSaveMaterial() removes the
+// overlay (matching uspmSaveComboPlantMaterial's existing ordering) — every
+// other section must persist its still-live DOM state before that happens.
+function uspmSaveComboAll(key, slot) {
+  selectSchedPlant(key, slot, _uspmComboSelectedPlant, null);
+  setPickerItems(key, slot, 'equipment', _uspmComboEquipSelected.slice());
+  setPickerItems(key, slot, 'operators', _uspmComboOperatorsSelected.slice());
+  saveTruckingModal();
+  uspmSaveMaterial(key, slot);
+}
+
+// ── Combined modal: Equipment section (category grid + drill-down chips) ────
+
+// Labels for this modal's four equipment category buttons specifically —
+// intentionally not FLEET_TYPES (used elsewhere with different wording, e.g.
+// "Material Transfer Vehicle") since this grid always shows these exact four.
+const _USPM_EQ_CAT_LABELS = { paver:'Pavers', roller:'Rollers', skid_steer:'Skid Steers', mtv:'MTVs' };
+
+function _uspmComboEquipSectionHtml(key, slot) {
+  return _uspmComboEquipCat ? _uspmComboEquipCatPanelHtml(key, slot) : _uspmComboEquipCategoryGridHtml(key, slot);
+}
+
+function _uspmComboEquipCategoryGridHtml(key, slot) {
+  const SCHED_EQ_TYPES = ['paver', 'roller', 'skid_steer', 'mtv'];
+  const fleet = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : []);
+  const catLabel = tk => _USPM_EQ_CAT_LABELS[tk] || tk;
+  return '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + SCHED_EQ_TYPES.map(tk => {
+    const count = _uspmComboEquipSelected.filter(name => {
+      const e = fleet.find(x => x.name === name);
+      return e && e.type === tk;
+    }).length;
+    const hasItems = count > 0;
+    const label = catLabel(tk) + (hasItems ? ' (' + count + ')' : '');
+    const style = 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 16px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:12px;width:calc(50% - 4px);box-sizing:border-box;text-align:center;color:var(--concrete);' +
+      (hasItems ? 'border-color:#a78bfa;background:rgba(167,139,250,0.1);color:#a78bfa;' : '');
+    return `<button style="${style}" onclick="_uspmComboEquipOpenCat('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${tk}')">${escHtml(label)}</button>`;
+  }).join('') + '</div>';
+}
+
+function _uspmComboEquipCatPanelHtml(key, slot) {
+  const tk = _uspmComboEquipCat;
+  const catLabel = _USPM_EQ_CAT_LABELS[tk] || tk;
+  const fleet = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : [])
+    .filter(e => e.active !== false && e.type === tk)
+    .sort((a, b) => (a.name||'').localeCompare(b.name||''));
+  const isCleanOut = _getBlockCleanOut(key, slot);
+  const itemsHtml = fleet.length ? fleet.map(e => {
+    const sel = _uspmComboEquipSelected.indexOf(e.name) !== -1;
+    let unavailReason = null;
+    if (e.status === 'down') unavailReason = 'Down — unavailable';
+    else if (e.status === 'maintenance') unavailReason = 'In maintenance';
+    else if (e.assignedJobName && !isCleanOut) unavailReason = `On ${e.assignedJobName}`;
+    const blocked = !!unavailReason && !sel;
+    let style = 'display:inline-flex;align-items:center;gap:4px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;margin:3px;';
+    if (sel) style += 'background:rgba(167,139,250,0.15);border:1px solid #a78bfa;color:#a78bfa;';
+    else if (blocked) style += 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);cursor:not-allowed;';
+    else style += 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);';
+    const label = (blocked ? '⚠️ ' : '') + escHtml(e.name);
+    return `<span style="${style}" title="${blocked ? escHtml(unavailReason) : ''}" onclick="_uspmComboEquipToggle('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${e.name.replace(/'/g,"\\'")}',${blocked},'${(unavailReason||'').replace(/'/g,"\\'")}')">${label}</span>`;
+  }).join('') : `<div class="uspm-empty">No ${escHtml(catLabel)} in fleet.</div>`;
+  return '<div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+      `<button onclick="_uspmComboEquipBack('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:'DM Mono',monospace;font-size:11px;padding:5px 10px;cursor:pointer;">← Back</button>` +
+      `<span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--white);">${escHtml(catLabel)}</span>` +
+    '</div>' +
+    `<div style="display:flex;flex-wrap:wrap;">${itemsHtml}</div>` +
+    '<div style="margin-top:10px;text-align:right;">' +
+      `<button onclick="_uspmComboEquipBack('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}')" class="btn btn-primary" style="padding:6px 16px;">✓ Done</button>` +
+    '</div>' +
+  '</div>';
+}
+
+function _uspmComboEquipRefresh(key, slot) {
+  const el = document.getElementById('uspmComboEquipBody');
+  if (el) el.innerHTML = _uspmComboEquipSectionHtml(key, slot);
+}
+
+function _uspmComboEquipOpenCat(key, slot, tk) {
+  _uspmComboEquipCat = tk;
+  _uspmComboEquipRefresh(key, slot);
+}
+
+function _uspmComboEquipBack(key, slot) {
+  _uspmComboEquipCat = null;
+  _uspmComboEquipRefresh(key, slot);
+}
+
+function _uspmComboEquipToggle(key, slot, name, blocked, reason) {
+  if (blocked) {
+    if (!isAdmin()) return;
+    if (!confirm('This equipment is ' + reason + '. Select anyway?')) return;
+  }
+  const idx = _uspmComboEquipSelected.indexOf(name);
+  if (idx >= 0) _uspmComboEquipSelected.splice(idx, 1); else _uspmComboEquipSelected.push(name);
+  _uspmComboEquipRefresh(key, slot);
+}
+
+// ── Combined modal: Operators section (shift-aware conflict detection) ──────
+
+function _uspmComboSlotShiftType(key, slot) {
+  if (slot.startsWith('extra_')) {
+    const idx = parseInt(slot.replace('extra_',''));
+    return (schedData[key]?.extras?.[idx]?.data?.type) || 'blank';
+  }
+  return (schedData[key]?.[slot]?.type) || 'blank';
+}
+
+// Returns the jobName of whichever OTHER same-shift-type slot on this day
+// already has this operator assigned, or '' if there's no conflict.
+function _getOperatorConflictJobName(dateKey, excludeSlot, shiftType, displayName) {
+  const _day = schedData[dateKey] || {};
+  let _jobName = '';
+  ['top', 'bottom'].forEach(s => {
+    if (_jobName || s === excludeSlot) return;
+    if ((_day[s]?.type || 'blank') !== shiftType) return;
+    const _ops = (_day[s]?.fields?.operators || '').split(',').map(x => x.trim()).filter(Boolean);
+    if (_ops.indexOf(displayName) !== -1) _jobName = _day[s].fields?.jobName || 'another job';
+  });
+  if (!_jobName) {
+    (_day.extras || []).forEach((ex, i) => {
+      if (_jobName || ('extra_' + i) === excludeSlot) return;
+      if ((ex.data?.type || 'blank') !== shiftType) return;
+      const _ops = (ex.data?.fields?.operators || '').split(',').map(x => x.trim()).filter(Boolean);
+      if (_ops.indexOf(displayName) !== -1) _jobName = ex.data?.fields?.jobName || 'another job';
+    });
+  }
+  return _jobName;
+}
+
+function _uspmComboOperatorsSectionHtml(key, slot) {
+  const roster = (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined' ? DEFAULT_TEAM_ACCOUNTS : [])
+    .filter(a => a.role === 'operator' && a.active !== false);
+  if (!roster.length) return '<div class="uspm-empty">No operator accounts yet.</div>';
+  const shiftType = _uspmComboSlotShiftType(key, slot);
+  return '<div style="display:flex;flex-wrap:wrap;">' + roster.map(a => {
+    const name = a.displayName || a.username;
+    const safeName = name.replace(/'/g,"\\'");
+    const sel = _uspmComboOperatorsSelected.indexOf(name) !== -1;
+    const conflictJob = sel ? '' : _getOperatorConflictJobName(key, slot, shiftType, name);
+    const overridden = !!_uspmComboOperatorOverrides[name];
+    const isConflict = !!conflictJob && !overridden;
+    let style = 'display:inline-flex;align-items:center;gap:6px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;margin:3px;';
+    if (sel) style += 'background:rgba(167,139,250,0.15);border:1px solid #a78bfa;color:#a78bfa;cursor:pointer;';
+    else if (isConflict) style += 'background:rgba(245,158,11,0.1);border:1px solid #f59e0b;color:#f59e0b;';
+    else style += 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);cursor:pointer;';
+    if (isConflict) {
+      return `<span style="${style}">⚠️ ${escHtml(name)} already on ${escHtml(conflictJob)}` +
+        `<button onclick="_uspmComboOperatorOverride('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${safeName}')" style="background:none;border:1px solid #f59e0b;border-radius:10px;color:#f59e0b;font-size:9px;padding:2px 8px;cursor:pointer;margin-left:4px;">Override ✓</button></span>`;
+    }
+    return `<span style="${style}" onclick="_uspmComboOperatorToggle('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${safeName}')">${escHtml(name)}</span>`;
+  }).join('') + '</div>';
+}
+
+function _uspmComboOperatorsRefresh(key, slot) {
+  const el = document.getElementById('uspmComboOperatorsBody');
+  if (el) el.innerHTML = _uspmComboOperatorsSectionHtml(key, slot);
+}
+
+function _uspmComboOperatorToggle(key, slot, name) {
+  const idx = _uspmComboOperatorsSelected.indexOf(name);
+  if (idx >= 0) { _uspmComboOperatorsSelected.splice(idx, 1); delete _uspmComboOperatorOverrides[name]; }
+  else _uspmComboOperatorsSelected.push(name);
+  _uspmComboOperatorsRefresh(key, slot);
+}
+
+function _uspmComboOperatorOverride(key, slot, name) {
+  _uspmComboOperatorOverrides[name] = true;
+  if (_uspmComboOperatorsSelected.indexOf(name) === -1) _uspmComboOperatorsSelected.push(name);
+  _uspmComboOperatorsRefresh(key, slot);
+}
+
+// ── Combined modal: Trucking section (embeds the standalone trucking modal's
+// own ids/functions — renderDriverChips/renderTruckingBrokerEntries/renderTruckRows
+// all keep working unchanged since #tm-* ids exist here too, and saveTruckingModal()
+// can be called directly from uspmSaveComboAll()) ────────────────────────────
+
+function _uspmComboTruckingSectionHtml(key, slot) {
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">⏱ Load Time</label>
+        <input class="form-input" id="tm-loadtime" placeholder="e.g. 6:00 AM" style="font-size:13px;" />
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">📏 Spacing</label>
+        <input class="form-input" id="tm-spacing" placeholder="e.g. 15 min" style="font-size:13px;" />
+      </div>
+    </div>
+    <div class="trucking-section-label" style="margin-top:12px;">🟣 Assigned Drivers</div>
+    <div id="tm-driver-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+    <div class="trucking-section-label">🔵 Broker Trucks</div>
+    <div id="tm-broker-entries" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+    <select id="tm-broker-select" class="trucking-truck-input" style="width:100%;" onchange="_truckingBrokerPick(this.value)">
+      <option value="">— select broker to add —</option>
+      ${truckingBrokersList.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('')}
+    </select>
+    <div id="tm-broker-qty-wrap" style="display:none;margin-top:8px;"></div>
+    <div class="trucking-section-label" style="margin-top:12px;">🟢 Supplier Trucks</div>
+    <div id="tm-supplier-rows"></div>
+    <button class="trucking-add-truck-btn" onclick="addTruckRow('supplier')">+ Add Supplier Truck</button>
+    <div id="tm-total-trucks" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete-dim);margin-top:14px;padding-top:10px;border-top:1px solid var(--asphalt-light);"></div>`;
+}
+
+// Populates the trucking section after it's in the DOM — mirrors openTruckingModal()'s
+// own setup so _truckingKey/_truckingSlot/_truckingRows/etc. are ready for
+// saveTruckingModal() to read directly at combo-Save time.
+function _uspmComboTruckingInit(key, slot) {
+  _truckingKey = key; _truckingSlot = slot;
+  const td = parseTruckingData(key, slot);
+  _truckingRows.supplier = (td.supplierTrucks && td.supplierTrucks.length) ? td.supplierTrucks.slice() : [''];
+  _truckingAssignedDrivers = Array.isArray(td.assignedDrivers) ? td.assignedDrivers.slice() : [];
+  if (Array.isArray(td.brokers)) {
+    _truckingBrokerEntries = td.brokers.map(b => ({ broker: b.broker, count: b.count || 1 }));
+  } else {
+    const _legacyBrk = td.brokerTrucks || [];
+    const _legacyGrouped = {};
+    _legacyBrk.forEach(name => { if (!name) return; _legacyGrouped[name] = (_legacyGrouped[name] || 0) + 1; });
+    _truckingBrokerEntries = Object.keys(_legacyGrouped).map(name => ({ broker: name, count: _legacyGrouped[name] }));
+  }
+  const lt = document.getElementById('tm-loadtime'); if (lt) lt.value = td.loadTime || '';
+  const sp = document.getElementById('tm-spacing');  if (sp) sp.value  = td.spacing  || '';
+  renderDriverChips();
+  renderTruckingBrokerEntries();
+  renderTruckRows('supplier');
+  renderTruckingTotal();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4807,7 +5070,7 @@ function renderSchedule() {
                   ? `<input class="mat-inline-search" placeholder="Search mix…" autocomplete="off"
                       onfocus="openMatSearchFromInline(this,'${key}','${slot}')"
                       oninput="openMatSearchFromInline(this,'${key}','${slot}')" />`
-                  : `<button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openPickerDropdown('${key}','${slot}','${f.key}','${f.type}')">+</button>`)
+                  : `<button class="op-add-btn" style="color:${fc}60;border-color:${fc}30;" onclick="openSchedComboModal('${key}','${slot}','${f.type}')">+</button>`)
                 : ''}
               </div>
             </div>`;
@@ -4848,7 +5111,7 @@ function renderSchedule() {
             const hasAny = trucks || load || space;
             const labelEl = canEdit
               ? `<button class="sched-field-label-btn" style="color:${fcDim};"
-                  onclick="openTruckingModal('${key}','${slot}')"
+                  onclick="openSchedComboModal('${key}','${slot}','trucking')"
                   onmouseenter="showTruckingTooltip(event,'${key}','${slot}')"
                   onmouseleave="hideTruckingTooltip()"
                   title="Hover to see trucks · Click to edit">${f.label}</button>`
