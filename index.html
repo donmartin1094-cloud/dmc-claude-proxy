@@ -6295,6 +6295,34 @@ function _toQtyKeyFor(pageNum) {
   return (_toSessionFolderId || 'nofolder') + '::' + _toCurrentPdfName + '::' + pageNum;
 }
 
+// One-time correction for row.tons values saved before the sy-based tonnage
+// formula fix — those rows still hold the old sqFt-based (~8.8x inflated)
+// number. Mutates the actual takeoffFolders array in place (via
+// _toFoldersLoad/_toFoldersSave) rather than a separate parsed copy, so this
+// can't be clobbered by a later Firebase sync of the still-stale in-memory data.
+function _toMigrateQtyTonnage() {
+  if (localStorage.getItem('dmc_qty_migration_v1')) return;
+  _toFoldersLoad();
+  var _changed = false;
+  (takeoffFolders || []).forEach(function(f) {
+    (f.pages || []).forEach(function(p) {
+      (p.quantities || []).forEach(function(r) {
+        var _depth = (parseFloat(r.base) || 0) + (parseFloat(r.binder) || 0) + (parseFloat(r.top) || 0);
+        if (_depth > 0 && r.sqFt) {
+          var _correctTons = (parseFloat(r.sqFt) / 9) * _depth * 0.056;
+          r.tons = parseFloat(_correctTons.toFixed(2));
+          _changed = true;
+        }
+      });
+    });
+  });
+  if (_changed) {
+    _toFoldersSave();
+    console.log('[migration] tonnage corrected on all saved takeoff pages');
+  }
+  localStorage.setItem('dmc_qty_migration_v1', '1');
+}
+
 function _toQtyLoadForPage(key) {
   _toQtyKey = key;
   try {
@@ -30116,6 +30144,7 @@ async function initApp(username) {
       }
     } catch(e) {}
   })();
+  _toMigrateQtyTonnage();
   // Hard-coded OneStepGPS key — always available
   localStorage.setItem('HEIMDALL_API_KEY', 'mxyIjusLY5jqv9h8DFGQGwj5Sn4ehVfTgy21PgN1F2I');
   _checkLocalStorageSize();
