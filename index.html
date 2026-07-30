@@ -31498,7 +31498,6 @@ function doLogin() {
       // ── Try Firebase Auth first ──
       let firebaseAuthOk = false;
       if (firebase.auth && authEmails.length) {
-        console.log('[login] attempting Firebase Auth for:', authEmails.join(', '));
         try {
           const auth = firebase.auth();
           let cred = null;
@@ -31512,7 +31511,6 @@ function doLogin() {
             }
           }
           if (!cred) throw lastAuthError || new Error('Auth sign-in failed');
-          console.log('[login] Firebase Auth result: SUCCESS uid:' + cred.user?.uid);
 
           const fbUser = cred.user;
           let appUser = inputAcct?.username || u;
