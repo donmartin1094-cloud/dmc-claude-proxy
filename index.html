@@ -4391,7 +4391,20 @@ async function _toChangePage(delta) {
   }
   await _toRenderPage();
   _toDrawMeasGroup();
-  _toQtyLoadForPage(_toQtyKeyFor(_toPdfPage));
+  // A page that already has a saved folder record is authoritative — never
+  // trust the scratch cache for it, since that slot could still hold stale
+  // data written before folder-scoped keys existed (same reasoning as the
+  // reopen branch in _toWinFileChanged). Only genuinely new/unsaved pages in
+  // this session fall back to the scratch cache.
+  var _folder = _toSessionFolderId ? takeoffFolders.find(function(x){ return x.id === _toSessionFolderId; }) : null;
+  var _savedPage = _folder && (_folder.pages||[]).find(function(pg){ return pg.pageNum === _toPdfPage; });
+  if (_savedPage) {
+    _toQtyRows = _savedPage.quantities ? JSON.parse(JSON.stringify(_savedPage.quantities)) : [];
+    _toQtyKey = null;
+    _toQtyRender();
+  } else {
+    _toQtyLoadForPage(_toQtyKeyFor(_toPdfPage));
+  }
 }
 
 function _toBindEvents() {
