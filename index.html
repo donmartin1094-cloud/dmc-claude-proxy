@@ -4664,10 +4664,50 @@ function _toDrawMeasGroup() {
       poly.addEventListener('click', function(e){ if (_toTool !== 'select') return; e.stopPropagation(); _toSelectMeasurement(idx); });
       g.appendChild(poly);
       for (const p of m.points) _toCircle(g,p.x,p.y,4,'#fff',m.color);
-      const cx=m.points.reduce((s,p)=>s+p.x,0)/m.points.length, cy=m.points.reduce((s,p)=>s+p.y,0)/m.points.length;
-      if (m.label) _toText(g, cx, cy, m.label, m.color);
+      _toDrawAreaLabel(g, m, idx);
     }
   }
+}
+
+// Rich multi-line label for a completed area — name, sq yds, non-zero depths,
+// tonnage — pulled from the matching quantity row (row.measIdx === idx, the
+// area's own index in _toMeasurements) so it always reflects the latest
+// edits; redrawn every time _toDrawMeasGroup() runs. White text with a dark
+// stroke outline keeps it readable over any fill color (same technique
+// _toText() already uses elsewhere), rather than an SVG filter.
+function _toDrawAreaLabel(g, m, idx) {
+  var _r = _toQtyRows.find(function(row){ return row.measIdx === idx; }) || null;
+  var _lines = [];
+  _lines.push({ text: m.label || ('Area ' + (idx + 1)), bold: true, size: 11 });
+  if (_r && _r.sqYd) _lines.push({ text: Math.round(parseFloat(_r.sqYd)) + ' SY', bold: false, size: 10 });
+  var _depthParts = [];
+  if (_r && parseFloat(_r.base))   _depthParts.push('B:' + _r.base + '"');
+  if (_r && parseFloat(_r.binder)) _depthParts.push('Bi:' + _r.binder + '"');
+  if (_r && parseFloat(_r.top))    _depthParts.push('T:' + _r.top + '"');
+  if (_depthParts.length) _lines.push({ text: _depthParts.join(' '), bold: false, size: 10 });
+  if (_r && parseFloat(_r.tons)) _lines.push({ text: parseFloat(_r.tons).toFixed(1) + ' tons', bold: true, size: 11 });
+
+  var _c = _toPolygonCentroid(m.points);
+  var _lineHeight = 14;
+  var _startY = _c.y - (_lines.length - 1) * _lineHeight / 2;
+  _lines.forEach(function(line, li) {
+    var _t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    _t.setAttribute('x', _c.x);
+    _t.setAttribute('y', _startY + li * _lineHeight);
+    _t.setAttribute('text-anchor', 'middle');
+    _t.setAttribute('dominant-baseline', 'middle');
+    _t.setAttribute('font-size', line.size);
+    _t.setAttribute('font-family', "'DM Mono',monospace");
+    _t.setAttribute('font-weight', line.bold ? '700' : '400');
+    _t.setAttribute('fill', '#ffffff');
+    _t.setAttribute('paint-order', 'stroke');
+    _t.setAttribute('stroke', '#0d0d0d');
+    _t.setAttribute('stroke-width', '3');
+    _t.setAttribute('stroke-linejoin', 'round');
+    _t.style.pointerEvents = 'none';
+    _t.textContent = line.text;
+    g.appendChild(_t);
+  });
 }
 
 // ── Pointer / select mode (Build 2) ──────────────────────────────────────────
@@ -4784,6 +4824,11 @@ function _toText(g,x,y,text,color){String(text).split('\n').forEach((line,i)=>{i
 function _toDist(a,b){return Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2);}
 function _toPolyLen(pts){let l=0;for(let i=1;i<pts.length;i++)l+=_toDist(pts[i-1],pts[i]);return l;}
 function _toPolyArea(pts){let a=0,n=pts.length;for(let i=0;i<n;i++){const j=(i+1)%n;a+=pts[i].x*pts[j].y-pts[j].x*pts[i].y;}return Math.abs(a/2);}
+function _toPolygonCentroid(points) {
+  var _cx = 0, _cy = 0;
+  points.forEach(function(p){ _cx += p.x; _cy += p.y; });
+  return { x: _cx / points.length, y: _cy / points.length };
+}
 
 // Scale dialog
 function _toShowScaleDialog() {
@@ -5102,6 +5147,7 @@ async function _toSetZoom(newZoom) {
 
 // ── Takeoffs Window ───────────────────────────────────────────────────────────
 let _toSaveTempData  = null;
+var _toSaveInProgress = false; // guards _toConfirmSavePage() against double-fire (e.g. double-click on Save)
 var _toSessionFolderId   = null;
 let _toCurrentPdfName = '';
 var _toLinkedJob         = null;
@@ -6571,7 +6617,10 @@ function _toQtySaveForPage() {
 }
 
 async function _toConfirmSavePage() {
+  if (_toSaveInProgress) return; // prevent double-fire (e.g. double-click on Save)
   if (!_toSaveTempData) return;
+  _toSaveInProgress = true;
+  try {
   var thumbnail    = _toSaveTempData.thumbnail;
   var measurements = _toSaveTempData.measurements;
   var pageNum      = _toSaveTempData.pageNum;
@@ -6618,7 +6667,8 @@ async function _toConfirmSavePage() {
   }
   folder.updatedAt = Date.now();
   _toFoldersSave();
-  document.getElementById('toSaveDlg').remove();
+  var _dlg = document.getElementById('toSaveDlg');
+  if (_dlg) _dlg.remove();
   _toSaveTempData = null;
   _toRefreshCardStacks();
   _toUpdateStatus('Saved to folder: ' + folder.name);
@@ -6632,6 +6682,9 @@ async function _toConfirmSavePage() {
     +'</div>';
   document.body.appendChild(_smModal);
   setTimeout(function(){ var m = document.getElementById('toSaveSuccessModal'); if (m) m.remove(); }, 2000);
+  } finally {
+    _toSaveInProgress = false;
+  }
 }
 
 function _toRefreshCardStacks() {
@@ -15804,8 +15857,19 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     const popup = document.getElementById('secPopup');
     if (popup && popup.classList.contains('open')) {
-      if (_toTool || (_toPoints && _toPoints.length > 0)) {
-        _toPoints = [];
+      if (_toPoints && _toPoints.length > 0) {
+        // Step back one point at a time instead of cancelling the whole measurement.
+        _toPoints.pop();
+        if (typeof _toUpdateGhost === 'function') _toUpdateGhost();
+        if (_toPoints.length === 0) {
+          _toTool = null;
+          document.querySelectorAll('.to-btn.active').forEach(function(b){
+            b.classList.remove('active');
+          });
+        }
+        return;
+      }
+      if (_toTool) {
         _toTool = null;
         if (typeof _toUpdateGhost === 'function') _toUpdateGhost();
         document.querySelectorAll('.to-btn.active').forEach(function(b){
