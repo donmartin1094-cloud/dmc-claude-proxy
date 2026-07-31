@@ -4660,7 +4660,7 @@ function _toDrawMeasGroup() {
       poly.setAttribute('stroke',m.color); poly.setAttribute('stroke-width','2');
       poly.setAttribute('data-meas-idx',idx);
       poly.style.pointerEvents = 'all'; poly.style.cursor = 'pointer';
-      poly.style.opacity = isSel ? '1' : (_toSelectedMeasIdx !== null ? '0.4' : '1');
+      poly.style.opacity = isSel ? '1' : (_toSelectedMeasIdx !== null ? '0.35' : '1');
       poly.addEventListener('click', function(e){ if (_toTool !== 'select') return; e.stopPropagation(); _toSelectMeasurement(idx); });
       g.appendChild(poly);
       for (const p of m.points) _toCircle(g,p.x,p.y,4,'#fff',m.color);
@@ -4679,9 +4679,11 @@ function _toSelectMeasurement(idx) {
     var polygon = document.querySelector('#toMeasGroup polygon[data-meas-idx="' + _toSelectedMeasIdx + '"]');
     if (polygon) {
       var _measColor = (_toMeasurements[_toSelectedMeasIdx] && _toMeasurements[_toSelectedMeasIdx].color) || '#a78bfa';
-      polygon.style.filter = 'drop-shadow(0 0 8px ' + _measColor + ') drop-shadow(0 0 16px ' + _measColor + ')';
-      polygon.style.stroke = '#ffffff';
+      polygon.style.fill = _measColor;
+      polygon.style.fillOpacity = '0.6';
+      polygon.style.stroke = _measColor;
       polygon.style.strokeWidth = '3';
+      polygon.style.filter = 'brightness(0.7)';
     }
   }
   _toQtyRender();
@@ -6474,6 +6476,13 @@ function _toQtyRecalcRowTons(idx) {
   var bEl = document.getElementById('toQtyBT_' + idx);   if (bEl) bEl.value = row.baseTons;
   var biEl = document.getElementById('toQtyBiT_' + idx); if (biEl) biEl.value = row.binderTons;
   var tEl = document.getElementById('toQtyTT_' + idx);   if (tEl) tEl.value = row.topTons;
+  // The Base/Binder/Top Tons columns are display:none on mobile (.to-qty-hide-mobile);
+  // the only place they're visible there is this row's expand strip, built once by
+  // _toQtyRender() as plain text. Patch it in place too so it doesn't go stale.
+  var _expStrongs = document.querySelectorAll('#toQtyExpRow_' + idx + ' strong');
+  if (_expStrongs[1]) _expStrongs[1].textContent = row.baseTons   ? parseFloat(row.baseTons).toFixed(2)   : '—';
+  if (_expStrongs[2]) _expStrongs[2].textContent = row.binderTons ? parseFloat(row.binderTons).toFixed(2) : '—';
+  if (_expStrongs[3]) _expStrongs[3].textContent = row.topTons    ? parseFloat(row.topTons).toFixed(2)    : '—';
   _toQtyRecalcTotalTons(idx);
 }
 
@@ -6496,6 +6505,8 @@ function _toQtyUpdate(idx, field, val) {
     _toQtyRows[idx].sqYd = sqYd || '';
     var syEl = document.getElementById('toQtySY_' + idx);
     if (syEl) syEl.textContent = sqYd ? sqYd.toFixed(1) : '';
+    var _expSY = document.querySelector('#toQtyExpRow_' + idx + ' strong');
+    if (_expSY) _expSY.textContent = sqYd ? sqYd.toFixed(1) : '—';
     _toQtyRecalcRowTons(idx);
   } else if (field === 'base' || field === 'binder' || field === 'top') {
     _toQtyRecalcRowTons(idx);
