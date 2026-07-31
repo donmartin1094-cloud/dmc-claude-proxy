@@ -30217,6 +30217,7 @@ async function fbLoadAll() {
         else if (key === 'gcs')        { knownGCs = val; }
         else if (key === 'fleet')      { console.log('FLEET LISTENER: firing, will replace equipmentFleet'); var _inProgress = Object.keys(_fleetPhotoUploadInProgress).filter(function(k){ return _fleetPhotoUploadInProgress[k]; }); console.log('FLEET LISTENER: uploads in progress:', _inProgress); equipmentFleet = (Array.isArray(val) ? val : equipmentFleet).map(function(eq){ if (!eq.photos) eq.photos = []; if (_fleetPhotoUploadInProgress[eq.id]) { var _mem = equipmentFleet.find(function(e){ return e.id===eq.id; }); if (_mem) { eq.profilePhoto = _mem.profilePhoto; eq.profilePhotoPath = _mem.profilePhotoPath; eq.photos = (_mem.photos||[]).slice(); } } if (eq.profilePhoto && !eq.profilePhoto.startsWith('data:') && !eq.photos.find(function(p){ return p.url===eq.profilePhoto; })) eq.photos.unshift({ url: eq.profilePhoto, path: eq.profilePhotoPath||'', addedAt: eq.createdAt||new Date().toISOString(), isPrimary: true }); if ((!eq.profilePhoto || eq.profilePhoto.startsWith('data:')) && eq.photos && eq.photos.length > 0) { var _p = eq.photos.find(function(p){ return p.isPrimary; }) || eq.photos[0]; if (_p && _p.url && !_p.url.startsWith('data:')) { eq.profilePhoto = _p.url; eq.profilePhotoPath = _p.path||''; } } return eq; }); localStorage.setItem(FLEET_KEY, JSON.stringify(equipmentFleet)); _equipSeedSnapshot();  _checkLocalStorageSize();}
         else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); }
+        else if (key === 'takeoff_folders') { takeoffFolders = Array.isArray(val) ? val : takeoffFolders; localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); _checkLocalStorageSize(); }
         else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
         else if (key === 'dmc_hmonteiro_daily_hours') { localStorage.setItem('dmc_hmonteiro_daily_hours', JSON.stringify(val)); if (typeof _homeHHoursRerender === 'function') _homeHHoursRerender(); _checkLocalStorageSize(); }
         else if (key === 'notifications') {
@@ -30767,6 +30768,15 @@ async function initApp(username) {
               else if (key === 'hd_equip_names') { localStorage.setItem('hd_equip_names', JSON.stringify(val));  _checkLocalStorageSize();}
               else if (key === 'certifiedReports') { certifiedReports = Array.isArray(val) ? val : certifiedReports; localStorage.setItem(CERTIFIED_REPORTS_KEY, JSON.stringify(certifiedReports)); if (activeTab === 'reports') renderReports();  _checkLocalStorageSize();}
               // ── Keys saved to Firebase but previously missing from live listener ──
+              else if (key === 'takeoff_folders') {
+                takeoffFolders = Array.isArray(val) ? val : takeoffFolders;
+                localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders));
+                _checkLocalStorageSize();
+                if (_secPopupCurrent === 'takeoffs' && !_takeoffViewerActive) {
+                  var _toDirBody = document.getElementById('secPopupBody');
+                  if (_toDirBody) _renderTakeoffDirectory(_toDirBody);
+                }
+              }
               else if (key === 'invoices')         { invoiceList = val; localStorage.setItem(INVOICES_KEY, JSON.stringify(val)); if (activeTab === 'apMix') renderInvoiceTracker();  _checkLocalStorageSize();}
               else if (key === 'qc_reports')       { qcReports = val; localStorage.setItem(QC_REPORTS_KEY, JSON.stringify(val)); if (activeTab === 'reports') renderReports();  _checkLocalStorageSize();}
               else if (key === 'job_mix_formulas') { jobMixFormulas = Array.isArray(val) ? val : jobMixFormulas; localStorage.setItem(JOB_MIX_FORMULAS_KEY, JSON.stringify(jobMixFormulas)); if (activeTab === 'reports' || activeTab === 'reportsJobMix') renderReports();  _checkLocalStorageSize();}
