@@ -24984,6 +24984,9 @@ async function openForemanReport() {
   var slot = foremanDisplay.toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom';
   var schedSlot = (typeof schedData !== 'undefined' && schedData[todayKey]) ? schedData[todayKey][slot] : null;
   var f = (schedSlot && schedSlot.fields) ? schedSlot.fields : {};
+  var _jobNum  = f.jobNum  || f.jobNo  || '';
+  var _jobName = f.jobName || '';
+  var _plant   = f.plant   || '';
   var _bj = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j){
     return f.jobNum && (j.num||'').toString().trim() === (f.jobNum||'').toString().trim();
   });
@@ -25130,7 +25133,7 @@ async function openForemanReport() {
         '</div>' +
 
         '<div style="display:flex;gap:8px;margin-bottom:20px;' + (isMobile?'flex-direction:column;':'') + '">' +
-          jobChip('GC Name', gcName) + jobChip('Project Name', f.jobName) + jobChip('Job #', f.jobNum) +
+          jobChip('Job #', _jobNum) + jobChip('Job Name', _jobName) + jobChip('Plant', _plant) + jobChip('GC', gcName) +
         '</div>' +
 
         '<div style="margin-bottom:20px;">' +
@@ -25223,10 +25226,11 @@ async function openForemanReport() {
       foreman: foremanDisplay,
       date: todayKey,
       weekKey: getISOWeekKey(),
-      jobNum: f.jobNum || '',
-      jobNumber: f.jobNum || '',
-      jobName: f.jobName || '',
-      jobLocation: f.plant || '',
+      jobNum: _jobNum,
+      jobNumber: _jobNum,
+      jobName: _jobName,
+      jobLocation: f.plant || '', // legacy alias — still read by _adminVerifyShow(); use plant/jobName going forward
+      plant: _plant,
       gcName: gcName,
       hours: _calcHrs,
       foremanHours: _calcHrs,

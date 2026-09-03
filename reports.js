@@ -2276,9 +2276,9 @@ function _frRenderDetail(r) {
     '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Job #</div><div style="color:var(--stripe);font-weight:700;">'+escHtml(r.jobNumber||'—')+'</div></div>'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">GC</div><div style="color:var(--white);">'+escHtml(r.gcName||'—')+'</div></div>'+
-      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Location</div><div style="color:var(--white);">'+escHtml(r.jobLocation||'—')+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Job Name</div><div style="color:var(--white);">'+escHtml(r.jobName||r.jobLocation||'—')+'</div></div>'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Time</div><div style="color:var(--white);">'+fmtTime(r.startingTime)+' – '+fmtTime(r.endingTime)+'</div></div>'+
-      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Plant</div><div style="color:var(--white);">'+escHtml(r.plantLocation||'—')+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Plant</div><div style="color:var(--white);">'+escHtml(r.plant||r.plantLocation||'—')+'</div></div>'+
     '</div>'+
     (laborRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Roster</div>'+laborRows+'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);text-align:right;margin-top:4px;">Total: '+totalCrewHrs.toFixed(1)+' hrs</div></div>':'')+
     workSectionHtml+
@@ -2378,16 +2378,16 @@ function _frCalReportBlock(r) {
     + '</div>';
 }
 
-// Renders one month as a Mon–Sun week grid; each week row's 8th column is a
-// "Print Week" button that prints every report across that Mon–Sun range.
+// Renders one month as a Sun–Sat week grid; each week row's 8th column is a
+// "Print Week" button that prints every report across that Sun–Sat range.
 function _frCalRenderMonthGrid(monthKey, foremanFilter) {
   var p = monthKey.split('-');
   var yr = parseInt(p[0],10), mo = parseInt(p[1],10)-1; // 0-indexed
   var MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var daysInMonth = new Date(yr, mo+1, 0).getDate();
   var firstDow = new Date(yr, mo, 1).getDay(); // 0=Sun..6=Sat
-  var leadBlanks = (firstDow + 6) % 7; // days since the Monday on/before the 1st
+  var leadBlanks = firstDow; // days since the Sunday on/before the 1st
   var totalCells = leadBlanks + daysInMonth;
   totalCells += (7 - (totalCells % 7)) % 7; // pad out to a whole number of weeks
 
@@ -2401,7 +2401,7 @@ function _frCalRenderMonthGrid(monthKey, foremanFilter) {
 
   var numWeeks = totalCells / 7;
   for (var w = 0; w < numWeeks; w++) {
-    var weekMondayKey = _frCalDateKey(new Date(yr, mo, 1 - leadBlanks + w*7));
+    var weekStartKey = _frCalDateKey(new Date(yr, mo, 1 - leadBlanks + w*7));
     for (var i = 0; i < 7; i++) {
       var cellDate = new Date(yr, mo, 1 - leadBlanks + w*7 + i);
       if (cellDate.getMonth() !== mo) {
@@ -2419,7 +2419,7 @@ function _frCalRenderMonthGrid(monthKey, foremanFilter) {
         + dayReports.map(_frCalReportBlock).join('')
         + '</div>';
     }
-    html += '<div class="frcal-printcell"><button class="frcal-print-btn" onclick="_frPrintWeek(\''+weekMondayKey+'\',\''+escHtml(foremanFilter||'')+'\')">🖨️ Print Week</button></div>';
+    html += '<div class="frcal-printcell"><button class="frcal-print-btn" onclick="_frPrintWeek(\''+weekStartKey+'\',\''+escHtml(foremanFilter||'')+'\')">🖨️ Print Week</button></div>';
   }
   html += '</div>';
   return html;
@@ -2509,8 +2509,8 @@ function _frWkReportBlock(r) {
     '<div><div class="frwk-lbl">Foreman</div>'+escHtml(r.foreman||r.foremanDisplay||'—')+'</div>'+
     '<div><div class="frwk-lbl">Job #</div>'+escHtml(r.jobNum||r.jobNumber||'—')+'</div>'+
     '<div><div class="frwk-lbl">GC</div>'+escHtml(r.gcName||'—')+'</div>'+
-    '<div><div class="frwk-lbl">Job Name</div>'+escHtml(r.jobName||'—')+'</div>'+
-    '<div><div class="frwk-lbl">Location</div>'+escHtml(r.jobLocation||'—')+'</div>'+
+    '<div><div class="frwk-lbl">Job Name</div>'+escHtml(r.jobName||r.jobLocation||'—')+'</div>'+
+    '<div><div class="frwk-lbl">Plant</div>'+escHtml(r.plant||r.plantLocation||'—')+'</div>'+
     '<div><div class="frwk-lbl">Status</div>'+(r.locationVerified===true?'Verified':'Unverified')+'</div>'+
   '</div>';
 
@@ -2540,7 +2540,7 @@ function _frWkReportBlock(r) {
     (r.notes ? '<div class="frwk-notes"><strong>Notes:</strong> '+escHtml(r.notes)+'</div>' : '');
 }
 
-// weekStartDate — 'YYYY-MM-DD' for the Monday of the week to print.
+// weekStartDate — 'YYYY-MM-DD' for the Sunday of the week to print.
 // foremanFilter — '' for all foremen, or a foreman display name to restrict to.
 function _frPrintWeek(weekStartDate, foremanFilter) {
   var dates = [];
@@ -2608,7 +2608,7 @@ function _frPrintWeek(weekStartDate, foremanFilter) {
     '.frwk-notes{margin-top:4px;font-size:8pt;color:#333;}'+
   '</style></head><body><div class="page">'+
     '<div class="hdr"><div><div class="hdr-name">Don Martin Corporation</div><div class="hdr-sub">475 School Street, Ste 6 · Marshfield, MA 02050 · (781) 834-0071</div></div>'+
-      '<div class="hdr-right"><div class="hdr-week">'+escHtml(startLabel)+' – '+escHtml(endLabel)+'</div><div class="hdr-foreman">'+escHtml(foremanLabel)+'</div></div></div>'+
+      '<div class="hdr-right"><div class="hdr-week">Week of '+escHtml(startLabel)+' to '+escHtml(endLabel)+'</div><div class="hdr-foreman">'+escHtml(foremanLabel)+'</div></div></div>'+
     bodyHtml +
   '</div></body></html>';
 
@@ -3156,10 +3156,10 @@ function printForemanReport(id) {
       '<div class="info-row"><span class="info-lbl">Date:</span><span class="info-val">'+escHtml(dt)+'</span></div>'+
       '<div class="info-row"><span class="info-lbl">Start:</span><span class="info-val">'+escHtml(fmtTime(r.startingTime))+'</span></div>'+
       '<div class="info-row"><span class="info-lbl">End:</span><span class="info-val">'+escHtml(fmtTime(r.endingTime))+'</span></div>'+
-      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">Job Location:</span><span class="info-val">'+escHtml(r.jobLocation||'')+'</span></div>'+
-      '<div class="info-row"><span class="info-lbl">Job #:</span><span class="info-val">'+escHtml(r.jobNumber||'')+'</span></div>'+
+      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">Job Name:</span><span class="info-val">'+escHtml(r.jobName||r.jobLocation||'')+'</span></div>'+
+      '<div class="info-row"><span class="info-lbl">Job #:</span><span class="info-val" style="font-weight:700;font-size:11pt;">'+escHtml(r.jobNumber||'')+'</span></div>'+
       '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">General Contractor:</span><span class="info-val">'+escHtml(r.gcName||'')+'</span></div>'+
-      '<div class="info-row"><span class="info-lbl">Plant Location:</span><span class="info-val">'+escHtml(r.plantLocation||'')+'</span></div>'+
+      '<div class="info-row"><span class="info-lbl">Plant:</span><span class="info-val">'+escHtml(r.plant||r.plantLocation||'')+'</span></div>'+
       '<div class="info-row"><span class="info-lbl">Foreman:</span><span class="info-val">'+escHtml(r.foreman||'')+'</span></div>'+
     '</div>'+
 
