@@ -4814,11 +4814,36 @@ function _inv3KpiBar() {
     if (a !== null) totalApproved += a;
     if (!_inv3IsApproved(inv)) pendingCount++;
   });
+  // Supplier breakdown — grouped by normalized name so variants like
+  // "Amrize Wrentham" / "Amrize-Wrentham" tally together; the display label
+  // uses the same canonical-name map the rest of the app already builds for
+  // supplier names (most-frequent raw variant across all invoices).
+  var _supCounts = {};
+  invs.forEach(function(inv) {
+    var _raw = (inv.supplier || '').trim();
+    if (!_raw) return;
+    var _norm = _normalizeSupplierName(_raw);
+    _supCounts[_norm] = (_supCounts[_norm] || 0) + 1;
+  });
+  var _supKeys = Object.keys(_supCounts).sort(function(a,b){ return _supCounts[b]-_supCounts[a]; });
+  var _supBarHtml = '';
+  if (_supKeys.length) {
+    var _supCanon = _buildSupplierCanonicalMap();
+    var _supChips = _supKeys.map(function(norm) {
+      var _label = _supCanon[norm] || norm;
+      var _n = _supCounts[norm];
+      return '<span style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:2px 10px;font-size:10px;font-family:\'DM Mono\',monospace;color:var(--concrete-dim);white-space:nowrap;">'+escHtml(_label)+' \xb7 '+_n+' invoice'+(_n!==1?'s':'')+'</span>';
+    }).join('');
+    _supBarHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:var(--concrete-dim);margin-top:10px;">By Supplier:</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">'+_supChips+'</div>';
+  }
+
   return '<div class="inv3-kpi-bar">'
     + '<div class="inv3-kpi-item"><span class="inv3-kpi-lbl">Total Billed</span><span class="inv3-kpi-val yellow">'+invFmt(totalBilled)+'</span></div>'
     + '<div class="inv3-kpi-item"><span class="inv3-kpi-lbl">Total Approved</span><span class="inv3-kpi-val green">'+invFmt(totalApproved)+'</span></div>'
     + '<div class="inv3-kpi-item"><span class="inv3-kpi-lbl">Pending</span><span class="inv3-kpi-val dim">'+pendingCount+'</span></div>'
-    + '</div>';
+    + '</div>'
+    + _supBarHtml;
 }
 
 // ── View toggle bar ──────────────────────────────────────────────────────────
@@ -4873,6 +4898,20 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
 
     var _rendered = {};
 
+    // Rainout indicator — rainedOut is stored per-slot (schedData[dk].top/.bottom
+    // .rainedOut), not on the day object itself. "filipe" substring is the same
+    // foreman->slot convention already used by _invGetSchedFields/_inv3DayBlock.
+    var _rainedTop    = !!(typeof schedData !== 'undefined' && schedData[dk] && schedData[dk].top    && schedData[dk].top.rainedOut);
+    var _rainedBottom = !!(typeof schedData !== 'undefined' && schedData[dk] && schedData[dk].bottom && schedData[dk].bottom.rainedOut);
+    var _rainStyle = 'background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:4px;padding:3px 6px;font-size:10px;color:#93c5fd;font-family:\'DM Mono\',monospace;text-align:center;width:100%;box-sizing:border-box;margin-bottom:2px;';
+    if (_rainedTop && _rainedBottom) {
+      html += '<div style="'+_rainStyle+'">🌧 Rain Out</div>';
+    } else if (_rainedTop) {
+      html += '<div style="'+_rainStyle+'">🌧 FJ Rain Out</div>';
+    } else if (_rainedBottom) {
+      html += '<div style="'+_rainStyle+'">🌧 LM Rain Out</div>';
+    }
+
     // Priority 1: group all invoices by foreman (preserving foreman order),
     // then render every invoice per foreman stacked together before moving to next foreman
     var _invsByForeman = {};
@@ -4886,6 +4925,8 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
     });
     _foremanKeys.forEach(function(fKey) {
       _rendered[fKey] = true;
+      // No invoice needed for a rained-out shift — the indicator above covers it.
+      if (fKey.indexOf('filipe') !== -1 ? _rainedTop : _rainedBottom) return;
       var r = dayReports.find(function(rep){ return (rep.foreman||'').toLowerCase()===fKey; }) || null;
       _invsByForeman[fKey].forEach(function(inv, idx) {
         html += _inv3DayBlock(dk, idx === 0 ? r : null, inv, canEdit);
@@ -4897,6 +4938,7 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
       var fKey = (r.foreman||'').toLowerCase();
       if (_rendered[fKey]) return;
       _rendered[fKey] = true;
+      if (fKey.indexOf('filipe') !== -1 ? _rainedTop : _rainedBottom) return;
       html += _inv3DayBlock(dk, r, null, canEdit);
     });
 
@@ -5035,9 +5077,15 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
 
   var state  = isApp ? 'approved' : 'filled';
   var amtCls = isApp ? 'green'    : 'yellow';
+  // Falls back to the schedule slot's plant when the invoice itself has no
+  // supplier set yet — _fBlk is the same schedule-fields lookup already used
+  // above for the trucking/QC line.
+  var _supplier = invoice.supplier || (_fBlk && _fBlk.plant) || '';
+  var _supplierLine = _supplier ? '<div style="font-size:9px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;margin-top:1px;">'+escHtml(_supplier)+'</div>' : '';
   return '<div class="inv3-day-block '+state+'"'+(isApp?'':' style="position:relative;"')+' onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(foremanName)+'">'
     + (isApp ? '' : '<span onclick="invQuickApprove(\''+escHtml(invoice.id)+'\',event)" style="position:absolute;top:2px;right:4px;font-size:10px;color:#f59e0b;cursor:pointer;font-weight:700;opacity:0.7;padding:2px;" title="Quick approve">&#10003;</span>')
     + '<div class="inv3-block-info">'+initials+' \xb7 '+jobNo+'</div>'
+    + _supplierLine
     + (billed > 0 ? '<div class="inv3-block-amt '+amtCls+'">'+invFmt(billed)+'</div>' : '')
     + _truckLine
     + '</div>';
@@ -5153,10 +5201,15 @@ function _inv3ListView(canEdit) {
     var jobNo    = escHtml(inv.jobNo || '—');
     var dateStr  = escHtml((inv.dateOfWork||'').slice(5).replace('-','/'));
     var mixItems = inv.mixItems || [];
+    // rainedOut is stored per-slot (schedData[date].top/.bottom.rainedOut) —
+    // same foreman->slot convention as the calendar view.
+    var _rainSlot = (inv.foreman||'').toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom';
+    var _rainedOut = !!(typeof schedData !== 'undefined' && schedData[inv.dateOfWork] && schedData[inv.dateOfWork][_rainSlot] && schedData[inv.dateOfWork][_rainSlot].rainedOut);
+    var _rainLabel = _rainedOut ? ' <span style="color:#93c5fd;font-size:9px;white-space:nowrap;">🌧 Rain Out</span>' : '';
 
     if (!mixItems.length) {
       html += '<tr class="'+rowCls+'" onclick="inv3OpenInvoice(\''+escHtml(inv.id)+'\')">'
-        + '<td class="dim">'+dateStr+'</td>'
+        + '<td class="dim">'+dateStr+_rainLabel+'</td>'
         + '<td>'+jobNo+'</td>'
         + '<td class="dim">'+escHtml(inv.invoiceNo||'—')+'</td>'
         + '<td class="dim">'+initials+'</td>'
@@ -5171,7 +5224,7 @@ function _inv3ListView(canEdit) {
         var isFirst = mi===0;
         var rowExtra = isFirst ? '' : ' inv3-group-border';
         html += '<tr class="'+rowCls+rowExtra+'" onclick="inv3OpenInvoice(\''+escHtml(inv.id)+'\')">'
-          + '<td class="dim">'+(isFirst?dateStr:'')+'</td>'
+          + '<td class="dim">'+(isFirst?dateStr+_rainLabel:'')+'</td>'
           + '<td>'+(isFirst?jobNo:'')+'</td>'
           + '<td class="dim">'+(isFirst?escHtml(inv.invoiceNo||'—'):'')+'</td>'
           + '<td class="dim">'+(isFirst?initials:'')+'</td>'
