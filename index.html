@@ -25003,6 +25003,8 @@ async function openForemanReport() {
   });
   var startTime = '';
   var endTime = '';
+  var tackCoat = '';
+  var rubber = '';
   var opsRaw = (f.operators || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   var operatorRows = opsRaw.map(function(name){ return { name: name, hours: '' }; });
 
@@ -25059,15 +25061,17 @@ async function openForemanReport() {
     for (var ci = 0; ci < MIX_TYPES.length; ci++) s += parseFloat(workVals[ri + '_' + ci]) || 0;
     return s;
   }
-  function _frColTotal(ci) {
-    var s = 0;
-    for (var ri = 0; ri < WORK_TYPES.length; ri++) s += parseFloat(workVals[ri + '_' + ci]) || 0;
-    return s;
-  }
   function _frGrandTotal() {
     var s = 0;
     for (var ri = 0; ri < WORK_TYPES.length; ri++) s += _frRowTotal(ri);
     return s;
+  }
+  // Exact tonnage display — no 1-decimal rounding (billing/payroll accuracy);
+  // toFixed(10) just clears floating-point noise before trimming trailing zeros.
+  function _frExactNum(v) {
+    var n = parseFloat(v);
+    if (!n || isNaN(n)) return '0';
+    return parseFloat(n.toFixed(10)).toString();
   }
   function _frWorkTableHtml() {
     var _cellStyle = 'width:60px;text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;color:#fff;font-family:\'DM Mono\',monospace;font-size:11px;';
@@ -25080,15 +25084,16 @@ async function openForemanReport() {
         return '<td style="padding:2px 4px;"><input type="text" inputmode="decimal" id="frCell_' + ri + '_' + ci + '" value="' + escHtml(v) + '" oninput="window._frCellChange(' + ri + ',' + ci + ',this.value)" style="' + _cellStyle + '"/></td>';
       }).join('');
       return '<tr><td style="color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 8px;white-space:nowrap;">' + wt + '</td>' + cells +
-        '<td id="frRowTotal_' + ri + '" style="text-align:center;padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);font-weight:700;">' + _frRowTotal(ri).toFixed(1) + '</td></tr>';
+        '<td id="frRowTotal_' + ri + '" style="text-align:center;padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);font-weight:700;">' + _frExactNum(_frRowTotal(ri)) + '</td></tr>';
     }).join('');
-    var totalRow = '<tr><td style="font-weight:700;color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;padding:4px 8px;">TOTAL</td>' +
-      MIX_TYPES.map(function(mt, ci) { return '<td id="frColTotal_' + ci + '" style="text-align:center;padding:4px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;">' + _frColTotal(ci).toFixed(1) + '</td>'; }).join('') +
-      '<td id="frGrandTotal" style="text-align:center;padding:4px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;">' + _frGrandTotal().toFixed(1) + '</td></tr>';
     var _wrapStyle = isMobile ? 'overflow-x:auto;-webkit-overflow-scrolling:touch;' : '';
     return '<div style="' + _wrapStyle + '">' +
       '<table style="border-collapse:collapse;width:100%;">' +
-      '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + totalRow + '</tbody></table></div>';
+      '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:8px 12px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:6px;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">Grand Total:</span>' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#a78bfa;"><span id="frGrandTotal">' + _frExactNum(_frGrandTotal()) + '</span> tons</span>' +
+      '</div>';
   }
 
   function render() {
@@ -25163,6 +25168,16 @@ async function openForemanReport() {
         '<div style="margin-bottom:16px;">' +
           '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Work Performed (Tons)</div>' +
           _frWorkTableHtml() +
+          '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;">' +
+            '<div style="flex:1;min-width:140px;">' +
+              '<label style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Tack Coat (gal)</label>' +
+              '<input type="text" inputmode="decimal" id="_frTackCoat" value="' + escHtml(tackCoat) + '" oninput="window._frTackCoatChange(this.value)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:8px 12px;color:#fff;font-family:\'DM Mono\',monospace;font-size:13px;width:100%;box-sizing:border-box;">' +
+            '</div>' +
+            '<div style="flex:1;min-width:140px;">' +
+              '<label style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Rubber (lineal ft)</label>' +
+              '<input type="text" inputmode="decimal" id="_frRubber" value="' + escHtml(rubber) + '" oninput="window._frRubberChange(this.value)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:8px 12px;color:#fff;font-family:\'DM Mono\',monospace;font-size:13px;width:100%;box-sizing:border-box;">' +
+            '</div>' +
+          '</div>' +
         '</div>' +
 
         '<div style="margin-bottom:20px;">' +
@@ -25193,12 +25208,12 @@ async function openForemanReport() {
   window._frCellChange = function(ri, ci, v) {
     workVals[ri + '_' + ci] = v;
     var rt = document.getElementById('frRowTotal_' + ri);
-    if (rt) rt.textContent = _frRowTotal(ri).toFixed(1);
-    var ct = document.getElementById('frColTotal_' + ci);
-    if (ct) ct.textContent = _frColTotal(ci).toFixed(1);
+    if (rt) rt.textContent = _frExactNum(_frRowTotal(ri));
     var gt = document.getElementById('frGrandTotal');
-    if (gt) gt.textContent = _frGrandTotal().toFixed(1);
+    if (gt) gt.textContent = _frExactNum(_frGrandTotal());
   };
+  window._frTackCoatChange = function(v) { tackCoat = v; };
+  window._frRubberChange = function(v) { rubber = v; };
 
   window._frSubmit = function() {
     var present = laborRows.filter(function(r){ return !r.absent; });
@@ -25253,6 +25268,8 @@ async function openForemanReport() {
       }).filter(function(m){ return m.qty > 0; }),
       workTable: _workTable,
       totalTonnage: totalTonnage,
+      tackCoat: (document.getElementById('_frTackCoat') || {}).value || '',
+      rubber: (document.getElementById('_frRubber') || {}).value || '',
       notes: jobNote,
       submittedAt: Date.now(),
       verified: false

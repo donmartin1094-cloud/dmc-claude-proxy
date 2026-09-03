@@ -2196,73 +2196,122 @@ function saveForemanReports() {
   try { if (db) fbSet('foreman_reports', foremanReports); } catch(e) {}
 }
 
-// Reduces a submitted report's workTable (rows=work types, cols=mix types,
-// cells keyed 'row::col' -> tonnage) down to only the non-zero rows/cols plus
-// their totals. Returns null when the report has no usable workTable (older
-// reports created before this field existed).
+// Builds the full work-type x mix-type grid from a submitted report's
+// workTable (rows=work types, cols=mix types, cells keyed 'row::col' ->
+// tonnage) — always ALL rows and ALL columns (empty cells render blank, not
+// dropped), so the generated report matches the form exactly. Returns null
+// when the report has no usable workTable (older reports created before
+// this field existed) — callers fall back to r.mixTypes / r.workItems.
 function _frWorkTableGrid(r) {
   var wt = r && r.workTable;
   if (!wt || !wt.cells || !Array.isArray(wt.rows) || !Array.isArray(wt.cols)) return null;
-  var rowsUsed = wt.rows.filter(function(row){
-    return wt.cols.some(function(col){ return (wt.cells[row+'::'+col]||0) > 0; });
-  });
-  var colsUsed = wt.cols.filter(function(col){
-    return wt.rows.some(function(row){ return (wt.cells[row+'::'+col]||0) > 0; });
-  });
-  if (!rowsUsed.length || !colsUsed.length) return null;
+  var activeRows = wt.rows; // all work types, always
+  var activeCols = wt.cols; // all mix types, always
   var colTotals = {};
-  colsUsed.forEach(function(col){
+  activeCols.forEach(function(col){
     colTotals[col] = wt.rows.reduce(function(s,row){ return s+(wt.cells[row+'::'+col]||0); }, 0);
   });
-  var grandTotal = colsUsed.reduce(function(s,col){ return s+colTotals[col]; }, 0);
-  return { rowsUsed: rowsUsed, colsUsed: colsUsed, cells: wt.cells, colTotals: colTotals, grandTotal: grandTotal };
+  var grandTotal = activeCols.reduce(function(s,col){ return s+colTotals[col]; }, 0);
+  return { rowsUsed: activeRows, colsUsed: activeCols, cells: wt.cells, colTotals: colTotals, grandTotal: grandTotal };
+}
+
+// Exact tonnage display — no 1-decimal rounding (billing/payroll accuracy);
+// toFixed(10) just clears floating-point noise before trimming trailing zeros.
+function _frExactNum(v) {
+  var n = parseFloat(v);
+  if (!n || isNaN(n)) return '0';
+  return parseFloat(n.toFixed(10)).toString();
+}
+
+// Formats a 24h 'HH:MM' time string as 12h, e.g. '15:30' -> '3:30 PM'.
+function _frFmt12h(t) {
+  if (!t) return '';
+  var _p = t.split(':');
+  var _h = parseInt(_p[0]);
+  var _m = _p[1];
+  var _ap = _h >= 12 ? 'PM' : 'AM';
+  _h = _h % 12 || 12;
+  return _h + ':' + _m + ' ' + _ap;
 }
 
 function _frRenderDetail(r) {
-  var fmtTime = function(t){ if(!t) return '—'; var p=t.split(':'); var h=parseInt(p[0]),m=p[1]||'00',ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m+' '+ap; };
   var workTypeLabels = {machinePave:'Machine Pave',levelingCourse:'Leveling Course',trenchPave:'Trench Pave',handPave:'Hand Pave',sidewalks:'Sidewalks',patch:'Patch',berm:'Berm'};
-  var totalCrewHrs = 0;
-  var laborRows = (r.labor||[]).map(function(l) {
-    var h = parseFloat(l.totalHours||l.machineHours||l.handHours)||0;
-    totalCrewHrs += h;
-    return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
-      '<span style="color:var(--concrete-dim);width:70px;flex-shrink:0;">'+escHtml(l.role||'')+'</span>'+
-      '<span style="flex:1;color:var(--white);">'+escHtml(l.name||'—')+'</span>'+
-      '<span style="color:var(--stripe);width:50px;text-align:right;">'+h.toFixed(1)+' hrs</span>'+
+
+  // ── Crew section — Present/Absent/Operators for the real foreman widget
+  // (r.crew array), falling back to the admin editor's role-based labor list.
+  var crewSectionHtml = '';
+  if (Array.isArray(r.crew)) {
+    var _crewPresent = r.crew.filter(function(c){ return !c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—')+' ('+_frExactNum(c.hours)+')'; });
+    var _crewAbsent  = r.crew.filter(function(c){ return c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—'); });
+    var _opsList = (r.operators||[]).map(function(o){ return escHtml(o.name||'—')+' ('+_frExactNum(o.hours)+')'; });
+    crewSectionHtml = '<div style="margin-bottom:8px;">'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Present</div>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);margin-bottom:6px;">'+(_crewPresent.length?_crewPresent.join(', '):'—')+'</div>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Absent</div>'+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);margin-bottom:6px;">'+(_crewAbsent.length?_crewAbsent.join(', '):'—')+'</div>'+
+      (_opsList.length ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Operators</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);">'+_opsList.join(', ')+'</div>' : '')+
     '</div>';
-  }).join('');
-  var _wtGrid = _frWorkTableGrid(r);
-  var workSectionHtml = '';
-  if (_wtGrid) {
-    var _headCells = '<th style="text-align:left;padding:3px 8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;">Work Type</th>' +
-      _wtGrid.colsUsed.map(function(col){ return '<th style="text-align:center;padding:3px 8px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:9px;">'+escHtml(col)+'</th>'; }).join('') +
-      '<th style="text-align:center;padding:3px 8px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:9px;">Total</th>';
-    var _bodyRows = _wtGrid.rowsUsed.map(function(row){
-      var _rowTotal = 0;
-      var _cellsHtml = _wtGrid.colsUsed.map(function(col){
-        var v = _wtGrid.cells[row+'::'+col] || 0;
-        _rowTotal += v;
-        return '<td style="text-align:center;padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+(v>0?v.toFixed(1):'')+'</td>';
-      }).join('');
-      return '<tr><td style="padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(row)+'</td>'+_cellsHtml+
-        '<td style="text-align:center;padding:2px 8px;color:var(--stripe);font-weight:700;font-family:\'DM Mono\',monospace;font-size:10px;">'+_rowTotal.toFixed(1)+'</td></tr>';
-    }).join('');
-    var _totalRow = '<tr><td style="padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">TOTAL</td>'+
-      _wtGrid.colsUsed.map(function(col){ return '<td style="text-align:center;padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">'+_wtGrid.colTotals[col].toFixed(1)+'</td>'; }).join('')+
-      '<td style="text-align:center;padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">'+_wtGrid.grandTotal.toFixed(1)+'</td></tr>';
-    workSectionHtml = '<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Work Performed (Tons)</div>'+
-      '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="border-collapse:collapse;width:100%;">'+
-      '<thead><tr>'+_headCells+'</tr></thead><tbody>'+_bodyRows+_totalRow+'</tbody></table></div></div>';
   } else {
-    var workRows = (r.workItems||[]).filter(function(w){ return w.workType; }).map(function(w) {
-      var tons = (parseFloat(w.denseGraded)||0)+(parseFloat(w.blackBase)||0)+(parseFloat(w.binder)||0)+(parseFloat(w.top)||0);
+    var totalCrewHrs = 0;
+    var laborRows = (r.labor||[]).map(function(l) {
+      var h = parseFloat(l.totalHours||l.machineHours||l.handHours)||0;
+      totalCrewHrs += h;
       return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
-        '<span style="flex:1;color:var(--white);">'+escHtml(workTypeLabels[w.workType]||w.workType)+'</span>'+
-        (tons>0?'<span style="color:var(--stripe);">'+tons.toFixed(1)+' T</span>':'')+
+        '<span style="color:var(--concrete-dim);width:70px;flex-shrink:0;">'+escHtml(l.role||'')+'</span>'+
+        '<span style="flex:1;color:var(--white);">'+escHtml(l.name||'—')+'</span>'+
+        '<span style="color:var(--stripe);width:50px;text-align:right;">'+h.toFixed(1)+' hrs</span>'+
       '</div>';
     }).join('');
-    workSectionHtml = workRows ? '<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Mix / Production</div>'+workRows+'</div>' : '';
+    crewSectionHtml = laborRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Roster</div>'+laborRows+'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);text-align:right;margin-top:4px;">Total: '+totalCrewHrs.toFixed(1)+' hrs</div></div>':'';
   }
+
+  // ── Work table — full grid (workTable) > simple mixTypes list > legacy workItems detail
+  var _wtGrid = _frWorkTableGrid(r);
+  var workSectionHtml = '';
+  var _grandTonnage = 0;
+  if (_wtGrid) {
+    _grandTonnage = _wtGrid.grandTotal;
+    var _headCells = '<th style="text-align:left;padding:3px 8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;">Work Type</th>' +
+      _wtGrid.colsUsed.map(function(col){ return '<th style="text-align:center;padding:3px 8px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:9px;">'+escHtml(col)+'</th>'; }).join('');
+    var _bodyRows = _wtGrid.rowsUsed.map(function(row){
+      var _cellsHtml = _wtGrid.colsUsed.map(function(col){
+        var v = _wtGrid.cells[row+'::'+col] || 0;
+        return '<td style="text-align:center;padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+(v>0?_frExactNum(v):'')+'</td>';
+      }).join('');
+      return '<tr><td style="padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(row)+'</td>'+_cellsHtml+'</tr>';
+    }).join('');
+    workSectionHtml = '<div style="margin-bottom:4px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Work Performed (Tons)</div>'+
+      '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="border-collapse:collapse;width:100%;">'+
+      '<thead><tr>'+_headCells+'</tr></thead><tbody>'+_bodyRows+'</tbody></table></div></div>';
+  } else if (r.mixTypes && r.mixTypes.length) {
+    _grandTonnage = r.mixTypes.reduce(function(s,m){ return s+(parseFloat(m.qty)||0); }, 0);
+    var _mixRows = r.mixTypes.filter(function(m){ return m && m.name; }).map(function(m) {
+      return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
+        '<span style="flex:1;color:var(--white);">'+escHtml(m.name)+'</span>'+
+        '<span style="color:var(--stripe);">'+_frExactNum(m.qty)+' T</span>'+
+      '</div>';
+    }).join('');
+    workSectionHtml = '<div style="margin-bottom:4px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Mix / Production</div>'+_mixRows+'</div>';
+  } else if (r.workItems && r.workItems.length) {
+    var workRows = r.workItems.filter(function(w){ return w.workType; }).map(function(w) {
+      var tons = (parseFloat(w.denseGraded)||0)+(parseFloat(w.blackBase)||0)+(parseFloat(w.binder)||0)+(parseFloat(w.top)||0);
+      _grandTonnage += tons;
+      return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
+        '<span style="flex:1;color:var(--white);">'+escHtml(workTypeLabels[w.workType]||w.workType)+'</span>'+
+        (tons>0?'<span style="color:var(--stripe);">'+_frExactNum(tons)+' T</span>':'')+
+      '</div>';
+    }).join('');
+    workSectionHtml = workRows ? '<div style="margin-bottom:4px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Mix / Production</div>'+workRows+'</div>' : '';
+  }
+
+  var belowTableHtml = '';
+  if (workSectionHtml) {
+    belowTableHtml += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#a78bfa;font-weight:700;margin-bottom:8px;">Grand Total Tonnage: '+_frExactNum(_grandTonnage)+' tons</div>';
+  }
+  if (r.tackCoat) belowTableHtml += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);margin-bottom:4px;">Tack Coat: '+escHtml(r.tackCoat)+' gal</div>';
+  if (r.rubber) belowTableHtml += '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);margin-bottom:8px;">Rubber: '+escHtml(r.rubber)+' lineal ft</div>';
+
   var equipRows = Object.keys(r.equipment||{}).filter(function(k){ return r.equipment[k]; }).map(function(k) {
     var eq = r.equipment[k]; var hrs = typeof eq==='object'?eq.hours:eq;
     return '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);padding:2px 0;">'+escHtml(k)+(hrs?' — '+hrs+' hrs':'')+'</div>';
@@ -2272,18 +2321,26 @@ function _frRenderDetail(r) {
     : r.locationVerified===false
       ? '<div style="margin-top:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:#fb923c;">⚠️ Issue flagged'+(r.locationIssueNote?': '+escHtml(r.locationIssueNote):'')+'</div>'
       : '';
+
+  var _startT = r.startTime || r.startingTime || '';
+  var _endT   = r.endTime   || r.endingTime   || '';
+  var _hrsVal = r.foremanHours != null ? r.foremanHours : (r.hours || 0);
+  var _timeDisplay = (_startT && _endT) ? (_frFmt12h(_startT)+' – '+_frFmt12h(_endT)+' ('+_frExactNum(_hrsVal)+' hrs)') : '—';
+  var _notesText = r.notes || r.delayNotes || '';
+
   return '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);margin:4px 16px 8px;padding:14px 16px;font-size:11px;">'+
     '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Job #</div><div style="color:var(--stripe);font-weight:700;">'+escHtml(r.jobNumber||'—')+'</div></div>'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">GC</div><div style="color:var(--white);">'+escHtml(r.gcName||'—')+'</div></div>'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Job Name</div><div style="color:var(--white);">'+escHtml(r.jobName||r.jobLocation||'—')+'</div></div>'+
-      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Time</div><div style="color:var(--white);">'+fmtTime(r.startingTime)+' – '+fmtTime(r.endingTime)+'</div></div>'+
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Plant</div><div style="color:var(--white);">'+escHtml(r.plant||r.plantLocation||'—')+'</div></div>'+
+      '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Time</div><div style="color:var(--white);">'+escHtml(_timeDisplay)+'</div></div>'+
     '</div>'+
-    (laborRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Roster</div>'+laborRows+'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);text-align:right;margin-top:4px;">Total: '+totalCrewHrs.toFixed(1)+' hrs</div></div>':'')+
+    crewSectionHtml+
     workSectionHtml+
+    belowTableHtml+
     (equipRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Equipment</div>'+equipRows+'</div>':'')+
-    (r.delayNotes?'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:6px;"><span style="text-transform:uppercase;letter-spacing:1px;font-size:8px;">Notes: </span>'+escHtml(r.delayNotes)+'</div>':'')+
+    (_notesText?'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:6px;"><span style="text-transform:uppercase;letter-spacing:1px;font-size:8px;">Notes: </span>'+escHtml(_notesText)+'</div>':'')+
     verifLine+
     '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'+
       '<button onclick="event.stopPropagation();openForemanReportForm(\''+r.id+'\')" style="background:rgba(245,197,24,0.1);border:1px solid rgba(245,197,24,0.4);border-radius:3px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;">✏️ Edit</button>'+
@@ -3077,52 +3134,84 @@ function printForemanReport(id) {
   var fmtTime = function(t){ if(!t) return ''; var p=t.split(':'); var h=parseInt(p[0]),m=p[1],ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m+' '+ap; };
   var dt = r.date ? new Date(r.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}) : '';
 
-  var laborRows = '';
-  var roles = ['foreman','operator','operator','operator','operator','operator','laborer','laborer','laborer','laborer','laborer','laborer','raker','raker','raker','raker'];
-  var roleLabels = {foreman:'Foreman',operator:'Operator',laborer:'Laborer',raker:'Raker'};
-  var allLaborSlots = [];
-  ['foreman','operator','laborer','raker'].forEach(function(role){
-    var entries = (r.labor||[]).filter(function(l){ return l.role===role; });
-    var count = role==='foreman'?1:role==='operator'?5:role==='laborer'?6:4;
-    for(var i=0;i<count;i++) allLaborSlots.push({role:role,data:entries[i]||null});
-  });
-  laborRows = allLaborSlots.map(function(slot){
-    var d = slot.data||{};
-    return '<tr><td class="lbl">'+roleLabels[slot.role]+'</td><td>'+(d.name||'')+'</td><td class="num">'+(d.machineHours||'')+'</td><td class="num">'+(d.handHours||'')+'</td><td class="num">'+(d.totalHours||'')+'</td><td class="num">'+(d.delayHours||'')+'</td></tr>';
-  }).join('');
+  // ── Crew section — Present/Absent/Operators for the real foreman widget
+  // (r.crew array), falling back to the admin editor's role-based labor table.
+  var crewSectionHtml;
+  if (Array.isArray(r.crew)) {
+    var _cPresent = r.crew.filter(function(c){ return !c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—')+' ('+fmtNum(c.hours)+')'; }).join(', ') || '—';
+    var _cAbsent  = r.crew.filter(function(c){ return c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—'); }).join(', ') || '—';
+    var _cOps     = (r.operators||[]).map(function(o){ return escHtml(o.name||'—')+' ('+fmtNum(o.hours)+')'; }).join(', ');
+    crewSectionHtml = '<section><div class="sec-title">Crew</div>'+
+      '<div style="margin-bottom:4px;"><strong>Present:</strong> '+_cPresent+'</div>'+
+      '<div style="margin-bottom:4px;"><strong>Absent:</strong> '+_cAbsent+'</div>'+
+      (_cOps ? '<div><strong>Operators:</strong> '+_cOps+'</div>' : '')+
+    '</section>';
+  } else {
+    var roleLabels = {foreman:'Foreman',operator:'Operator',laborer:'Laborer',raker:'Raker'};
+    var allLaborSlots = [];
+    ['foreman','operator','laborer','raker'].forEach(function(role){
+      var entries = (r.labor||[]).filter(function(l){ return l.role===role; });
+      var count = role==='foreman'?1:role==='operator'?5:role==='laborer'?6:4;
+      for(var i=0;i<count;i++) allLaborSlots.push({role:role,data:entries[i]||null});
+    });
+    var laborRows = allLaborSlots.map(function(slot){
+      var d = slot.data||{};
+      return '<tr><td class="lbl">'+roleLabels[slot.role]+'</td><td>'+(d.name||'')+'</td><td class="num">'+(d.machineHours||'')+'</td><td class="num">'+(d.handHours||'')+'</td><td class="num">'+(d.totalHours||'')+'</td><td class="num">'+(d.delayHours||'')+'</td></tr>';
+    }).join('');
+    crewSectionHtml = '<section><div class="sec-title">Labor</div>'+
+      '<table><thead><tr><th>Role</th><th>Name</th><th>Mach Hrs</th><th>Hand Hrs</th><th>Total Hrs</th><th>Delay Hrs</th></tr></thead><tbody>'+laborRows+'</tbody></table></section>';
+  }
 
+  // ── Work table — full grid (workTable) > simple mixTypes list > legacy workItems detail
   var _wtGrid = _frWorkTableGrid(r);
-  var workHeaderRow, workRows;
+  var workHeaderRow, workRows, _grandTonnage = 0;
   if (_wtGrid) {
-    workHeaderRow = '<th>Work Type</th>' + _wtGrid.colsUsed.map(function(col){ return '<th>'+escHtml(col)+'</th>'; }).join('') + '<th>Total</th>';
+    _grandTonnage = _wtGrid.grandTotal;
+    workHeaderRow = '<th>Work Type</th>' + _wtGrid.colsUsed.map(function(col){ return '<th>'+escHtml(col)+'</th>'; }).join('');
     workRows = _wtGrid.rowsUsed.map(function(row){
-      var rowTotal = 0;
       var cells = _wtGrid.colsUsed.map(function(col){
         var v = _wtGrid.cells[row+'::'+col] || 0;
-        rowTotal += v;
-        return '<td class="num">'+fmtNum(v)+'</td>';
+        return '<td class="num">'+(v>0?fmtNum(v):'')+'</td>';
       }).join('');
-      return '<tr><td class="lbl">'+escHtml(row)+'</td>'+cells+'<td class="num">'+fmtNum(rowTotal)+'</td></tr>';
+      return '<tr><td class="lbl">'+escHtml(row)+'</td>'+cells+'</tr>';
     }).join('');
-    workRows += '<tr><td class="lbl">TOTAL</td>' + _wtGrid.colsUsed.map(function(col){ return '<td class="num">'+fmtNum(_wtGrid.colTotals[col])+'</td>'; }).join('') + '<td class="num">'+fmtNum(_wtGrid.grandTotal)+'</td></tr>';
+  } else if (r.mixTypes && r.mixTypes.length) {
+    _grandTonnage = r.mixTypes.reduce(function(s,m){ return s+(parseFloat(m.qty)||0); }, 0);
+    workHeaderRow = '<th>Mix Type</th><th>Tons</th>';
+    workRows = r.mixTypes.filter(function(m){ return m && m.name; }).map(function(m){
+      return '<tr><td class="lbl">'+escHtml(m.name)+'</td><td class="num">'+fmtNum(m.qty)+'</td></tr>';
+    }).join('');
   } else {
     var workMap = {};
     (r.workItems||[]).forEach(function(w){ workMap[w.workType]=w; });
     workHeaderRow = '<th>Work Type</th><th>Dense Graded</th><th>Black Base</th><th>Binder</th><th>Top</th><th>Lin Ft (Berm)</th>';
     workRows = ['machinePave','levelingCourse','trenchPave','handPave','sidewalks','patch','berm'].map(function(wt){
       var d=workMap[wt]||{};
+      var tons = (parseFloat(d.denseGraded)||0)+(parseFloat(d.blackBase)||0)+(parseFloat(d.binder)||0)+(parseFloat(d.top)||0);
+      _grandTonnage += tons;
       return '<tr><td class="lbl">'+workTypeLabels[wt]+'</td><td class="num">'+fmtNum(d.denseGraded)+'</td><td class="num">'+fmtNum(d.blackBase)+'</td><td class="num">'+fmtNum(d.binder)+'</td><td class="num">'+fmtNum(d.top)+'</td><td class="num">'+(wt==='berm'?fmtNum(d.linFt):'')+'</td></tr>';
     }).join('');
   }
+  var _tackVal   = r.tackCoat || r.tackCostGal || '';
+  var _rubberVal = r.rubber   || r.hotRubberLft || '';
+  var belowTableHtml = '<div style="margin-top:8px;font-size:9pt;font-weight:700;">Grand Total Tonnage: '+fmtNum(_grandTonnage)+' tons</div>'+
+    (_tackVal   ? '<div style="margin-top:4px;font-size:8pt;"><strong>Tack Coat:</strong> '+escHtml(_tackVal)+' gal</div>' : '')+
+    (_rubberVal ? '<div style="margin-top:2px;font-size:8pt;"><strong>Rubber:</strong> '+escHtml(_rubberVal)+' lineal ft</div>' : '');
 
   var eq = r.equipment||{};
   var truckRows = (r.trucks||[]).filter(function(t){return t.name||t.start||t.ending;}).map(function(t,i){
     return '<tr><td class="num">'+(i+1)+'</td><td>'+escHtml(t.name||'')+'</td><td class="num">'+fmtTime(t.start)+'</td><td class="num">'+fmtTime(t.ending)+'</td><td class="num">'+(t.trailer?'✓':'')+'</td><td class="num">'+(t.triaxle?'✓':'')+'</td></tr>';
   }).join('');
 
+  var _startT = r.startTime || r.startingTime || '';
+  var _endT   = r.endTime   || r.endingTime   || '';
+  var _hrsVal = r.foremanHours != null ? r.foremanHours : (r.hours || 0);
+  var _timeStr = (_startT && _endT) ? (_frFmt12h(_startT)+' – '+_frFmt12h(_endT)+' ('+fmtNum(_hrsVal)+' hrs)') : '';
+  var _notesText = r.notes || r.delayNotes || '';
+
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Foreman Report — '+escHtml(r.foreman||'')+'</title><style>'+
     '*{margin:0;padding:0;box-sizing:border-box;}'+
-    'body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#111;background:#fff;}'+
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#111;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
     '@page{size:letter portrait;margin:0.5in;}'+
     '.page{width:100%;max-width:7.5in;}'+
     '.logo-hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1a1a2e;padding-bottom:6px;margin-bottom:10px;}'+
@@ -3136,13 +3225,13 @@ function printForemanReport(id) {
     'section{margin-bottom:10px;}'+
     '.sec-title{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:#1a1a2e;color:#fff;padding:2px 6px;margin-bottom:4px;}'+
     'table{width:100%;border-collapse:collapse;font-size:8pt;}'+
-    'th{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#f0f0f0;border:1px solid #ccc;padding:2px 4px;text-align:center;}'+
-    'td{border:1px solid #ddd;padding:2px 4px;vertical-align:middle;}'+
+    'th{font-size:7pt;font-weight:bold;text-transform:uppercase;letter-spacing:.5px;background:#f5f5f5;border:1px solid #ccc;padding:2px 4px;text-align:center;}'+
+    'td{border:1px solid #ccc;padding:2px 4px;vertical-align:middle;}'+
     'td.lbl{font-weight:600;background:#fafafa;white-space:nowrap;}'+
     'td.num{text-align:center;}'+
     '.sig-line{border-top:1px solid #111;margin-top:24px;padding-top:4px;font-size:8pt;color:#555;}'+
     '.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}'+
-    '.delay-box{border:1px solid #ddd;min-height:48px;padding:4px;font-size:8pt;color:#333;}'+
+    '.delay-box{border:1px solid #ccc;min-height:48px;padding:4px;font-size:8pt;color:#333;}'+
   '</style></head><body><div class="page">'+
 
     // Logo header
@@ -3154,26 +3243,22 @@ function printForemanReport(id) {
     // Job info
     '<div class="info-grid">'+
       '<div class="info-row"><span class="info-lbl">Date:</span><span class="info-val">'+escHtml(dt)+'</span></div>'+
-      '<div class="info-row"><span class="info-lbl">Start:</span><span class="info-val">'+escHtml(fmtTime(r.startingTime))+'</span></div>'+
-      '<div class="info-row"><span class="info-lbl">End:</span><span class="info-val">'+escHtml(fmtTime(r.endingTime))+'</span></div>'+
-      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">Job Name:</span><span class="info-val">'+escHtml(r.jobName||r.jobLocation||'')+'</span></div>'+
       '<div class="info-row"><span class="info-lbl">Job #:</span><span class="info-val" style="font-weight:700;font-size:11pt;">'+escHtml(r.jobNumber||'')+'</span></div>'+
-      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">General Contractor:</span><span class="info-val">'+escHtml(r.gcName||'')+'</span></div>'+
-      '<div class="info-row"><span class="info-lbl">Plant:</span><span class="info-val">'+escHtml(r.plant||r.plantLocation||'')+'</span></div>'+
       '<div class="info-row"><span class="info-lbl">Foreman:</span><span class="info-val">'+escHtml(r.foreman||'')+'</span></div>'+
+      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">Job Name:</span><span class="info-val">'+escHtml(r.jobName||r.jobLocation||'')+'</span></div>'+
+      '<div class="info-row"><span class="info-lbl">Plant:</span><span class="info-val">'+escHtml(r.plant||r.plantLocation||'')+'</span></div>'+
+      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">General Contractor:</span><span class="info-val">'+escHtml(r.gcName||'')+'</span></div>'+
+      '<div class="info-row" style="grid-column:1/3;"><span class="info-lbl">Time:</span><span class="info-val">'+escHtml(_timeStr)+'</span></div>'+
     '</div>'+
 
-    // Labor
-    '<section><div class="sec-title">Labor</div>'+
-    '<table><thead><tr><th>Role</th><th>Name</th><th>Mach Hrs</th><th>Hand Hrs</th><th>Total Hrs</th><th>Delay Hrs</th></tr></thead><tbody>'+laborRows+'</tbody></table></section>'+
+    // Crew
+    crewSectionHtml+
 
     // Work performed
     '<section><div class="sec-title">Description of Work Performed — Actual Placed Quantities (Tons)</div>'+
     '<table><thead><tr>'+workHeaderRow+'</tr></thead><tbody>'+workRows+'</tbody></table>'+
-    '<div style="display:flex;gap:24px;margin-top:6px;font-size:8pt;">'+
-      '<span><strong>Tack Cost:</strong> '+(r.tackCostGal||0)+' gal</span>'+
-      '<span><strong>Hot Rubber:</strong> '+(r.hotRubberLft||0)+' lin ft · '+(r.hotRubberFt||0)+' ft</span>'+
-    '</div></section>'+
+    belowTableHtml+
+    '</section>'+
 
     // Equipment + Trucks side by side
     '<div class="two-col">'+
@@ -3194,9 +3279,9 @@ function printForemanReport(id) {
       '</tbody></table></section>'+
     '</div>'+
 
-    // Delay notes + signature
+    // Notes + signature
     '<div class="two-col" style="margin-top:10px;">'+
-      '<section><div class="sec-title">Delay Notes</div><div class="delay-box">'+escHtml(r.delayNotes||'')+'</div></section>'+
+      '<section><div class="sec-title">Notes</div><div class="delay-box">'+escHtml(_notesText)+'</div></section>'+
       '<section><div style="margin-top:32px;"><div class="sig-line">Foreman Signature: '+escHtml(r.foremanSignature||'')+'</div></div></section>'+
     '</div>'+
 
