@@ -4325,7 +4325,7 @@ async function _toOpenPortal(file) {
     await _toLoadPdfJs();
     _toPdfDoc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
     _toPdfPage = 1;
-    await _toRenderPage();
+    await _toRenderPage(true);
     _toBindEvents();
     _toUpdateStatus('Ready — 📐 Set Scale first, then measure');
   } catch(err) { _toUpdateStatus('Error: ' + (err.message||err)); }
@@ -4352,7 +4352,7 @@ async function _toLoadPdfJs() {
   });
 }
 
-async function _toRenderPage() {
+async function _toRenderPage(_resetView) {
   if (!_toPdfDoc) return;
   const page = await _toPdfDoc.getPage(_toPdfPage);
   const vp = page.getViewport({ scale: 2.0 * _toZoom });
@@ -4372,6 +4372,11 @@ async function _toRenderPage() {
   if (!_toPageMeasurements[_toPdfPage]) _toPageMeasurements[_toPdfPage] = [];
   _toMeasurements = _toPageMeasurements[_toPdfPage];
   _toDrawMeasGroup();
+  // Opt-in only — _toSetZoom() also calls _toRenderPage() for its +/-/100%
+  // buttons, and resetting the view on every one of those clicks would
+  // silently override the zoom the user just asked for. Only the "a new page
+  // is loading" call sites (initial PDF load, page navigation) pass true.
+  if (_resetView) _toResetView();
 }
 
 async function _toChangePage(delta) {
@@ -4389,7 +4394,7 @@ async function _toChangePage(delta) {
     if (_toScale) { disp.textContent = '1 ft = ' + _toScale.toFixed(1) + ' px'; disp.style.color = '#7ecb8f'; }
     else { disp.textContent = 'Scale: not set'; disp.style.color = '#9b9488'; }
   }
-  await _toRenderPage();
+  await _toRenderPage(true);
   _toDrawMeasGroup();
   // A page that already has a saved folder record is authoritative — never
   // trust the scratch cache for it, since that slot could still hold stale
@@ -4423,6 +4428,7 @@ function _toBindEvents() {
       if (_toIsPanning && _toPanDragStart) {
         _toTzTx = _toPanDragStart.tx + (e.clientX - _toPanDragStart.x) / _toTzScale;
         _toTzTy = _toPanDragStart.ty + (e.clientY - _toPanDragStart.y) / _toTzScale;
+        _toClampPan();
         _toTzApply();
         return;
       }
@@ -4435,7 +4441,8 @@ function _toBindEvents() {
     wrap.addEventListener('wheel', function(e) {
       e.preventDefault();
       var _delta = e.deltaY > 0 ? -0.1 : 0.1;
-      _toTzScale = Math.max(0.25, Math.min(8, _toTzScale + _delta));
+      _toTzScale = Math.max(0.1, Math.min(8, _toTzScale + _delta));
+      _toClampPan();
       _toTzApply();
     }, { passive: false });
 
@@ -4487,12 +4494,14 @@ function _toBindEvents() {
         if (_toTzInitDist > 0) {
           _toTzScale = Math.min(4, Math.max(0.5, _toTzScale * (newDist / _toTzInitDist)));
           _toTzInitDist = newDist;
+          _toClampPan();
           _toTzApply();
         }
       } else if (e.touches.length === 1 && _tzStart && _toTzScale > 1) {
         e.preventDefault();
         _toTzTx = _tzStart.tx + (e.touches[0].clientX - _tzStart.x) / _toTzScale;
         _toTzTy = _tzStart.ty + (e.touches[0].clientY - _tzStart.y) / _toTzScale;
+        _toClampPan();
         _toTzApply();
       }
     }, { passive: false });
@@ -4529,6 +4538,68 @@ function _toTzResetTransform() {
 function _toTzResetScale() {
   _toTzScale = 1;
   _toTzApply();
+}
+
+// Fit the current page to the viewport and re-center it — "Reset View" /
+// H key. canvas.width/height are pdf.js render-resolution pixels, not CSS
+// pixels (the canvas is 1:1 on desktop but CSS-scaled via #toCanvas{width:100%}
+// on mobile), so the natural size is recovered from the live rendered box
+// (divided back out by whatever scale is already applied) rather than
+// canvas.width/devicePixelRatio, which would be wrong here.
+function _toResetView() {
+  var _canvas = document.getElementById('toCanvas');
+  var _wrap = document.getElementById('toCanvasWrap');
+  var _inner = document.getElementById('toCanvasInner');
+  if (!_canvas || !_wrap || !_inner) return;
+
+  var _wrapW = _wrap.clientWidth;
+  var _wrapH = _wrap.clientHeight;
+  var _rect = _canvas.getBoundingClientRect();
+  var _curScale = _toTzScale || 1;
+  var _canvasW = _rect.width / _curScale;
+  var _canvasH = _rect.height / _curScale;
+  if (!_canvasW || !_canvasH || !_wrapW || !_wrapH) return;
+
+  // Fit scale — use the smaller ratio so the entire page is visible; never
+  // scale above 100% on reset.
+  var _fitScale = Math.min(_wrapW / _canvasW, _wrapH / _canvasH, 1);
+  _toTzScale = _fitScale;
+  _toTzTx = 0;
+  _toTzTy = 0;
+  _toTzApply();
+
+  // #toCanvasInner uses transform-origin:center center and isn't otherwise
+  // centered by its parent's block layout, so center it by measuring the
+  // actual rendered boxes rather than computing an analytical translate.
+  var _innerRect = _inner.getBoundingClientRect();
+  var _wrapRect = _wrap.getBoundingClientRect();
+  _wrap.scrollLeft += (_innerRect.left - _wrapRect.left) - (_wrapRect.width - _innerRect.width) / 2;
+  _wrap.scrollTop  += (_innerRect.top  - _wrapRect.top)  - (_wrapRect.height - _innerRect.height) / 2;
+}
+
+// Soft boundary so the canvas can never be panned/zoomed fully off screen —
+// called after every zoom and pan change. Uses the live rendered box (already
+// scale-inclusive via getBoundingClientRect) rather than canvas.width times
+// scale, for the same reason _toResetView() does.
+function _toClampPan() {
+  var _canvas = document.getElementById('toCanvas');
+  var _wrap = document.getElementById('toCanvasWrap');
+  if (!_canvas || !_wrap || !_toTzScale) return;
+
+  var _rect = _canvas.getBoundingClientRect();
+  var _canvasW = _rect.width;
+  var _canvasH = _rect.height;
+  var _wrapW = _wrap.clientWidth;
+  var _wrapH = _wrap.clientHeight;
+
+  var _margin = 100; // keep at least this much canvas visible on each axis
+  var _maxTx = (_wrapW - _margin) / _toTzScale;
+  var _minTx = -(_canvasW - _margin) / _toTzScale;
+  var _maxTy = (_wrapH - _margin) / _toTzScale;
+  var _minTy = -(_canvasH - _margin) / _toTzScale;
+
+  _toTzTx = Math.max(_minTx, Math.min(_maxTx, _toTzTx));
+  _toTzTy = Math.max(_minTy, Math.min(_maxTy, _toTzTy));
 }
 
 function _toSvgPt(e) {
@@ -5940,7 +6011,7 @@ function _toWinFileChanged(e) {
   _toLoadPdfJs().then(async ()=>{
     _toPdfDoc = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
     _toPdfPage = _reopen ? Math.min(Math.max(1, _reopen.pageNum||1), _toPdfDoc.numPages) : 1;
-    await _toRenderPage(); _toBindEvents();
+    await _toRenderPage(true); _toBindEvents();
     _toUpdateStatus('Ready — 📐 Set Scale first, then measure');
     if (_reopen) {
       // Re-derive quantities straight from the authoritative page record instead
@@ -6177,6 +6248,7 @@ function _toQtyInit() {
       '<button onclick="_toZoomOut()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom Out">−</button>' +
       '<span id="toZoomDisplay" onclick="_toZoomReset()" style="font-family:\'DM Mono\',monospace;font-size:10px;color:#9b9488;padding:4px 8px;background:#252525;border:1px solid #333;border-radius:4px;cursor:pointer;white-space:nowrap;min-width:40px;text-align:center;" title="Click to reset zoom">100%</span>' +
       '<button onclick="_toZoomIn()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Zoom In">+</button>' +
+      '<button onclick="_toResetView()" style="background:none;border:1px solid #444;border-radius:4px;color:#f9f7f3;font-family:\'DM Mono\',monospace;font-size:14px;padding:2px 9px;cursor:pointer;line-height:1;" title="Reset View (H)">⌂</button>' +
       '<div style="width:1px;height:24px;background:#333;flex-shrink:0;"></div>' +
       '<button onclick="document.getElementById(\'toWinFile\').click()" style="background:rgba(90,180,245,0.12);border:1px solid rgba(90,180,245,0.4);border-radius:4px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 12px;cursor:pointer;white-space:nowrap;">📄 Load PDF</button>' +
       '<input type="file" id="toWinFile" accept=".pdf" style="display:none" onchange="_toWinFileChanged(event)">' +
@@ -15878,6 +15950,17 @@ document.addEventListener('keydown', e => {
         return;
       }
       closeSecPopup(); return;
+    }
+  }
+  if ((e.key === 'h' || e.key === 'H' || e.key === '0') && _takeoffViewerActive) {
+    // Guard against hijacking normal typing — 'h' and '0' are regular
+    // characters typed constantly in the portal's own inputs (page name,
+    // notes, mix search, etc.), so only fire when nothing is focused for text entry.
+    const _ae = document.activeElement;
+    const _isTyping = _ae && (_ae.tagName === 'INPUT' || _ae.tagName === 'TEXTAREA' || _ae.tagName === 'SELECT' || _ae.isContentEditable);
+    if (!_isTyping) {
+      _toResetView();
+      e.preventDefault();
     }
   }
   if (!document.getElementById('sheetPanel').classList.contains('open')) return;
