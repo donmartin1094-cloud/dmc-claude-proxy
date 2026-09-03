@@ -2234,23 +2234,46 @@ function _frFmt12h(t) {
   return _h + ':' + _m + ' ' + _ap;
 }
 
+// Groups a report's crew array by role for print/detail output — Laborers
+// (default bucket, matches the form's bucketing) then Rakers. Falls back to
+// one flat "Crew" group when no member has a role at all (reports saved
+// before role was tracked per crew member).
+function _frGroupCrewByRole(crew) {
+  crew = crew || [];
+  var hasAnyRole = crew.some(function(c){ return c.role; });
+  if (!hasAnyRole) return crew.length ? [{ label: 'Crew', members: crew }] : [];
+  var laborers = crew.filter(function(c){ return (c.role||'').toLowerCase() !== 'raker'; });
+  var rakers   = crew.filter(function(c){ return (c.role||'').toLowerCase() === 'raker'; });
+  var groups = [];
+  if (laborers.length) groups.push({ label: 'Laborers', members: laborers });
+  if (rakers.length)   groups.push({ label: 'Rakers', members: rakers });
+  return groups;
+}
+
 function _frRenderDetail(r) {
   var workTypeLabels = {machinePave:'Machine Pave',levelingCourse:'Leveling Course',trenchPave:'Trench Pave',handPave:'Hand Pave',sidewalks:'Sidewalks',patch:'Patch',berm:'Berm'};
 
-  // ── Crew section — Present/Absent/Operators for the real foreman widget
-  // (r.crew array), falling back to the admin editor's role-based labor list.
+  // ── Crew section — Foreman header + role groups (Laborers/Rakers) for the
+  // real foreman widget (r.crew array), plus Operators from r.operators[],
+  // falling back to the admin editor's role-based labor list.
   var crewSectionHtml = '';
   if (Array.isArray(r.crew)) {
-    var _crewPresent = r.crew.filter(function(c){ return !c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—')+' ('+_frExactNum(c.hours)+')'; });
-    var _crewAbsent  = r.crew.filter(function(c){ return c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—'); });
-    var _opsList = (r.operators||[]).map(function(o){ return escHtml(o.name||'—')+' ('+_frExactNum(o.hours)+')'; });
+    var _crewGroups = _frGroupCrewByRole(r.crew);
+    var _groupsHtml = _crewGroups.map(function(g){
+      var _rows = g.members.map(function(c){
+        return '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:'+(c.absent?'var(--concrete-dim)':'var(--white)')+';padding:2px 0;">'+
+          escHtml(c.displayName||c.name||'—')+' — '+_frExactNum(c.hours)+' hrs'+(c.absent?' (ABSENT)':'')+
+        '</div>';
+      }).join('');
+      return '<div style="margin-bottom:6px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">'+escHtml(g.label)+'</div>'+_rows+'</div>';
+    }).join('');
+    var _opsRows = (r.operators||[]).map(function(o){
+      return '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);padding:2px 0;">'+escHtml(o.name||'—')+' — '+_frExactNum(o.hours)+' hrs</div>';
+    }).join('');
     crewSectionHtml = '<div style="margin-bottom:8px;">'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Present</div>'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);margin-bottom:6px;">'+(_crewPresent.length?_crewPresent.join(', '):'—')+'</div>'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Absent</div>'+
-      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);margin-bottom:6px;">'+(_crewAbsent.length?_crewAbsent.join(', '):'—')+'</div>'+
-      (_opsList.length ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Operators</div>'+
-        '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);">'+_opsList.join(', ')+'</div>' : '')+
+      '<div style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:6px;">Foreman: '+escHtml(r.foreman||r.foremanDisplay||'—')+'</div>'+
+      _groupsHtml+
+      (_opsRows ? '<div style="margin-bottom:6px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Operators</div>'+_opsRows+'</div>' : '')+
     '</div>';
   } else {
     var totalCrewHrs = 0;
@@ -2281,9 +2304,12 @@ function _frRenderDetail(r) {
       }).join('');
       return '<tr><td style="padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(row)+'</td>'+_cellsHtml+'</tr>';
     }).join('');
+    var _totalRow = '<tr><td style="padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">TOTAL</td>'+
+      _wtGrid.colsUsed.map(function(col){ return '<td style="text-align:center;padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">'+_frExactNum(_wtGrid.colTotals[col])+'</td>'; }).join('')+
+    '</tr>';
     workSectionHtml = '<div style="margin-bottom:4px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Work Performed (Tons)</div>'+
       '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="border-collapse:collapse;width:100%;">'+
-      '<thead><tr>'+_headCells+'</tr></thead><tbody>'+_bodyRows+'</tbody></table></div></div>';
+      '<thead><tr>'+_headCells+'</tr></thead><tbody>'+_bodyRows+_totalRow+'</tbody></table></div></div>';
   } else if (r.mixTypes && r.mixTypes.length) {
     _grandTonnage = r.mixTypes.reduce(function(s,m){ return s+(parseFloat(m.qty)||0); }, 0);
     var _mixRows = r.mixTypes.filter(function(m){ return m && m.name; }).map(function(m) {
@@ -3134,17 +3160,23 @@ function printForemanReport(id) {
   var fmtTime = function(t){ if(!t) return ''; var p=t.split(':'); var h=parseInt(p[0]),m=p[1],ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+m+' '+ap; };
   var dt = r.date ? new Date(r.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}) : '';
 
-  // ── Crew section — Present/Absent/Operators for the real foreman widget
-  // (r.crew array), falling back to the admin editor's role-based labor table.
+  // ── Crew section — Foreman header + role groups (Laborers/Rakers) for the
+  // real foreman widget (r.crew array), plus Operators from r.operators[],
+  // falling back to the admin editor's role-based labor table.
   var crewSectionHtml;
   if (Array.isArray(r.crew)) {
-    var _cPresent = r.crew.filter(function(c){ return !c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—')+' ('+fmtNum(c.hours)+')'; }).join(', ') || '—';
-    var _cAbsent  = r.crew.filter(function(c){ return c.absent; }).map(function(c){ return escHtml(c.displayName||c.name||'—'); }).join(', ') || '—';
-    var _cOps     = (r.operators||[]).map(function(o){ return escHtml(o.name||'—')+' ('+fmtNum(o.hours)+')'; }).join(', ');
+    var _crewGroups = _frGroupCrewByRole(r.crew);
+    var _groupsHtml = _crewGroups.map(function(g){
+      var _rows = g.members.map(function(c){
+        return escHtml(c.displayName||c.name||'—')+' — '+fmtNum(c.hours)+' hrs'+(c.absent?' (ABSENT)':'');
+      }).join('<br>');
+      return '<div style="margin-bottom:4px;"><strong>'+escHtml(g.label)+':</strong><br>'+_rows+'</div>';
+    }).join('');
+    var _opsRows = (r.operators||[]).map(function(o){ return escHtml(o.name||'—')+' — '+fmtNum(o.hours)+' hrs'; }).join('<br>');
     crewSectionHtml = '<section><div class="sec-title">Crew</div>'+
-      '<div style="margin-bottom:4px;"><strong>Present:</strong> '+_cPresent+'</div>'+
-      '<div style="margin-bottom:4px;"><strong>Absent:</strong> '+_cAbsent+'</div>'+
-      (_cOps ? '<div><strong>Operators:</strong> '+_cOps+'</div>' : '')+
+      '<div style="margin-bottom:4px;"><strong>Foreman:</strong> '+escHtml(r.foreman||'')+'</div>'+
+      _groupsHtml+
+      (_opsRows ? '<div><strong>Operators:</strong><br>'+_opsRows+'</div>' : '')+
     '</section>';
   } else {
     var roleLabels = {foreman:'Foreman',operator:'Operator',laborer:'Laborer',raker:'Raker'};
@@ -3175,6 +3207,7 @@ function printForemanReport(id) {
       }).join('');
       return '<tr><td class="lbl">'+escHtml(row)+'</td>'+cells+'</tr>';
     }).join('');
+    workRows += '<tr><td class="lbl">TOTAL</td>' + _wtGrid.colsUsed.map(function(col){ return '<td class="num">'+fmtNum(_wtGrid.colTotals[col])+'</td>'; }).join('') + '</tr>';
   } else if (r.mixTypes && r.mixTypes.length) {
     _grandTonnage = r.mixTypes.reduce(function(s,m){ return s+(parseFloat(m.qty)||0); }, 0);
     workHeaderRow = '<th>Mix Type</th><th>Tons</th>';

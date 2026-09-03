@@ -25061,6 +25061,11 @@ async function openForemanReport() {
     for (var ci = 0; ci < MIX_TYPES.length; ci++) s += parseFloat(workVals[ri + '_' + ci]) || 0;
     return s;
   }
+  function _frColTotal(ci) {
+    var s = 0;
+    for (var ri = 0; ri < WORK_TYPES.length; ri++) s += parseFloat(workVals[ri + '_' + ci]) || 0;
+    return s;
+  }
   function _frGrandTotal() {
     var s = 0;
     for (var ri = 0; ri < WORK_TYPES.length; ri++) s += _frRowTotal(ri);
@@ -25074,22 +25079,23 @@ async function openForemanReport() {
     return parseFloat(n.toFixed(10)).toString();
   }
   function _frWorkTableHtml() {
-    var _cellStyle = 'width:60px;text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;color:#fff;font-family:\'DM Mono\',monospace;font-size:11px;';
-    var headCells = '<th style="color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 8px;">Work Type</th>' +
-      MIX_TYPES.map(function(mt){ return '<th style="color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;text-align:center;padding:4px 8px;">' + mt + '</th>'; }).join('') +
-      '<th style="color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;text-align:center;padding:4px 8px;">Total</th>';
+    var _cellStyle = 'width:52px;text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:2px 4px;color:#fff;font-family:\'DM Mono\',monospace;font-size:11px;';
+    var headCells = '<th style="width:90px;color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 6px;">Work Type</th>' +
+      MIX_TYPES.map(function(mt){ return '<th style="width:60px;color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;text-align:center;padding:4px 4px;">' + mt + '</th>'; }).join('');
     var bodyRows = WORK_TYPES.map(function(wt, ri) {
       var cells = MIX_TYPES.map(function(mt, ci) {
         var v = workVals[ri + '_' + ci] || '';
         return '<td style="padding:2px 4px;"><input type="text" inputmode="decimal" id="frCell_' + ri + '_' + ci + '" value="' + escHtml(v) + '" oninput="window._frCellChange(' + ri + ',' + ci + ',this.value)" style="' + _cellStyle + '"/></td>';
       }).join('');
-      return '<tr><td style="color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 8px;white-space:nowrap;">' + wt + '</td>' + cells +
-        '<td id="frRowTotal_' + ri + '" style="text-align:center;padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);font-weight:700;">' + _frExactNum(_frRowTotal(ri)) + '</td></tr>';
+      return '<tr><td style="width:90px;color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + wt + '</td>' + cells + '</tr>';
     }).join('');
+    var totalRow = '<tr><td style="width:90px;font-weight:700;color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;padding:4px 6px;">TOTAL</td>' +
+      MIX_TYPES.map(function(mt, ci) { return '<td id="frColTotal_' + ci + '" style="width:60px;text-align:center;padding:4px 4px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">' + _frExactNum(_frColTotal(ci)) + '</td>'; }).join('') +
+      '</tr>';
     var _wrapStyle = isMobile ? 'overflow-x:auto;-webkit-overflow-scrolling:touch;' : '';
     return '<div style="' + _wrapStyle + '">' +
-      '<table style="border-collapse:collapse;width:100%;">' +
-      '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>' +
+      '<table style="border-collapse:collapse;width:100%;table-layout:fixed;font-size:10px;">' +
+      '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + totalRow + '</tbody></table></div>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:8px 12px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:6px;">' +
         '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">Grand Total:</span>' +
         '<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#a78bfa;"><span id="frGrandTotal">' + _frExactNum(_frGrandTotal()) + '</span> tons</span>' +
@@ -25097,18 +25103,35 @@ async function openForemanReport() {
   }
 
   function render() {
-    var laborHtml = laborRows.length ? laborRows.map(function(row, idx) {
+    var _roleHeaderStyle = "font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;color:var(--concrete-dim);letter-spacing:0.05em;margin:10px 0 4px 0;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:2px;";
+
+    function _frLaborRowHtml(idx) {
+      var row = laborRows[idx];
       var absent = row.absent;
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.06);' + (absent?'opacity:0.5;':'') + '">' +
         '<button onclick="window._frToggleAbsent(' + idx + ')" title="Tap to mark ' + (absent?'present':'absent') + '" style="width:26px;height:26px;flex-shrink:0;border-radius:5px;border:2px solid ' + (absent?'#ff6464':'#7ecb8f') + ';background:' + (absent?'rgba(255,100,100,0.15)':'rgba(126,203,143,0.12)') + ';color:' + (absent?'#ff6464':'#7ecb8f') + ';font-size:12px;cursor:pointer;">' + (absent?'✕':'✓') + '</button>' +
         '<div style="flex:1;min-width:0;">' +
           '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(row.displayName) + '</div>' +
-          (row.role ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + escHtml(row.role) + '</div>' : '') +
         '</div>' +
         '<input type="number" step="0.5" min="0" max="24" placeholder="hrs" id="_frLaborHours_' + idx + '" value="' + escHtml(row.hours) + '" ' + (absent?'disabled':'') + ' oninput="window._frLaborHours(' + idx + ',this.value)" ' +
           'style="width:70px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
       '</div>';
-    }).join('') : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#f59e0b;padding:10px 0;">No laborers assigned to you yet.<br>Add them in Settings → Roster → Employees.</div>';
+    }
+
+    // Group crew roster rows by role — Laborers (default bucket) vs Rakers.
+    // Operators are handled separately below (sourced from the schedule, not the roster).
+    var _laborerIdx = [];
+    var _rakerIdx = [];
+    laborRows.forEach(function(row, idx) {
+      if ((row.role||'').toLowerCase() === 'raker') _rakerIdx.push(idx);
+      else _laborerIdx.push(idx);
+    });
+    var laborHtml = laborRows.length
+      ? (_laborerIdx.length ? '<div style="' + _roleHeaderStyle + '">Laborers</div>' + _laborerIdx.map(_frLaborRowHtml).join('') : '') +
+        (_rakerIdx.length ? '<div style="' + _roleHeaderStyle + '">Rakers</div>' + _rakerIdx.map(_frLaborRowHtml).join('') : '')
+      : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#f59e0b;padding:10px 0;">No laborers assigned to you yet.<br>Add them in Settings → Roster → Employees.</div>';
+
+    var foremanHeaderHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:10px;">Foreman: ' + escHtml(foremanDisplay) + '</div>';
 
     var operatorsHtml = operatorRows.map(function(row, idx) {
       return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">' +
@@ -25143,6 +25166,7 @@ async function openForemanReport() {
 
         '<div style="margin-bottom:20px;">' +
           '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Crew</div>' +
+          foremanHeaderHtml +
           '<div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;">' +
             '<div>' +
               '<label style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Start Time</label>' +
@@ -25156,13 +25180,12 @@ async function openForemanReport() {
               '<span id="_frHoursCalc" style="font-family:\'DM Mono\',monospace;font-size:12px;color:#a78bfa;font-weight:700;">' + (startTime && endTime ? _frComputeHours() + ' hrs' : '') + '</span>' +
             '</div>' +
           '</div>' +
-          '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">' + laborHtml + '</div>' +
-        '</div>' +
-
-        '<div style="margin-bottom:20px;">' +
-          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Operators (enter hours individually)</div>' +
-          operatorsHtml +
-          '<button onclick="window._frAddOperator()" style="width:100%;margin-top:6px;min-height:44px;background:rgba(90,180,245,0.08);border:1px dashed rgba(90,180,245,0.35);border-radius:6px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">+ Add Operator</button>' +
+          '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;padding:0 2px 8px;">' +
+            laborHtml +
+            '<div style="' + _roleHeaderStyle + '">Operators</div>' +
+            operatorsHtml +
+            '<div style="padding:6px 8px 0;"><button onclick="window._frAddOperator()" style="width:100%;min-height:44px;background:rgba(90,180,245,0.08);border:1px dashed rgba(90,180,245,0.35);border-radius:6px;color:#5ab4f5;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">+ Add Operator</button></div>' +
+          '</div>' +
         '</div>' +
 
         '<div style="margin-bottom:16px;">' +
@@ -25207,8 +25230,8 @@ async function openForemanReport() {
   window._frRemoveOperator = function(idx) { operatorRows.splice(idx,1); render(); };
   window._frCellChange = function(ri, ci, v) {
     workVals[ri + '_' + ci] = v;
-    var rt = document.getElementById('frRowTotal_' + ri);
-    if (rt) rt.textContent = _frExactNum(_frRowTotal(ri));
+    var ct = document.getElementById('frColTotal_' + ci);
+    if (ct) ct.textContent = _frExactNum(_frColTotal(ci));
     var gt = document.getElementById('frGrandTotal');
     if (gt) gt.textContent = _frExactNum(_frGrandTotal());
   };
@@ -25252,7 +25275,7 @@ async function openForemanReport() {
       startTime: startTime,
       endTime: endTime,
       fullCrew: absent.length === 0,
-      crew: laborRows.map(function(r){ return { username:r.username, displayName:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
+      crew: laborRows.map(function(r){ return { username:r.username, displayName:r.displayName, role: (r.role||'').toLowerCase()==='raker'?'raker':'laborer', hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
       labor: laborRows.map(function(r){ return { name:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
       presentMembers: present.map(function(m){ return m.username; }),
       presentDisplay: present.map(function(m){ return m.displayName; }),
