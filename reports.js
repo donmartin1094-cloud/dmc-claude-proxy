@@ -2187,11 +2187,8 @@ function deleteQCReport(id) {
 
 var FOREMAN_REPORTS_KEY = 'pavescope_foreman_reports';
 var foremanReports = JSON.parse(localStorage.getItem(FOREMAN_REPORTS_KEY) || '[]');
-var _frSortBy = 'date'; // 'date' | 'foreman'
-var _frFilterForeman = '';   // '' = all, or foreman name
-var _frFilterMonth   = '';   // '' = all, or 'YYYY-MM'
-var _frFilterVerif   = 'all'; // 'all' | 'verified' | 'unverified' | 'flagged'
-var _frExpandedId    = null;  // currently expanded report id
+var _frCalMonth   = null; // active month tab — 'YYYY-MM' | 'Q1-YYYY', mirrors inv3ActiveMonth
+var _frCalForeman = '';   // '' = All Foremen, or a foreman display name
 
 function saveForemanReports() {
   localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(foremanReports));
@@ -2219,13 +2216,6 @@ function _frWorkTableGrid(r) {
   });
   var grandTotal = colsUsed.reduce(function(s,col){ return s+colTotals[col]; }, 0);
   return { rowsUsed: rowsUsed, colsUsed: colsUsed, cells: wt.cells, colTotals: colTotals, grandTotal: grandTotal };
-}
-
-// ── Repository list rendering ────────────────────────────────────────────────
-function _frVerifBadge(r) {
-  if (r.locationVerified === true)  return '<span style="color:#4ade80;font-size:11px;" title="Location Verified">✅</span>';
-  if (r.locationVerified === false) return '<span style="color:#fb923c;font-size:11px;" title="Issue Flagged">⚠️</span>';
-  return '<span style="color:var(--concrete-dim);font-size:11px;" title="Unverified">○</span>';
 }
 
 function _frRenderDetail(r) {
@@ -2303,106 +2293,326 @@ function _frRenderDetail(r) {
   '</div>';
 }
 
+// ── Calendar view ─────────────────────────────────────────────────────────────
+
+function _frCalInjectStyles() {
+  if (document.getElementById('_frCalStyle')) return;
+  var s = document.createElement('style');
+  s.id = '_frCalStyle';
+  s.textContent = [
+    '.frcal-month-label { font-family:\'DM Mono\',monospace; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--concrete-dim); padding:12px 4px 6px; }',
+    '.frcal-grid { display:grid; grid-template-columns:repeat(7,1fr) 90px; border:1px solid var(--asphalt-light); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:20px; }',
+    '.frcal-dow { background:var(--asphalt-mid); font-family:\'DM Mono\',monospace; font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--concrete-dim); text-align:center; padding:6px 4px; border-bottom:1px solid var(--asphalt-light); }',
+    '.frcal-day { background:var(--asphalt); border-right:1px solid var(--asphalt-light); border-bottom:1px solid var(--asphalt-light); min-height:82px; padding:4px; display:flex; flex-direction:column; gap:3px; }',
+    '.frcal-day.outside { background:rgba(255,255,255,0.015); }',
+    '.frcal-day.today { box-shadow:inset 0 0 0 1px rgba(245,197,24,0.4); }',
+    '.frcal-date { font-family:\'DM Mono\',monospace; font-size:10px; color:var(--concrete-dim); }',
+    '.frcal-printcell { background:var(--asphalt-mid); border-bottom:1px solid var(--asphalt-light); display:flex; align-items:center; justify-content:center; padding:4px; }',
+    '.frcal-print-btn { background:none; border:1px solid var(--asphalt-light); border-radius:3px; color:var(--concrete-dim); font-family:\'DM Mono\',monospace; font-size:9px; padding:6px 4px; cursor:pointer; width:100%; text-align:center; }',
+    '.frcal-print-btn:hover { background:rgba(245,197,24,0.1); border-color:rgba(245,197,24,0.4); color:var(--stripe); }',
+    '.frcal-block { background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.3); border-radius:4px; padding:4px 6px; cursor:pointer; font-family:\'DM Mono\',monospace; font-size:9px; color:var(--white); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }',
+    '.frcal-block:hover { background:rgba(167,139,250,0.18); }'
+  ].join('\n');
+  document.head.appendChild(s);
+}
+
+function _frCalDateKey(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function _frCalActiveYear() {
+  if (!_frCalMonth) return new Date().getFullYear();
+  if (_frCalMonth.indexOf('Q1-') === 0) return parseInt(_frCalMonth.replace('Q1-',''),10);
+  return parseInt(_frCalMonth.slice(0,4),10);
+}
+
+function _frCalRenderMonthTabs() {
+  var yr = _frCalActiveYear();
+  var tabs = [
+    { id:'Q1-'+yr, label:'Q1 Jan–Mar' },
+    { id:yr+'-04', label:'Apr' }, { id:yr+'-05', label:'May' },
+    { id:yr+'-06', label:'Jun' }, { id:yr+'-07', label:'Jul' },
+    { id:yr+'-08', label:'Aug' }, { id:yr+'-09', label:'Sep' },
+    { id:yr+'-10', label:'Oct' }, { id:yr+'-11', label:'Nov' },
+    { id:yr+'-12', label:'Dec' },
+  ];
+  var html = '<div class="inv3-month-tabs">'
+    + '<button class="inv3-year-btn" onclick="_frCalSetYear('+(yr-1)+')">&#8249; '+(yr-1)+'</button>';
+  tabs.forEach(function(tab) {
+    html += '<button class="inv3-month-tab'+(_frCalMonth===tab.id?' active':'')+'" onclick="_frCalSetTab(\''+tab.id+'\')">'+tab.label+'</button>';
+  });
+  html += '<button class="inv3-year-btn" onclick="_frCalSetYear('+(yr+1)+')">'+(yr+1)+' &#8250;</button>'
+    + '</div>';
+  return html;
+}
+
+function _frCalSetTab(tab) {
+  _frCalMonth = tab;
+  var el = document.getElementById('frListWrap');
+  if (el) renderForemanReports(el);
+}
+
+function _frCalSetYear(yr) {
+  if (!_frCalMonth) _frCalMonth = _inv3DefaultMonth();
+  if (_frCalMonth.indexOf('Q1-')===0) {
+    _frCalMonth = 'Q1-'+yr;
+  } else {
+    _frCalMonth = yr+'-'+_frCalMonth.slice(5);
+  }
+  var el = document.getElementById('frListWrap');
+  if (el) renderForemanReports(el);
+}
+
+// One report block inside a day cell — foreman initials + job # + GC + tonnage + status icon
+function _frCalReportBlock(r) {
+  var initials = (typeof _inv3Initials === 'function') ? _inv3Initials(r.foreman||r.foremanDisplay||'') : '';
+  var jobNo = r.jobNum || r.jobNumber || '';
+  var tonnage = parseFloat(r.totalTonnage) || 0;
+  var statusIcon = r.locationVerified === true ? '✅' : '⚠️';
+  var titleAttr = (r.foreman||r.foremanDisplay||'')+' — '+(r.gcName||'')+' — '+tonnage.toFixed(1)+'T';
+  return '<div class="frcal-block" onclick="_frCalOpenDetail(\''+r.id+'\')" title="'+escHtml(titleAttr)+'">'
+    + '<span style="color:#a78bfa;font-weight:700;">'+escHtml(initials)+'</span>'
+    + (jobNo ? ' #'+escHtml(jobNo) : '')
+    + (r.gcName ? ' '+escHtml(r.gcName) : '')
+    + ' '+tonnage.toFixed(1)+'T '+statusIcon
+    + '</div>';
+}
+
+// Renders one month as a Mon–Sun week grid; each week row's 8th column is a
+// "Print Week" button that prints every report across that Mon–Sun range.
+function _frCalRenderMonthGrid(monthKey, foremanFilter) {
+  var p = monthKey.split('-');
+  var yr = parseInt(p[0],10), mo = parseInt(p[1],10)-1; // 0-indexed
+  var MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var daysInMonth = new Date(yr, mo+1, 0).getDate();
+  var firstDow = new Date(yr, mo, 1).getDay(); // 0=Sun..6=Sat
+  var leadBlanks = (firstDow + 6) % 7; // days since the Monday on/before the 1st
+  var totalCells = leadBlanks + daysInMonth;
+  totalCells += (7 - (totalCells % 7)) % 7; // pad out to a whole number of weeks
+
+  var n = new Date(); n.setHours(0,0,0,0);
+  var todayKey = _frCalDateKey(n);
+
+  var html = '<div class="frcal-month-label">'+MNAMES[mo]+' '+yr+'</div>'
+    + '<div class="frcal-grid">';
+  DOW.forEach(function(d){ html += '<div class="frcal-dow">'+d+'</div>'; });
+  html += '<div class="frcal-dow">Print</div>';
+
+  var numWeeks = totalCells / 7;
+  for (var w = 0; w < numWeeks; w++) {
+    var weekMondayKey = _frCalDateKey(new Date(yr, mo, 1 - leadBlanks + w*7));
+    for (var i = 0; i < 7; i++) {
+      var cellDate = new Date(yr, mo, 1 - leadBlanks + w*7 + i);
+      if (cellDate.getMonth() !== mo) {
+        html += '<div class="frcal-day outside"></div>';
+        continue;
+      }
+      var dk = _frCalDateKey(cellDate);
+      var isToday = dk === todayKey;
+      var dayReports = (typeof foremanReports !== 'undefined' ? foremanReports : [])
+        .filter(function(r){ return r.date === dk; })
+        .filter(function(r){ return !foremanFilter || (r.foreman||'') === foremanFilter; })
+        .sort(function(a,b){ return _inv3GetForemanOrder(a.foreman) - _inv3GetForemanOrder(b.foreman); });
+      html += '<div class="frcal-day'+(isToday?' today':'')+'">'
+        + '<span class="frcal-date">'+cellDate.getDate()+'</span>'
+        + dayReports.map(_frCalReportBlock).join('')
+        + '</div>';
+    }
+    html += '<div class="frcal-printcell"><button class="frcal-print-btn" onclick="_frPrintWeek(\''+weekMondayKey+'\',\''+escHtml(foremanFilter||'')+'\')">🖨️ Print Week</button></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderForemanReports(containerEl) {
   if (!containerEl) return;
   _injectReportsPrintStyles();
+  _frCalInjectStyles();
+  if (!_frCalMonth) _frCalMonth = _inv3DefaultMonth();
 
-  // ── Filter bar ──────────────────────────────────────────────────────────────
-  var allForemen = [];
-  foremanReports.forEach(function(r){ if (r.foreman && allForemen.indexOf(r.foreman) < 0) allForemen.push(r.foreman); });
-  allForemen.sort();
-  var allMonths = [];
-  foremanReports.forEach(function(r){ var m = (r.date||'').slice(0,7); if (m && allMonths.indexOf(m) < 0) allMonths.push(m); });
-  allMonths.sort().reverse();
-
-  var foremanOpts = '<option value="">All Foremen</option>'+allForemen.map(function(f){ return '<option value="'+escHtml(f)+'"'+(f===_frFilterForeman?' selected':'')+'>'+escHtml(f)+'</option>'; }).join('');
-  var monthOpts   = '<option value="">All Months</option>'+allMonths.map(function(m){ var d=new Date(m+'-01T12:00:00'); var lbl=d.toLocaleDateString('en-US',{month:'long',year:'numeric'}); return '<option value="'+m+'"'+(m===_frFilterMonth?' selected':'')+'>'+escHtml(lbl)+'</option>'; }).join('');
+  var foremanChoices = ['', 'Filipe Joaquim', 'Louie Medeiros'];
   var selStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 6px;cursor:pointer;';
-  var verifBtns = ['all','verified','unverified','flagged'].map(function(v){
-    var labels={all:'All',verified:'✅ Verified',unverified:'○ Unverified',flagged:'⚠️ Flagged'};
-    var act = v===_frFilterVerif;
-    return '<button onclick="_frFilterVerif=\''+v+'\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
-      'style="background:'+(act?'rgba(245,197,24,0.12)':'none')+';border:1px solid '+(act?'rgba(245,197,24,0.5)':'var(--asphalt-light)')+';border-radius:3px;color:'+(act?'var(--stripe)':'var(--concrete-dim)')+';font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 8px;cursor:pointer;">'+labels[v]+'</button>';
+  var foremanOpts = foremanChoices.map(function(f){
+    return '<option value="'+escHtml(f)+'"'+(f===_frCalForeman?' selected':'')+'>'+escHtml(f||'All Foremen')+'</option>';
   }).join('');
 
   var filterBar =
     '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;background:var(--asphalt-mid);flex-wrap:wrap;">'+
-      '<select onchange="_frFilterForeman=this.value;renderForemanReports(document.getElementById(\'frListWrap\'))" style="'+selStyle+'">'+foremanOpts+'</select>'+
-      '<select onchange="_frFilterMonth=this.value;renderForemanReports(document.getElementById(\'frListWrap\'))" style="'+selStyle+'">'+monthOpts+'</select>'+
-      '<div style="display:flex;gap:4px;">'+verifBtns+'</div>'+
+      '<select onchange="_frCalForeman=this.value;renderForemanReports(document.getElementById(\'frListWrap\'))" style="'+selStyle+'">'+foremanOpts+'</select>'+
       '<div style="flex:1;"></div>'+
-      '<button onclick="window.print()" class="rpt-no-print" style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.4px;">🖨 Print</button>'+
       '<button onclick="openForemanReportForm(null)" style="background:var(--stripe);border:none;border-radius:var(--radius);padding:4px 14px;color:var(--asphalt);font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;cursor:pointer;">+ New Report</button>'+
     '</div>';
 
-  // ── Apply filters ────────────────────────────────────────────────────────────
-  var filtered = foremanReports.filter(function(r) {
-    if (_frFilterForeman && (r.foreman||'') !== _frFilterForeman) return false;
-    if (_frFilterMonth  && (r.date||'').slice(0,7) !== _frFilterMonth)   return false;
-    if (_frFilterVerif === 'verified'   && r.locationVerified !== true)  return false;
-    if (_frFilterVerif === 'unverified' && r.locationVerified !== undefined && r.locationVerified !== null) return false;
-    if (_frFilterVerif === 'flagged'    && r.locationVerified !== false)  return false;
-    return true;
-  });
+  var monthTabsHtml = _frCalRenderMonthTabs();
+  var months = _inv3MonthsForTab(_frCalMonth);
+  var gridHtml = months.map(function(mo){ return _frCalRenderMonthGrid(mo, _frCalForeman); }).join('');
 
-  if (!filtered.length) {
-    containerEl.innerHTML = filterBar + '<div style="padding:40px;text-align:center;color:var(--concrete-dim);font-size:12px;">No reports match the current filters.</div>';
-    return;
+  containerEl.innerHTML = filterBar + monthTabsHtml + '<div style="flex:1;overflow-y:auto;padding:8px 16px 16px;">' + gridHtml + '</div>';
+
+  setTimeout(function() {
+    var t = containerEl.querySelector('.inv3-month-tab.active');
+    if (t) t.scrollIntoView({ behavior:'smooth', inline:'center', block:'nearest' });
+  }, 40);
+}
+
+// ── Report detail modal ──────────────────────────────────────────────────────
+
+function _frCalOpenDetail(reportId) {
+  var r = (typeof foremanReports !== 'undefined' ? foremanReports : []).find(function(x){ return x.id === reportId; });
+  if (!r) return;
+  document.getElementById('_frCalDetailOverlay')?.remove();
+
+  var canVerify = typeof isAdmin === 'function' && isAdmin();
+  var overlay = document.createElement('div');
+  overlay.id = '_frCalDetailOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);width:100%;max-width:640px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--asphalt-light);flex-shrink:0;">'+
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--stripe);">📋 Report Detail</div>'+
+        '<button onclick="document.getElementById(\'_frCalDetailOverlay\').remove()" style="background:none;border:none;color:var(--concrete-dim);font-size:16px;cursor:pointer;">✕</button>'+
+      '</div>'+
+      '<div style="flex:1;overflow-y:auto;">'+_frRenderDetail(r)+'</div>'+
+      '<div style="display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--asphalt-light);flex-shrink:0;">'+
+        '<button onclick="printForemanReport(\''+r.id+'\')" style="flex:1;padding:8px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">🖨️ Print This Report</button>'+
+        (canVerify ? '<button onclick="_frCalVerifyReport(\''+r.id+'\')" style="flex:1;padding:8px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.4);border-radius:var(--radius);color:#4ade80;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;cursor:pointer;">✅ Verify</button>' : '')+
+        '<button onclick="document.getElementById(\'_frCalDetailOverlay\').remove()" style="flex:1;padding:8px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;">✕ Close</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function _frCalVerifyReport(reportId) {
+  var r = (typeof foremanReports !== 'undefined' ? foremanReports : []).find(function(x){ return x.id === reportId; });
+  if (!r) return;
+  r.locationVerified = true;
+  r.locationVerifiedAt = Date.now();
+  var cu = localStorage.getItem('dmc_u') || '';
+  if (cu) r.locationVerifiedBy = cu;
+  saveForemanReports();
+  document.getElementById('_frCalDetailOverlay')?.remove();
+  var el = document.getElementById('frListWrap');
+  if (el) renderForemanReports(el);
+}
+
+// ── Weekly print ──────────────────────────────────────────────────────────────
+
+// One report's section inside the weekly print layout — job info, crew,
+// operators, work type table (reusing _frWorkTableGrid), total tonnage, notes.
+function _frWkReportBlock(r) {
+  var crewPresent = (r.crew||[]).filter(function(c){ return !c.absent; }).map(function(c){ return c.displayName||c.name||''; }).filter(Boolean);
+  var crewAbsent  = (r.crew||[]).filter(function(c){ return c.absent; }).map(function(c){ return c.displayName||c.name||''; }).filter(Boolean);
+  var operators = (r.operators||[]).map(function(o){ return (o.name||'')+(o.hours?' ('+o.hours+'h)':''); }).filter(Boolean);
+
+  var infoHtml = '<div class="frwk-info">'+
+    '<div><div class="frwk-lbl">Foreman</div>'+escHtml(r.foreman||r.foremanDisplay||'—')+'</div>'+
+    '<div><div class="frwk-lbl">Job #</div>'+escHtml(r.jobNum||r.jobNumber||'—')+'</div>'+
+    '<div><div class="frwk-lbl">GC</div>'+escHtml(r.gcName||'—')+'</div>'+
+    '<div><div class="frwk-lbl">Job Name</div>'+escHtml(r.jobName||'—')+'</div>'+
+    '<div><div class="frwk-lbl">Location</div>'+escHtml(r.jobLocation||'—')+'</div>'+
+    '<div><div class="frwk-lbl">Status</div>'+(r.locationVerified===true?'Verified':'Unverified')+'</div>'+
+  '</div>';
+
+  var crewHtml = '<div class="frwk-info" style="grid-template-columns:1fr 1fr;">'+
+    '<div><div class="frwk-lbl">Crew Present</div>'+(crewPresent.length?escHtml(crewPresent.join(', ')):'—')+'</div>'+
+    '<div><div class="frwk-lbl">Crew Absent</div>'+(crewAbsent.length?escHtml(crewAbsent.join(', ')):'—')+'</div>'+
+  '</div>'+
+  (operators.length ? '<div class="frwk-info" style="grid-template-columns:1fr;margin-top:4px;"><div><div class="frwk-lbl">Operators</div>'+escHtml(operators.join(', '))+'</div></div>' : '');
+
+  var grid = _frWorkTableGrid(r);
+  var workHtml = '';
+  if (grid) {
+    var head = '<th>Work Type</th>'+grid.colsUsed.map(function(c){ return '<th>'+escHtml(c)+'</th>'; }).join('')+'<th>Total</th>';
+    var rows = grid.rowsUsed.map(function(row){
+      var rt = 0;
+      var cells = grid.colsUsed.map(function(col){ var v = grid.cells[row+'::'+col]||0; rt += v; return '<td>'+(v>0?v.toFixed(1):'')+'</td>'; }).join('');
+      return '<tr><td class="lbl">'+escHtml(row)+'</td>'+cells+'<td>'+rt.toFixed(1)+'</td></tr>';
+    }).join('');
+    var totRow = '<tr><td class="lbl">TOTAL</td>'+grid.colsUsed.map(function(c){ return '<td>'+grid.colTotals[c].toFixed(1)+'</td>'; }).join('')+'<td>'+grid.grandTotal.toFixed(1)+'</td></tr>';
+    workHtml = '<table><thead><tr>'+head+'</tr></thead><tbody>'+rows+totRow+'</tbody></table>';
   }
 
-  // ── Group: foreman → month → reports ────────────────────────────────────────
-  var byForeman = {};
-  filtered.forEach(function(r) {
-    var fn = r.foreman || '(Unknown)';
-    var mo = (r.date||'').slice(0,7) || '0000-00';
-    if (!byForeman[fn]) byForeman[fn] = {};
-    if (!byForeman[fn][mo]) byForeman[fn][mo] = [];
-    byForeman[fn][mo].push(r);
-  });
+  var totalTonnage = parseFloat(r.totalTonnage) || (grid ? grid.grandTotal : 0);
 
-  var foremanNames = Object.keys(byForeman).sort();
+  return infoHtml + crewHtml + workHtml +
+    '<div class="frwk-total">Total Tonnage: '+totalTonnage.toFixed(1)+' T</div>' +
+    (r.notes ? '<div class="frwk-notes"><strong>Notes:</strong> '+escHtml(r.notes)+'</div>' : '');
+}
 
-  var bodyHtml = foremanNames.map(function(fn) {
-    var months = Object.keys(byForeman[fn]).sort().reverse();
-    var monthSections = months.map(function(mo) {
-      var reports = byForeman[fn][mo].slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
-      var moLabel = mo !== '0000-00' ? new Date(mo+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : 'Unknown Date';
-      var items = reports.map(function(r) {
-        var dp = (r.date||'').split('-');
-        var dateStr = dp.length===3 ? dp[1]+'.'+dp[2]+'.'+dp[0] : (r.date||'—');
-        var label = dateStr + (r.gcName?'.'+r.gcName:'') + (r.jobLocation?'.'+r.jobLocation:'');
-        var isExpanded = _frExpandedId === r.id;
-        return '<div>'+
-          '<div onclick="_frExpandedId=_frExpandedId===\''+r.id+'\'?null:\''+r.id+'\';renderForemanReports(document.getElementById(\'frListWrap\'))" '+
-            'style="display:flex;align-items:center;gap:8px;padding:7px 16px 7px 32px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.03);" '+
-            'onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'\'">'+
-            '<span style="font-size:10px;color:var(--concrete-dim);">'+(isExpanded?'▼':'▶')+'</span>'+
-            _frVerifBadge(r)+
-            '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--white);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(label)+'</span>'+
-          '</div>'+
-          (isExpanded ? _frRenderDetail(r) : '')+
-        '</div>';
+// weekStartDate — 'YYYY-MM-DD' for the Monday of the week to print.
+// foremanFilter — '' for all foremen, or a foreman display name to restrict to.
+function _frPrintWeek(weekStartDate, foremanFilter) {
+  var dates = [];
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(weekStartDate + 'T12:00:00');
+    d.setDate(d.getDate() + i);
+    dates.push(_frCalDateKey(d));
+  }
+  var weekReports = (typeof foremanReports !== 'undefined' ? foremanReports : [])
+    .filter(function(r){ return dates.indexOf(r.date) !== -1; })
+    .filter(function(r){ return !foremanFilter || (r.foreman||'') === foremanFilter; })
+    .sort(function(a,b){
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return _inv3GetForemanOrder(a.foreman) - _inv3GetForemanOrder(b.foreman);
+    });
+
+  var startLabel = new Date(dates[0]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  var endLabel   = new Date(dates[6]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  var foremanLabel = foremanFilter || 'All Foremen';
+
+  var bodyHtml;
+  if (!weekReports.length) {
+    bodyHtml = '<div class="frwk-empty">No reports submitted for this week</div>';
+  } else {
+    var byDate = {}, dateOrder = [];
+    weekReports.forEach(function(r) {
+      if (!byDate[r.date]) { byDate[r.date] = []; dateOrder.push(r.date); }
+      byDate[r.date].push(r);
+    });
+    bodyHtml = dateOrder.map(function(dk, dIdx) {
+      var dayLabel = new Date(dk+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+      // Page break between foremen's reports only when printing all foremen together
+      var dayReportsHtml = byDate[dk].map(function(r, rIdx) {
+        var brk = (!foremanFilter && rIdx > 0) ? ' style="page-break-before:always;"' : '';
+        var sep = (foremanFilter && rIdx > 0) ? '<hr class="frwk-hr"/>' : '';
+        return sep + '<div'+brk+'>' + _frWkReportBlock(r) + '</div>';
       }).join('');
-      return '<div>'+
-        '<div style="padding:5px 16px 5px 22px;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.04);">'+
-          '<span style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">'+escHtml(moLabel)+'</span>'+
-          '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--asphalt-light);margin-left:8px;">'+reports.length+' report'+(reports.length!==1?'s':'')+'</span>'+
-        '</div>'+
-        items+
-      '</div>';
+      return (dIdx>0 ? '<hr class="frwk-hr"/>' : '') +
+        '<div class="frwk-day"><div class="frwk-day-hdr">'+escHtml(dayLabel)+'</div>'+dayReportsHtml+'</div>';
     }).join('');
+  }
 
-    return '<div style="border-bottom:2px solid var(--asphalt-light);">'+
-      '<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--asphalt-mid);">'+
-        '<span style="font-size:16px;">👷</span>'+
-        '<span style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);">'+escHtml(fn)+'</span>'+
-        '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-left:4px;">'+byForeman[fn][Object.keys(byForeman[fn])[0]].length+' this month</span>'+
-      '</div>'+
-      monthSections+
-    '</div>';
-  }).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Foreman Reports — '+escHtml(startLabel)+' to '+escHtml(endLabel)+'</title><style>'+
+    '*{margin:0;padding:0;box-sizing:border-box;}'+
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#111;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+    '@page{size:8.5in 11in;margin:0.5in;}'+
+    '.page{width:100%;}'+
+    '.hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1a1a2e;padding-bottom:6px;margin-bottom:14px;}'+
+    '.hdr-name{font-family:Arial Black,sans-serif;font-size:18pt;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#1a1a2e;}'+
+    '.hdr-sub{font-size:8pt;color:#555;letter-spacing:.5px;margin-top:2px;}'+
+    '.hdr-right{text-align:right;}'+
+    '.hdr-week{font-size:12pt;font-weight:700;color:#1a1a2e;}'+
+    '.hdr-foreman{font-size:9pt;color:#555;margin-top:2px;}'+
+    '.frwk-day{margin-bottom:14px;page-break-inside:avoid;}'+
+    '.frwk-day-hdr{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#1a1a2e;color:#fff;padding:3px 8px;margin-bottom:6px;}'+
+    '.frwk-hr{border:none;border-top:1px solid #ccc;margin:10px 0;}'+
+    '.frwk-empty{text-align:center;color:#999;font-size:11pt;padding:60px 0;}'+
+    '.frwk-info{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 16px;margin-bottom:8px;font-size:8pt;}'+
+    '.frwk-lbl{font-weight:700;text-transform:uppercase;font-size:7pt;color:#666;letter-spacing:.4px;}'+
+    'table{width:100%;border-collapse:collapse;font-size:8pt;margin-top:4px;}'+
+    'th{background:#f0f0f0;border:1px solid #ccc;padding:2px 6px;font-size:7pt;text-transform:uppercase;letter-spacing:.4px;}'+
+    'td{border:1px solid #ccc;padding:2px 6px;text-align:center;}'+
+    'td.lbl{text-align:left;font-weight:600;background:#fafafa;white-space:nowrap;}'+
+    '.frwk-total{font-weight:700;margin-top:4px;font-size:9pt;}'+
+    '.frwk-notes{margin-top:4px;font-size:8pt;color:#333;}'+
+  '</style></head><body><div class="page">'+
+    '<div class="hdr"><div><div class="hdr-name">Don Martin Corporation</div><div class="hdr-sub">475 School Street, Ste 6 · Marshfield, MA 02050 · (781) 834-0071</div></div>'+
+      '<div class="hdr-right"><div class="hdr-week">'+escHtml(startLabel)+' – '+escHtml(endLabel)+'</div><div class="hdr-foreman">'+escHtml(foremanLabel)+'</div></div></div>'+
+    bodyHtml +
+  '</div></body></html>';
 
-  containerEl.innerHTML = filterBar + '<div style="flex:1;overflow-y:auto;">' + bodyHtml + '</div>';
+  _openWin(html, { print:true, delay:350 });
 }
 
 function deleteForemanReport(id) {
