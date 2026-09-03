@@ -24934,10 +24934,24 @@ function saveForemanReport(report) {
     var hrs = parseFloat(c.hours) || 0;
     if (!username || !hrs) return;
     if (!hoursMap[username]) hoursMap[username] = {};
-    if (!hoursMap[username][report.weekKey]) hoursMap[username][report.weekKey] = { hours: 0, reportIds: [], verified: false };
+    if (!hoursMap[username][report.weekKey]) hoursMap[username][report.weekKey] = { hours: 0, reportIds: [], verified: false, dailyHours: {} };
     hoursMap[username][report.weekKey].hours += hrs;
     hoursMap[username][report.weekKey].reportIds.push(report.id);
+    hoursMap[username][report.weekKey].dailyHours = hoursMap[username][report.weekKey].dailyHours || {};
+    hoursMap[username][report.weekKey].dailyHours[report.date] = (hoursMap[username][report.weekKey].dailyHours[report.date] || 0) + hrs;
   });
+
+  // Credit the foreman's own hours (they don't appear as a crew row) same as crew
+  var _foremanUsername = localStorage.getItem('dmc_u') || '';
+  if (_foremanUsername && report.foremanHours) {
+    if (!hoursMap[_foremanUsername]) hoursMap[_foremanUsername] = {};
+    if (!hoursMap[_foremanUsername][report.weekKey]) hoursMap[_foremanUsername][report.weekKey] = { hours: 0, reportIds: [], verified: false, dailyHours: {} };
+    hoursMap[_foremanUsername][report.weekKey].hours += report.foremanHours;
+    hoursMap[_foremanUsername][report.weekKey].reportIds.push(report.id);
+    hoursMap[_foremanUsername][report.weekKey].dailyHours = hoursMap[_foremanUsername][report.weekKey].dailyHours || {};
+    hoursMap[_foremanUsername][report.weekKey].dailyHours[report.date] = (hoursMap[_foremanUsername][report.weekKey].dailyHours[report.date] || 0) + report.foremanHours;
+  }
+
   localStorage.setItem(EMPLOYEE_HOURS_KEY, JSON.stringify(hoursMap));
   _checkLocalStorageSize();
   try { fbSet(EMPLOYEE_HOURS_KEY, hoursMap); } catch(e) {}
@@ -24984,13 +24998,14 @@ async function openForemanReport() {
   var laborRows = crewMembers.map(function(m) {
     return { username: m.username, displayName: m.displayName || m.username, role: m.role || '', hours: '', absent: false };
   });
-  var wheelHours = '';
+  var startTime = '';
+  var endTime = '';
   var opsRaw = (f.operators || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   var operatorRows = opsRaw.map(function(name){ return { name: name, hours: '' }; });
 
   // ── Work performed table — rows are work types, columns are mix types ─────
   var WORK_TYPES = ['Machine Pave','Leveling','Trench','Hand Pave','Sidewalk','Patch','Berm'];
-  var MIX_TYPES  = ['Dense Graded','Black Base','Binder','Top','Berm'];
+  var MIX_TYPES  = ['Dense Graded','Black Base','Binder','Top'];
   var workVals = {}; // keyed 'ri_ci' -> string value entered by the foreman
   // Pre-populate from the schedule's material field — e.g. "Binder: 150 tons"
   // pre-fills the Binder column's Machine Pave row as a starting point.
@@ -25005,14 +25020,36 @@ async function openForemanReport() {
   });
   var jobNote = '';
 
-  var _frHoursOptions = [];
-  for (var _fhI = 1; _fhI <= 32; _fhI++) { _frHoursOptions.push(_fhI * 0.5); }
-
   var isMobile = window.innerWidth <= 600;
 
   var dlg = document.createElement('div');
   dlg.id = '_frDlg';
   dlg.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);';
+
+  function _frApplyHoursToAll(hours) {
+    laborRows.forEach(function(row, idx) {
+      if (!row.absent) {
+        row.hours = hours;
+        var _el = document.getElementById('_frLaborHours_' + idx);
+        if (_el) _el.value = hours;
+      }
+    });
+  }
+  function _frComputeHours() {
+    if (!startTime || !endTime) return 0;
+    var _sm = parseInt(startTime.split(':')[0])*60 + parseInt(startTime.split(':')[1]);
+    var _em = parseInt(endTime.split(':')[0])*60 + parseInt(endTime.split(':')[1]);
+    if (_em <= _sm) _em += 24*60; // handle overnight
+    var _hrs = (_em - _sm) / 60;
+    return Math.round(_hrs * 2) / 2; // round to nearest 0.5
+  }
+  function _frCalcHours() {
+    var _rounded = _frComputeHours();
+    var _elC = document.getElementById('_frHoursCalc');
+    if (_elC) _elC.textContent = (startTime && endTime) ? (_rounded + ' hrs') : '';
+    _frApplyHoursToAll(_rounded);
+    return _rounded;
+  }
 
   function _frRowTotal(ri) {
     var s = 0;
@@ -25045,7 +25082,8 @@ async function openForemanReport() {
     var totalRow = '<tr><td style="font-weight:700;color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;padding:4px 8px;">TOTAL</td>' +
       MIX_TYPES.map(function(mt, ci) { return '<td id="frColTotal_' + ci + '" style="text-align:center;padding:4px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;">' + _frColTotal(ci).toFixed(1) + '</td>'; }).join('') +
       '<td id="frGrandTotal" style="text-align:center;padding:4px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;">' + _frGrandTotal().toFixed(1) + '</td></tr>';
-    return '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' +
+    var _wrapStyle = isMobile ? 'overflow-x:auto;-webkit-overflow-scrolling:touch;' : '';
+    return '<div style="' + _wrapStyle + '">' +
       '<table style="border-collapse:collapse;width:100%;">' +
       '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + totalRow + '</tbody></table></div>';
   }
@@ -25059,14 +25097,10 @@ async function openForemanReport() {
           '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(row.displayName) + '</div>' +
           (row.role ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">' + escHtml(row.role) + '</div>' : '') +
         '</div>' +
-        '<input type="number" step="0.5" min="0" max="24" placeholder="hrs" value="' + escHtml(row.hours) + '" ' + (absent?'disabled':'') + ' oninput="window._frLaborHours(' + idx + ',this.value)" ' +
+        '<input type="number" step="0.5" min="0" max="24" placeholder="hrs" id="_frLaborHours_' + idx + '" value="' + escHtml(row.hours) + '" ' + (absent?'disabled':'') + ' oninput="window._frLaborHours(' + idx + ',this.value)" ' +
           'style="width:70px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
       '</div>';
     }).join('') : '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#f59e0b;padding:10px 0;">No laborers assigned to you yet.<br>Add them in Settings → Roster → Employees.</div>';
-
-    var wheelOptionsHtml = '<option value="">—</option>' + _frHoursOptions.map(function(h) {
-      return '<option value="' + h + '"' + (String(h)===String(wheelHours)?' selected':'') + '>' + h.toFixed(1) + '</option>';
-    }).join('');
 
     var operatorsHtml = operatorRows.map(function(row, idx) {
       return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">' +
@@ -25101,9 +25135,18 @@ async function openForemanReport() {
 
         '<div style="margin-bottom:20px;">' +
           '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Crew</div>' +
-          '<div style="text-align:center;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px;margin-bottom:10px;">' +
-            '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);margin-bottom:6px;">Set hours for all crew:</div>' +
-            '<select onchange="window._frWheelChange(this.value)" style="min-height:44px;min-width:120px;background:rgba(255,255,255,0.08);border:1px solid rgba(167,139,250,0.4);border-radius:6px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;text-align:center;padding:6px 12px;">' + wheelOptionsHtml + '</select>' +
+          '<div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;">' +
+            '<div>' +
+              '<label style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Start Time</label>' +
+              '<input type="time" id="_frStartTime" value="' + escHtml(startTime) + '" oninput="window._frTimeChange(\'start\',this.value)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:8px 12px;color:#fff;font-family:\'DM Mono\',monospace;font-size:13px;min-width:120px;">' +
+            '</div>' +
+            '<div>' +
+              '<label style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);display:block;margin-bottom:4px;">End Time</label>' +
+              '<input type="time" id="_frEndTime" value="' + escHtml(endTime) + '" oninput="window._frTimeChange(\'end\',this.value)" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:8px 12px;color:#fff;font-family:\'DM Mono\',monospace;font-size:13px;min-width:120px;">' +
+            '</div>' +
+            '<div style="padding-top:16px;">' +
+              '<span id="_frHoursCalc" style="font-family:\'DM Mono\',monospace;font-size:12px;color:#a78bfa;font-weight:700;">' + (startTime && endTime ? _frComputeHours() + ' hrs' : '') + '</span>' +
+            '</div>' +
           '</div>' +
           '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">' + laborHtml + '</div>' +
         '</div>' +
@@ -25136,10 +25179,9 @@ async function openForemanReport() {
     render();
   };
   window._frLaborHours = function(idx, v) { laborRows[idx].hours = v; };
-  window._frWheelChange = function(v) {
-    wheelHours = v;
-    laborRows.forEach(function(row) { row.hours = v; });
-    render();
+  window._frTimeChange = function(which, v) {
+    if (which === 'start') startTime = v; else endTime = v;
+    _frCalcHours();
   };
   window._frOperatorName = function(idx, v) { operatorRows[idx].name = v; };
   window._frOperatorHours = function(idx, v) { operatorRows[idx].hours = v; };
@@ -25172,7 +25214,7 @@ async function openForemanReport() {
       });
     });
     var totalTonnage = Object.keys(_workTable.cells).reduce(function(s,k){ return s + _workTable.cells[k]; }, 0);
-    var _wheelHrsNum = parseFloat(wheelHours) || 0;
+    var _calcHrs = _frCalcHours(); // same value auto-applied to crew rows; also the foreman's own hours
 
     var report = {
       id: 'fr_' + Date.now().toString(36),
@@ -25186,7 +25228,10 @@ async function openForemanReport() {
       jobName: f.jobName || '',
       jobLocation: f.plant || '',
       gcName: gcName,
-      hours: _wheelHrsNum,
+      hours: _calcHrs,
+      foremanHours: _calcHrs,
+      startTime: startTime,
+      endTime: endTime,
       fullCrew: absent.length === 0,
       crew: laborRows.map(function(r){ return { username:r.username, displayName:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
       labor: laborRows.map(function(r){ return { name:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
@@ -25307,11 +25352,21 @@ function widgetMyHours() {
   var thisWeek = getISOWeekKey();
   var lastWeek = getISOWeekKey(new Date(Date.now() - 7 * 86400000));
 
+  var _todayD = new Date();
+  var todayKeyMH = _todayD.getFullYear() + '-' + String(_todayD.getMonth()+1).padStart(2,'0') + '-' + String(_todayD.getDate()).padStart(2,'0');
+  var todayHours = (myHours[thisWeek] && myHours[thisWeek].dailyHours && myHours[thisWeek].dailyHours[todayKeyMH]) || 0;
+  var todayHtml = '<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
+    '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Today</span>' +
+    (todayHours > 0
+      ? '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:var(--stripe);">' + todayHours + ' hrs</span>'
+      : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">No report submitted today</span>') +
+  '</div>';
+
   var weeks = Object.keys(myHours).sort().reverse().slice(0, 6);
   if (!weeks.length) {
     return '<div class="home-widget">' +
       '<div class="home-widget-header"><div class="home-widget-title">⏱ My Hours</div></div>' +
-      '<div class="home-widget-body"><div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No hours recorded yet.</div></div>' +
+      '<div class="home-widget-body">' + todayHtml + '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);text-align:center;padding:16px 0;">No hours recorded yet.</div></div>' +
     '</div>';
   }
 
@@ -25350,7 +25405,7 @@ function widgetMyHours() {
       '<div class="home-widget-title">⏱ My Hours</div>' +
       (avg4 !== null ? '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">4-wk avg: ' + avg4 + ' hrs</div>' : '') +
     '</div>' +
-    '<div class="home-widget-body">' + weeksHtml + '</div>' +
+    '<div class="home-widget-body">' + todayHtml + weeksHtml + '</div>' +
   '</div>';
 }
 
