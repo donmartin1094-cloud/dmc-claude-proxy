@@ -3654,6 +3654,7 @@ var _invEditMode = {}; // keyed by invoice ID — true when edit mode active
 // v3 redesign state
 var inv3View        = null; // 'calendar' | 'list'
 var inv3ActiveMonth = null; // 'YYYY-MM' | 'Q1-YYYY'
+var _inv3SupplierFilter = null; // { type:'parent'|'plant', name } — session-only, not persisted
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 function invFmt(n) {
@@ -4805,6 +4806,44 @@ function _inv3RenderMonthTabs() {
 
 // ── KPI summary bar ──────────────────────────────────────────────────────────
 
+// Extracts the parent supplier from a full plant name, e.g. "Amrize" from
+// "Amrize Wrentham". Matches known multi-plant suppliers by prefix first,
+// otherwise falls back to the first word.
+function _inv3ParentSupplier(supplierName) {
+  var _s = (supplierName || '').trim();
+  var _known = ['Amrize', 'Benevento', 'Brox', 'Keating', 'PJ Keating'];
+  for (var i = 0; i < _known.length; i++) {
+    if (_s.toLowerCase().indexOf(_known[i].toLowerCase()) === 0) return _known[i];
+  }
+  return _s.split(' ')[0] || _s;
+}
+
+// supplierName here is the already-resolved effective supplier for a block
+// (invoice.supplier, or the schedule-slot plant fallback) — not an invoice
+// object — so this works identically for filled and stub blocks.
+function _inv3BlockMatchesFilter(supplierName) {
+  if (!_inv3SupplierFilter) return true;
+  var _s = supplierName || '';
+  if (_inv3SupplierFilter.type === 'parent') return _inv3ParentSupplier(_s) === _inv3SupplierFilter.name;
+  if (_inv3SupplierFilter.type === 'plant')  return _normalizeSupplierName(_s) === _normalizeSupplierName(_inv3SupplierFilter.name);
+  return true;
+}
+
+function _inv3FilterSupplier(name, type) {
+  type = type || 'parent';
+  if (_inv3SupplierFilter && _inv3SupplierFilter.type === type && _inv3SupplierFilter.name === name) {
+    _inv3SupplierFilter = null; // same chip clicked again — deselect
+  } else {
+    _inv3SupplierFilter = { type: type, name: name };
+  }
+  renderInvoiceTracker();
+}
+
+function _inv3ClearSupplierFilter() {
+  _inv3SupplierFilter = null;
+  renderInvoiceTracker();
+}
+
 function _inv3KpiBar() {
   var invs = _inv3InvoicesForMonth(inv3ActiveMonth);
   var totalBilled = invs.reduce(function(s,inv){ return s+_inv3BilledTotal(inv); }, 0);
@@ -4814,28 +4853,60 @@ function _inv3KpiBar() {
     if (a !== null) totalApproved += a;
     if (!_inv3IsApproved(inv)) pendingCount++;
   });
-  // Supplier breakdown — grouped by normalized name so variants like
-  // "Amrize Wrentham" / "Amrize-Wrentham" tally together; the display label
-  // uses the same canonical-name map the rest of the app already builds for
-  // supplier names (most-frequent raw variant across all invoices).
-  var _supCounts = {};
+
+  // Supplier breakdown — Level 1 groups by parent supplier (e.g. "Amrize"),
+  // Level 2 (shown only under the currently-selected parent) breaks it down
+  // into individual plants, grouped by normalized name so variants like
+  // "Amrize Wrentham" / "Amrize-Wrentham" tally together. Display labels use
+  // the same canonical-name map the rest of the app builds for supplier names.
+  var _parentCounts = {}; // parent -> count
+  var _plantCounts  = {}; // parent -> { normPlant: count }
   invs.forEach(function(inv) {
     var _raw = (inv.supplier || '').trim();
     if (!_raw) return;
+    var _parent = _inv3ParentSupplier(_raw);
+    _parentCounts[_parent] = (_parentCounts[_parent] || 0) + 1;
     var _norm = _normalizeSupplierName(_raw);
-    _supCounts[_norm] = (_supCounts[_norm] || 0) + 1;
+    if (!_plantCounts[_parent]) _plantCounts[_parent] = {};
+    _plantCounts[_parent][_norm] = (_plantCounts[_parent][_norm] || 0) + 1;
   });
-  var _supKeys = Object.keys(_supCounts).sort(function(a,b){ return _supCounts[b]-_supCounts[a]; });
+  var _parentKeys = Object.keys(_parentCounts).sort(function(a,b){ return _parentCounts[b]-_parentCounts[a]; });
   var _supBarHtml = '';
-  if (_supKeys.length) {
+  if (_parentKeys.length) {
     var _supCanon = _buildSupplierCanonicalMap();
-    var _supChips = _supKeys.map(function(norm) {
-      var _label = _supCanon[norm] || norm;
-      var _n = _supCounts[norm];
-      return '<span style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:2px 10px;font-size:10px;font-family:\'DM Mono\',monospace;color:var(--concrete-dim);white-space:nowrap;">'+escHtml(_label)+' \xb7 '+_n+' invoice'+(_n!==1?'s':'')+'</span>';
+    var _chips = _parentKeys.map(function(parent) {
+      var _n = _parentCounts[parent];
+      var _sel = !!(_inv3SupplierFilter && _inv3SupplierFilter.type === 'parent' && _inv3SupplierFilter.name === parent);
+      var _style = _sel
+        ? 'background:rgba(167,139,250,0.25);border:1px solid #a78bfa;border-radius:12px;padding:2px 10px;font-size:10px;font-family:\'DM Mono\',monospace;color:#a78bfa;white-space:nowrap;cursor:pointer;'
+        : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:2px 10px;font-size:10px;font-family:\'DM Mono\',monospace;color:var(--concrete-dim);white-space:nowrap;cursor:pointer;';
+      return '<span onclick="_inv3FilterSupplier(\''+escHtml(parent)+'\',\'parent\')" style="'+_style+'">'+escHtml(parent)+' \xb7 '+_n+' invoice'+(_n!==1?'s':'')+'</span>';
     }).join('');
+
+    // Level 2 — plant breakdown for the currently-selected parent, if any
+    var _plantHtml = '';
+    if (_inv3SupplierFilter && _inv3SupplierFilter.type === 'parent' && _plantCounts[_inv3SupplierFilter.name]) {
+      var _pMap = _plantCounts[_inv3SupplierFilter.name];
+      var _pKeys = Object.keys(_pMap).sort(function(a,b){ return _pMap[b]-_pMap[a]; });
+      var _pChips = _pKeys.map(function(norm) {
+        var _label = _supCanon[norm] || norm;
+        var _n = _pMap[norm];
+        var _sel = _inv3SupplierFilter.type === 'plant' && _normalizeSupplierName(_inv3SupplierFilter.name) === norm;
+        var _style = _sel
+          ? 'background:rgba(167,139,250,0.25);border:1px solid #a78bfa;border-radius:10px;padding:2px 8px;font-size:9px;font-family:\'DM Mono\',monospace;color:#a78bfa;white-space:nowrap;cursor:pointer;'
+          : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:2px 8px;font-size:9px;font-family:\'DM Mono\',monospace;color:var(--concrete-dim);white-space:nowrap;cursor:pointer;';
+        return '<span onclick="event.stopPropagation();_inv3FilterSupplier(\''+escHtml(_label)+'\',\'plant\')" style="'+_style+'">'+escHtml(_label)+' \xb7 '+_n+'</span>';
+      }).join('');
+      _plantHtml = '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;margin-left:16px;">'+_pChips+'</div>';
+    }
+
+    var _clearBtn = _inv3SupplierFilter
+      ? '<span onclick="_inv3ClearSupplierFilter()" style="background:none;border:1px solid rgba(217,79,61,0.4);border-radius:12px;padding:2px 10px;font-size:10px;font-family:\'DM Mono\',monospace;color:#d94f3d;white-space:nowrap;cursor:pointer;">✕ Clear Filter</span>'
+      : '';
+
     _supBarHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:var(--concrete-dim);margin-top:10px;">By Supplier:</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">'+_supChips+'</div>';
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center;">'+_chips+_clearBtn+'</div>'
+      + _plantHtml;
   }
 
   return '<div class="inv3-kpi-bar">'
@@ -4888,7 +4959,7 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
     var isToday = dk===todayKey;
 
     var dayReports = (typeof foremanReports!=='undefined' ? foremanReports : [])
-      .filter(function(r){ return r.date===dk && r.locationVerified===true; })
+      .filter(function(r){ return r.date===dk; })
       .sort(function(a,b){ return _inv3GetForemanOrder(a.foreman)-_inv3GetForemanOrder(b.foreman); });
 
     var dayInvoices = (invoiceList||[]).filter(function(inv){ return inv.dateOfWork===dk; });
@@ -5014,15 +5085,20 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
   // still works when invoice is null) so placeholder blocks show it too.
   var _fBlk = _invGetSchedFields(dateKey, foremanName);
   var _supplier = (invoice && invoice.supplier) || (_fBlk && _fBlk.plant) || '';
+  // Dim blocks that don't match the active supplier filter so matching ones
+  // stand out — applies to both the empty/stub path and the filled path below.
+  var _matchesFilter = _inv3BlockMatchesFilter(_supplier);
+  var _unverified = !!(report && report.locationVerified !== true);
+  var _unverifiedFlag = _unverified ? '<span title="Location not yet verified" style="margin-right:3px;">⚠️</span>' : '';
 
   if (isEmpty) {
     var invId = invoice ? invoice.id : '';
     var handler = invId
       ? 'openInvoiceModal(\''+invId+'\')'
       : (report ? 'inv3OpenFromVerify(\''+escHtml(dateKey)+'\',\''+escHtml(report.id)+'\')' : '');
-    return '<div class="inv3-day-block empty"'+(handler?' onclick="'+handler+'"':'')+' title="'+escHtml(foremanName)+'">'
+    return '<div class="inv3-day-block empty"'+(handler?' onclick="'+handler+'"':'')+(_matchesFilter?'':' style="opacity:0.25;"')+' title="'+escHtml(foremanName)+'">'
       + '<div class="inv3-block-info" style="display:flex;justify-content:space-between;align-items:center;">'
-        + '<span>'+initials+' \xb7 '+jobNo+'</span>'
+        + '<span>'+_unverifiedFlag+initials+' \xb7 '+jobNo+'</span>'
         + '<span style="font-weight:700;font-size:9px;color:var(--concrete-dim);text-align:right;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(_supplier)+'</span>'
       + '</div>'
       + '<div class="inv3-block-plus">+</div>'
@@ -5085,10 +5161,14 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
 
   var state  = isApp ? 'approved' : 'filled';
   var amtCls = isApp ? 'green'    : 'yellow';
-  return '<div class="inv3-day-block '+state+'"'+(isApp?'':' style="position:relative;"')+' onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(foremanName)+'">'
+  var _styleParts = [];
+  if (!isApp) _styleParts.push('position:relative;');
+  if (!_matchesFilter) _styleParts.push('opacity:0.25;');
+  var _styleAttr = _styleParts.length ? ' style="'+_styleParts.join('')+'"' : '';
+  return '<div class="inv3-day-block '+state+'"'+_styleAttr+' onclick="inv3OpenInvoice(\''+escHtml(invoice.id)+'\')" title="'+escHtml(foremanName)+'">'
     + (isApp ? '' : '<span onclick="invQuickApprove(\''+escHtml(invoice.id)+'\',event)" style="position:absolute;top:2px;right:4px;font-size:10px;color:#f59e0b;cursor:pointer;font-weight:700;opacity:0.7;padding:2px;" title="Quick approve">&#10003;</span>')
     + '<div class="inv3-block-info" style="display:flex;justify-content:space-between;align-items:center;">'
-      + '<span>'+initials+' \xb7 '+jobNo+'</span>'
+      + '<span>'+_unverifiedFlag+initials+' \xb7 '+jobNo+'</span>'
       + '<span style="font-weight:700;font-size:9px;color:var(--white);text-align:right;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(_supplier)+'</span>'
     + '</div>'
     + (billed > 0 ? '<div class="inv3-block-amt '+amtCls+'">'+invFmt(billed)+'</div>' : '')

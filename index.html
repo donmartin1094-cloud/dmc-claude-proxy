@@ -24918,6 +24918,7 @@ function saveForemanReport(report) {
   reports.unshift(report);
   localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(reports));
   _checkLocalStorageSize();
+  foremanReports = reports;
   try { fbSet('foreman_reports', reports); } catch(e) {}
 
   // Update per-employee weekly hours — use each crew member's individual
@@ -24972,7 +24973,12 @@ async function openForemanReport() {
   var _bj = (typeof backlogJobs !== 'undefined' ? backlogJobs : []).find(function(j){
     return f.jobNum && (j.num||'').toString().trim() === (f.jobNum||'').toString().trim();
   });
-  var gcName = f.gcName || (_bj && _bj.gc) || '';
+  var gcName = '';
+  if (_bj) gcName = _bj.gc || _bj.gcName || '';
+  if (!gcName) gcName = f.gcName || f.owner || f.gc || '';
+  if (!gcName && f.jobName && f.jobName.indexOf(' — ') !== -1) {
+    gcName = f.jobName.split(' — ')[0].trim();
+  }
 
   // ── Form state ───────────────────────────────────────────────────────────
   var laborRows = crewMembers.map(function(m) {
@@ -25128,14 +25134,18 @@ async function openForemanReport() {
       id: 'fr_' + Date.now().toString(36),
       foremanUsername: u,
       foremanDisplay: foremanDisplay,
+      foreman: foremanDisplay,
       date: todayKey,
       weekKey: getISOWeekKey(),
       jobNum: f.jobNum || '',
+      jobNumber: f.jobNum || '',
       jobName: f.jobName || '',
+      jobLocation: f.plant || '',
       gcName: gcName,
       hours: _wheelHrsNum,
       fullCrew: absent.length === 0,
       crew: laborRows.map(function(r){ return { username:r.username, displayName:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
+      labor: laborRows.map(function(r){ return { name:r.displayName, hours: r.absent?0:(parseFloat(r.hours)||0), absent: r.absent }; }),
       presentMembers: present.map(function(m){ return m.username; }),
       presentDisplay: present.map(function(m){ return m.displayName; }),
       absentMembers: absent.map(function(m){ return m.username; }),
@@ -30335,6 +30345,7 @@ async function fbLoadAll() {
                 else if (key === 'bills_in_progress') { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress));  _checkLocalStorageSize();}
                 else if (key === 'paving_slips')      { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {}  _checkLocalStorageSize();}
                 else if (key === 'sched_queue')  { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
+                else if (key === 'foreman_reports') { foremanReports = Array.isArray(val) ? val : foremanReports; localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(foremanReports)); _checkLocalStorageSize(); }
                 else if (key === 'daily_orders') {
                   if (Array.isArray(val)) {
                     var localIds = new Set(dailyOrders.map(function(o){ return o.id; }));
@@ -30944,6 +30955,7 @@ async function initApp(username) {
               else if (key === 'bills_in_progress')  { billsInProgress = Array.isArray(val) ? val : billsInProgress; localStorage.setItem(BILLS_KEY, JSON.stringify(billsInProgress)); if (activeTab === 'apAia') renderInvoiceTracker();  _checkLocalStorageSize();}
               else if (key === 'paving_slips')       { pavingSlips = _slipsMigrate(Array.isArray(val) ? val : pavingSlips); localStorage.setItem(SLIPS_KEY, JSON.stringify(pavingSlips)); try { document.querySelectorAll('[data-tonnage-job]').forEach(function(el){ if(el.classList.contains('home-backlog-row')) return; var jid=el.getAttribute('data-tonnage-job'); if(!jid) return; var job=(backlogJobs||[]).find(function(j){return j.id===jid||j.num===jid;}); if(!job) return; var fr=document.createElement('div'); fr.innerHTML=renderTonnageTracker(job.id,job.num,job.name); if(fr.firstElementChild) el.replaceWith(fr.firstElementChild); }); } catch(e) {}  _checkLocalStorageSize();}
               else if (key === 'sched_queue')         { schedQueue = val; localStorage.setItem(SCHED_QUEUE_KEY, JSON.stringify(val));  _checkLocalStorageSize();}
+              else if (key === 'foreman_reports')     { foremanReports = Array.isArray(val) ? val : foremanReports; localStorage.setItem(FOREMAN_REPORTS_KEY, JSON.stringify(foremanReports)); _checkLocalStorageSize(); if (activeTab === 'reports' || activeTab === 'reportsTimeReports') renderReports(); }
               else if (key === 'dmc_dj_daily_hours') { localStorage.setItem('dmc_dj_daily_hours', JSON.stringify(val)); if (typeof _homeDJHoursRerender === 'function') _homeDJHoursRerender(); _checkLocalStorageSize();}
               else if (key === 'dmc_hmonteiro_daily_hours') { localStorage.setItem('dmc_hmonteiro_daily_hours', JSON.stringify(val)); if (typeof _homeHHoursRerender === 'function') _homeHHoursRerender(); _checkLocalStorageSize(); }
               else if (key === 'daily_orders') {
