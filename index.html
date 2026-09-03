@@ -24987,10 +24987,21 @@ async function openForemanReport() {
   var wheelHours = '';
   var opsRaw = (f.operators || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   var operatorRows = opsRaw.map(function(name){ return { name: name, hours: '' }; });
+
+  // ── Work performed table — rows are work types, columns are mix types ─────
+  var WORK_TYPES = ['Machine Pave','Leveling','Trench','Hand Pave','Sidewalk','Patch','Berm'];
+  var MIX_TYPES  = ['Dense Graded','Black Base','Binder','Top','Berm'];
+  var workVals = {}; // keyed 'ri_ci' -> string value entered by the foreman
+  // Pre-populate from the schedule's material field — e.g. "Binder: 150 tons"
+  // pre-fills the Binder column's Machine Pave row as a starting point.
   var mixItemsFromSched = (typeof parseMaterialField === 'function') ? parseMaterialField(f.material || '') : [];
-  var mixRows = mixItemsFromSched.map(function(item) {
+  mixItemsFromSched.forEach(function(item) {
     var label = (typeof matDisplayName === 'function' ? matDisplayName(item.name) : item.name) || item.name || '';
-    return { name: label, qty: '' };
+    var qty = parseFloat(item.tons) || 0;
+    if (!label || qty <= 0) return;
+    var _ci = -1;
+    MIX_TYPES.forEach(function(mt, idx){ if (_ci === -1 && label.toLowerCase().indexOf(mt.toLowerCase()) !== -1) _ci = idx; });
+    if (_ci !== -1) workVals['0_' + _ci] = String(qty);
   });
   var jobNote = '';
 
@@ -25003,10 +25014,40 @@ async function openForemanReport() {
   dlg.id = '_frDlg';
   dlg.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);';
 
-  function _frRecalcTonnage() {
-    var total = mixRows.reduce(function(s,r){ return s + (parseFloat(r.qty)||0); }, 0);
-    var el = document.getElementById('_frTonnageTotal');
-    if (el) el.textContent = total.toFixed(1) + ' T';
+  function _frRowTotal(ri) {
+    var s = 0;
+    for (var ci = 0; ci < MIX_TYPES.length; ci++) s += parseFloat(workVals[ri + '_' + ci]) || 0;
+    return s;
+  }
+  function _frColTotal(ci) {
+    var s = 0;
+    for (var ri = 0; ri < WORK_TYPES.length; ri++) s += parseFloat(workVals[ri + '_' + ci]) || 0;
+    return s;
+  }
+  function _frGrandTotal() {
+    var s = 0;
+    for (var ri = 0; ri < WORK_TYPES.length; ri++) s += _frRowTotal(ri);
+    return s;
+  }
+  function _frWorkTableHtml() {
+    var _cellStyle = 'width:60px;text-align:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px;color:#fff;font-family:\'DM Mono\',monospace;font-size:11px;';
+    var headCells = '<th style="color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 8px;">Work Type</th>' +
+      MIX_TYPES.map(function(mt){ return '<th style="color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;text-align:center;padding:4px 8px;">' + mt + '</th>'; }).join('') +
+      '<th style="color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;text-align:center;padding:4px 8px;">Total</th>';
+    var bodyRows = WORK_TYPES.map(function(wt, ri) {
+      var cells = MIX_TYPES.map(function(mt, ci) {
+        var v = workVals[ri + '_' + ci] || '';
+        return '<td style="padding:2px 4px;"><input type="text" inputmode="decimal" id="frCell_' + ri + '_' + ci + '" value="' + escHtml(v) + '" oninput="window._frCellChange(' + ri + ',' + ci + ',this.value)" style="' + _cellStyle + '"/></td>';
+      }).join('');
+      return '<tr><td style="color:var(--concrete-dim);font-size:10px;font-family:\'DM Mono\',monospace;text-align:left;padding:4px 8px;white-space:nowrap;">' + wt + '</td>' + cells +
+        '<td id="frRowTotal_' + ri + '" style="text-align:center;padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--stripe);font-weight:700;">' + _frRowTotal(ri).toFixed(1) + '</td></tr>';
+    }).join('');
+    var totalRow = '<tr><td style="font-weight:700;color:#a78bfa;font-size:10px;font-family:\'DM Mono\',monospace;padding:4px 8px;">TOTAL</td>' +
+      MIX_TYPES.map(function(mt, ci) { return '<td id="frColTotal_' + ci + '" style="text-align:center;padding:4px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;">' + _frColTotal(ci).toFixed(1) + '</td>'; }).join('') +
+      '<td id="frGrandTotal" style="text-align:center;padding:4px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:11px;">' + _frGrandTotal().toFixed(1) + '</td></tr>';
+    return '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' +
+      '<table style="border-collapse:collapse;width:100%;">' +
+      '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + totalRow + '</tbody></table></div>';
   }
 
   function render() {
@@ -25034,16 +25075,6 @@ async function openForemanReport() {
         '<input type="number" step="0.5" min="0" max="24" placeholder="hrs" value="' + escHtml(row.hours) + '" oninput="window._frOperatorHours(' + idx + ',this.value)" ' +
           'style="width:70px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
         '<button onclick="window._frRemoveOperator(' + idx + ')" style="background:none;border:none;color:var(--concrete-dim);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button>' +
-      '</div>';
-    }).join('');
-
-    var mixHtml = mixRows.map(function(row, idx) {
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">' +
-        '<input type="text" placeholder="Mix type" value="' + escHtml(row.name) + '" oninput="window._frMixName(' + idx + ',this.value)" ' +
-          'style="flex:1;min-width:0;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:12px;padding:6px 10px;">' +
-        '<input type="number" step="0.1" min="0" placeholder="tons" value="' + escHtml(row.qty) + '" oninput="window._frMixQty(' + idx + ',this.value)" ' +
-          'style="width:80px;min-height:44px;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:5px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:13px;padding:6px 8px;text-align:center;">' +
-        '<button onclick="window._frRemoveMix(' + idx + ')" style="background:none;border:none;color:var(--concrete-dim);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button>' +
       '</div>';
     }).join('');
 
@@ -25084,13 +25115,8 @@ async function openForemanReport() {
         '</div>' +
 
         '<div style="margin-bottom:16px;">' +
-          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Mix Types</div>' +
-          mixHtml +
-          '<button onclick="window._frAddMix()" style="width:100%;margin-top:6px;min-height:44px;background:rgba(245,197,24,0.08);border:1px dashed rgba(245,197,24,0.35);border-radius:6px;color:var(--stripe);font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;cursor:pointer;">+ Add Mix</button>' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.3);border-radius:6px;">' +
-            '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:#a78bfa;">Total Tonnage:</span>' +
-            '<span id="_frTonnageTotal" style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;color:#a78bfa;">' + mixRows.reduce(function(s,r){ return s+(parseFloat(r.qty)||0); },0).toFixed(1) + ' T</span>' +
-          '</div>' +
+          '<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">Work Performed (Tons)</div>' +
+          _frWorkTableHtml() +
         '</div>' +
 
         '<div style="margin-bottom:20px;">' +
@@ -25119,15 +25145,33 @@ async function openForemanReport() {
   window._frOperatorHours = function(idx, v) { operatorRows[idx].hours = v; };
   window._frAddOperator = function() { operatorRows.push({ name:'', hours:'' }); render(); };
   window._frRemoveOperator = function(idx) { operatorRows.splice(idx,1); render(); };
-  window._frMixName = function(idx, v) { mixRows[idx].name = v; };
-  window._frMixQty = function(idx, v) { mixRows[idx].qty = v; _frRecalcTonnage(); };
-  window._frAddMix = function() { mixRows.push({ name:'', qty:'' }); render(); };
-  window._frRemoveMix = function(idx) { mixRows.splice(idx,1); render(); };
+  window._frCellChange = function(ri, ci, v) {
+    workVals[ri + '_' + ci] = v;
+    var rt = document.getElementById('frRowTotal_' + ri);
+    if (rt) rt.textContent = _frRowTotal(ri).toFixed(1);
+    var ct = document.getElementById('frColTotal_' + ci);
+    if (ct) ct.textContent = _frColTotal(ci).toFixed(1);
+    var gt = document.getElementById('frGrandTotal');
+    if (gt) gt.textContent = _frGrandTotal().toFixed(1);
+  };
 
   window._frSubmit = function() {
     var present = laborRows.filter(function(r){ return !r.absent; });
     var absent  = laborRows.filter(function(r){ return r.absent; });
-    var totalTonnage = mixRows.reduce(function(s,r){ return s + (parseFloat(r.qty)||0); }, 0);
+
+    var _workTable = {
+      rows: WORK_TYPES,
+      cols: MIX_TYPES,
+      cells: {}
+    };
+    _workTable.rows.forEach(function(row, ri){
+      _workTable.cols.forEach(function(col, ci){
+        var _el = document.getElementById('frCell_' + ri + '_' + ci);
+        var _val = _el ? parseFloat(_el.value) || 0 : 0;
+        if (_val > 0) _workTable.cells[row + '::' + col] = _val;
+      });
+    });
+    var totalTonnage = Object.keys(_workTable.cells).reduce(function(s,k){ return s + _workTable.cells[k]; }, 0);
     var _wheelHrsNum = parseFloat(wheelHours) || 0;
 
     var report = {
@@ -25151,7 +25195,14 @@ async function openForemanReport() {
       absentMembers: absent.map(function(m){ return m.username; }),
       absentDisplay: absent.map(function(m){ return m.displayName; }),
       operators: operatorRows.filter(function(r){ return r.name; }).map(function(r){ return { name:r.name, hours: parseFloat(r.hours)||0 }; }),
-      mixTypes: mixRows.filter(function(r){ return r.name; }).map(function(r){ return { name:r.name, qty: parseFloat(r.qty)||0 }; }),
+      // Sum tonnage per mix type column for the AR invoice stub (backward-compatible shape)
+      mixTypes: _workTable.cols.map(function(col){
+        var _total = _workTable.rows.reduce(function(sum, row){
+          return sum + (_workTable.cells[row + '::' + col] || 0);
+        }, 0);
+        return { name: col, qty: _total };
+      }).filter(function(m){ return m.qty > 0; }),
+      workTable: _workTable,
       totalTonnage: totalTonnage,
       notes: jobNote,
       submittedAt: Date.now(),

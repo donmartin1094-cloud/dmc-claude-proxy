@@ -2199,6 +2199,28 @@ function saveForemanReports() {
   try { if (db) fbSet('foreman_reports', foremanReports); } catch(e) {}
 }
 
+// Reduces a submitted report's workTable (rows=work types, cols=mix types,
+// cells keyed 'row::col' -> tonnage) down to only the non-zero rows/cols plus
+// their totals. Returns null when the report has no usable workTable (older
+// reports created before this field existed).
+function _frWorkTableGrid(r) {
+  var wt = r && r.workTable;
+  if (!wt || !wt.cells || !Array.isArray(wt.rows) || !Array.isArray(wt.cols)) return null;
+  var rowsUsed = wt.rows.filter(function(row){
+    return wt.cols.some(function(col){ return (wt.cells[row+'::'+col]||0) > 0; });
+  });
+  var colsUsed = wt.cols.filter(function(col){
+    return wt.rows.some(function(row){ return (wt.cells[row+'::'+col]||0) > 0; });
+  });
+  if (!rowsUsed.length || !colsUsed.length) return null;
+  var colTotals = {};
+  colsUsed.forEach(function(col){
+    colTotals[col] = wt.rows.reduce(function(s,row){ return s+(wt.cells[row+'::'+col]||0); }, 0);
+  });
+  var grandTotal = colsUsed.reduce(function(s,col){ return s+colTotals[col]; }, 0);
+  return { rowsUsed: rowsUsed, colsUsed: colsUsed, cells: wt.cells, colTotals: colTotals, grandTotal: grandTotal };
+}
+
 // ── Repository list rendering ────────────────────────────────────────────────
 function _frVerifBadge(r) {
   if (r.locationVerified === true)  return '<span style="color:#4ade80;font-size:11px;" title="Location Verified">✅</span>';
@@ -2219,14 +2241,38 @@ function _frRenderDetail(r) {
       '<span style="color:var(--stripe);width:50px;text-align:right;">'+h.toFixed(1)+' hrs</span>'+
     '</div>';
   }).join('');
-  var workRows = (r.workItems||[]).filter(function(w){ return w.workType; }).map(function(w) {
-    var tons = (parseFloat(w.denseGraded)||0)+(parseFloat(w.blackBase)||0)+(parseFloat(w.binder)||0)+(parseFloat(w.top)||0);
-    return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
-      '<span style="flex:1;color:var(--white);">'+escHtml(workTypeLabels[w.workType]||w.workType)+'</span>'+
-      (parseFloat(w.squareYards)>0?'<span style="color:var(--concrete-dim);">'+parseFloat(w.squareYards).toFixed(0)+' SY</span>':'')+''+
-      (tons>0?'<span style="color:var(--stripe);">'+tons.toFixed(1)+' T</span>':'')+''+
-    '</div>';
-  }).join('');
+  var _wtGrid = _frWorkTableGrid(r);
+  var workSectionHtml = '';
+  if (_wtGrid) {
+    var _headCells = '<th style="text-align:left;padding:3px 8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:9px;">Work Type</th>' +
+      _wtGrid.colsUsed.map(function(col){ return '<th style="text-align:center;padding:3px 8px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:9px;">'+escHtml(col)+'</th>'; }).join('') +
+      '<th style="text-align:center;padding:3px 8px;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:9px;">Total</th>';
+    var _bodyRows = _wtGrid.rowsUsed.map(function(row){
+      var _rowTotal = 0;
+      var _cellsHtml = _wtGrid.colsUsed.map(function(col){
+        var v = _wtGrid.cells[row+'::'+col] || 0;
+        _rowTotal += v;
+        return '<td style="text-align:center;padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+(v>0?v.toFixed(1):'')+'</td>';
+      }).join('');
+      return '<tr><td style="padding:2px 8px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:10px;">'+escHtml(row)+'</td>'+_cellsHtml+
+        '<td style="text-align:center;padding:2px 8px;color:var(--stripe);font-weight:700;font-family:\'DM Mono\',monospace;font-size:10px;">'+_rowTotal.toFixed(1)+'</td></tr>';
+    }).join('');
+    var _totalRow = '<tr><td style="padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">TOTAL</td>'+
+      _wtGrid.colsUsed.map(function(col){ return '<td style="text-align:center;padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">'+_wtGrid.colTotals[col].toFixed(1)+'</td>'; }).join('')+
+      '<td style="text-align:center;padding:2px 8px;font-weight:700;color:#a78bfa;font-family:\'DM Mono\',monospace;font-size:10px;">'+_wtGrid.grandTotal.toFixed(1)+'</td></tr>';
+    workSectionHtml = '<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Work Performed (Tons)</div>'+
+      '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="border-collapse:collapse;width:100%;">'+
+      '<thead><tr>'+_headCells+'</tr></thead><tbody>'+_bodyRows+_totalRow+'</tbody></table></div></div>';
+  } else {
+    var workRows = (r.workItems||[]).filter(function(w){ return w.workType; }).map(function(w) {
+      var tons = (parseFloat(w.denseGraded)||0)+(parseFloat(w.blackBase)||0)+(parseFloat(w.binder)||0)+(parseFloat(w.top)||0);
+      return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:\'DM Mono\',monospace;font-size:10px;">'+
+        '<span style="flex:1;color:var(--white);">'+escHtml(workTypeLabels[w.workType]||w.workType)+'</span>'+
+        (tons>0?'<span style="color:var(--stripe);">'+tons.toFixed(1)+' T</span>':'')+
+      '</div>';
+    }).join('');
+    workSectionHtml = workRows ? '<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Mix / Production</div>'+workRows+'</div>' : '';
+  }
   var equipRows = Object.keys(r.equipment||{}).filter(function(k){ return r.equipment[k]; }).map(function(k) {
     var eq = r.equipment[k]; var hrs = typeof eq==='object'?eq.hours:eq;
     return '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--concrete-dim);padding:2px 0;">'+escHtml(k)+(hrs?' — '+hrs+' hrs':'')+'</div>';
@@ -2245,7 +2291,7 @@ function _frRenderDetail(r) {
       '<div><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">Plant</div><div style="color:var(--white);">'+escHtml(r.plantLocation||'—')+'</div></div>'+
     '</div>'+
     (laborRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Crew Roster</div>'+laborRows+'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--stripe);text-align:right;margin-top:4px;">Total: '+totalCrewHrs.toFixed(1)+' hrs</div></div>':'')+
-    (workRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Mix / Production</div>'+workRows+'</div>':'')+
+    workSectionHtml+
     (equipRows?'<div style="margin-bottom:8px;"><div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:4px;">Equipment</div>'+equipRows+'</div>':'')+
     (r.delayNotes?'<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);margin-bottom:6px;"><span style="text-transform:uppercase;letter-spacing:1px;font-size:8px;">Notes: </span>'+escHtml(r.delayNotes)+'</div>':'')+
     verifLine+
@@ -2835,12 +2881,29 @@ function printForemanReport(id) {
     return '<tr><td class="lbl">'+roleLabels[slot.role]+'</td><td>'+(d.name||'')+'</td><td class="num">'+(d.machineHours||'')+'</td><td class="num">'+(d.handHours||'')+'</td><td class="num">'+(d.totalHours||'')+'</td><td class="num">'+(d.delayHours||'')+'</td></tr>';
   }).join('');
 
-  var workMap = {};
-  (r.workItems||[]).forEach(function(w){ workMap[w.workType]=w; });
-  var workRows = ['machinePave','levelingCourse','trenchPave','handPave','sidewalks','patch','berm'].map(function(wt){
-    var d=workMap[wt]||{};
-    return '<tr><td class="lbl">'+workTypeLabels[wt]+'</td><td class="num">'+fmtNum(d.denseGraded)+'</td><td class="num">'+fmtNum(d.blackBase)+'</td><td class="num">'+fmtNum(d.binder)+'</td><td class="num">'+fmtNum(d.top)+'</td><td class="num">'+fmtNum(d.squareYards)+'</td><td class="num">'+(wt==='berm'?fmtNum(d.linFt):'')+'</td></tr>';
-  }).join('');
+  var _wtGrid = _frWorkTableGrid(r);
+  var workHeaderRow, workRows;
+  if (_wtGrid) {
+    workHeaderRow = '<th>Work Type</th>' + _wtGrid.colsUsed.map(function(col){ return '<th>'+escHtml(col)+'</th>'; }).join('') + '<th>Total</th>';
+    workRows = _wtGrid.rowsUsed.map(function(row){
+      var rowTotal = 0;
+      var cells = _wtGrid.colsUsed.map(function(col){
+        var v = _wtGrid.cells[row+'::'+col] || 0;
+        rowTotal += v;
+        return '<td class="num">'+fmtNum(v)+'</td>';
+      }).join('');
+      return '<tr><td class="lbl">'+escHtml(row)+'</td>'+cells+'<td class="num">'+fmtNum(rowTotal)+'</td></tr>';
+    }).join('');
+    workRows += '<tr><td class="lbl">TOTAL</td>' + _wtGrid.colsUsed.map(function(col){ return '<td class="num">'+fmtNum(_wtGrid.colTotals[col])+'</td>'; }).join('') + '<td class="num">'+fmtNum(_wtGrid.grandTotal)+'</td></tr>';
+  } else {
+    var workMap = {};
+    (r.workItems||[]).forEach(function(w){ workMap[w.workType]=w; });
+    workHeaderRow = '<th>Work Type</th><th>Dense Graded</th><th>Black Base</th><th>Binder</th><th>Top</th><th>Lin Ft (Berm)</th>';
+    workRows = ['machinePave','levelingCourse','trenchPave','handPave','sidewalks','patch','berm'].map(function(wt){
+      var d=workMap[wt]||{};
+      return '<tr><td class="lbl">'+workTypeLabels[wt]+'</td><td class="num">'+fmtNum(d.denseGraded)+'</td><td class="num">'+fmtNum(d.blackBase)+'</td><td class="num">'+fmtNum(d.binder)+'</td><td class="num">'+fmtNum(d.top)+'</td><td class="num">'+(wt==='berm'?fmtNum(d.linFt):'')+'</td></tr>';
+    }).join('');
+  }
 
   var eq = r.equipment||{};
   var truckRows = (r.trucks||[]).filter(function(t){return t.name||t.start||t.ending;}).map(function(t,i){
@@ -2896,7 +2959,7 @@ function printForemanReport(id) {
 
     // Work performed
     '<section><div class="sec-title">Description of Work Performed — Actual Placed Quantities (Tons)</div>'+
-    '<table><thead><tr><th>Work Type</th><th>Dense Graded</th><th>Black Base</th><th>Binder</th><th>Top</th><th>Sq Yds</th><th>Lin Ft (Berm)</th></tr></thead><tbody>'+workRows+'</tbody></table>'+
+    '<table><thead><tr>'+workHeaderRow+'</tr></thead><tbody>'+workRows+'</tbody></table>'+
     '<div style="display:flex;gap:24px;margin-top:6px;font-size:8pt;">'+
       '<span><strong>Tack Cost:</strong> '+(r.tackCostGal||0)+' gal</span>'+
       '<span><strong>Hot Rubber:</strong> '+(r.hotRubberLft||0)+' lin ft · '+(r.hotRubberFt||0)+' ft</span>'+
