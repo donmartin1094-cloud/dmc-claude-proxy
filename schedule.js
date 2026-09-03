@@ -717,86 +717,21 @@ function rainOutBlock(key, slot) {
     return;
   }
 
-  // ── Mark the block as rained out ─────────────────────────────────────
-  schedData[key][slot].rainedOut = true;
-
-  // ── Collect the consecutive run of occupied workdays starting the day
-  //    after the rain-out. We stop collecting only when we hit a workday
-  //    that is genuinely empty (no job at all). That empty day is the
-  //    natural absorber — the cascade stops there.
+  // ── Mark the block as rained out — this is the "Keep As-Is" choice in the
+  // rainout modal. It must do nothing else: no shifting, no touching any
+  // other date's schedData. Pushing jobs to the next open slot is a
+  // deliberately separate, explicit flow (_roOpenStep2 / _roExecutePush),
+  // reached only via the "Push Everything Back" button.
   // ─────────────────────────────────────────────────────────────────────
-  const run = [];   // [ dateKey, … ] chronological, all have jobs
-  let scan = nextWorkday(key);
-
-  for (let i = 0; i < 365; i++) {
-    if (slotHasWork(scan, slot)) {
-      run.push(scan);
-      scan = nextWorkday(scan);
-    } else {
-      // This is an empty workday — the cascade stops here naturally.
-      // We do NOT include this day in the run.
-      break;
-    }
-  }
-
-  // ── Shift every job in the run forward by exactly 1 workday ──────────
-  // Process in REVERSE so we never overwrite a job that hasn't moved yet.
-  for (let i = run.length - 1; i >= 0; i--) {
-    const fromKey = run[i];
-    const toKey   = nextWorkday(fromKey);
-    if (!schedData[toKey]) schedData[toKey] = {};
-    schedData[toKey][slot] = JSON.parse(JSON.stringify(schedData[fromKey][slot]));
-    schedData[toKey][slot].rainedOut = false;
-    schedData[fromKey][slot] = { type: 'blank', fields: {} };
-  }
-
+  schedData[key][slot].rainedOut = true;
   saveSchedDataDirect();
   renderSchedule();
 
-  // ── Notifications ─────────────────────────────────────────────────────
   const foreman = slot === 'top' ? 'Filipe Joaquim' : 'Louie Medeiros';
-  let totalContacts = 0;
-
-  // One notification per shifted job that has contacts
-  run.forEach(fromKey => {
-    const toKey    = nextWorkday(fromKey);
-    const jobName  = getBlockJobName(toKey, slot);
-    const contacts = getBlockContacts(toKey, slot);
-    const origDate = fmtScheduleDate(fromKey);
-    const newDate  = fmtScheduleDate(toKey);
-    totalContacts += contacts.length;
-
-    if (contacts.length && isAdmin()) {
-      contacts.forEach(contact => {
-        pushNotif('info',
-          '🌧 Rain Delay — ' + escHtml(jobName),
-          '<strong>Contact to notify:</strong> ' + escHtml(contact) + '<br>' +
-          'Job <em>' + escHtml(jobName) + '</em> (' + escHtml(foreman) + ') ' +
-          'was originally scheduled for <strong>' + origDate + '</strong> ' +
-          'and has been pushed to <strong>' + newDate + '</strong> (+1 workday) due to a rain-out.',
-          null
-        );
-      });
-    }
-  });
-
-  // Summary
-  if (run.length === 0) {
-    pushNotif('info', '🌧 Rained Out',
-      escHtml(foreman.split(' ')[0]) + '\'s block on ' + fmtScheduleDate(key) +
-      ' marked as rained out. No following jobs needed to shift.',
-      null);
-  } else {
-    pushNotif('success', '🌧 Rained Out — Schedule Pushed +1 Day',
-      escHtml(foreman.split(' ')[0]) + '\'s ' + run.length +
-      ' consecutive job' + (run.length !== 1 ? 's' : '') +
-      ' shifted forward by 1 workday. Cascade stopped at the first open slot.' +
-      (totalContacts > 0 && isAdmin()
-        ? ' ' + totalContacts + ' contact' + (totalContacts !== 1 ? 's' : '') + ' flagged for notification.'
-        : (totalContacts > 0 ? ' Admin notified to contact affected parties.' : '')),
-      null
-    );
-  }
+  pushNotif('info', '🌧 Rained Out',
+    escHtml(foreman.split(' ')[0]) + '\'s block on ' + fmtScheduleDate(key) +
+    ' marked as rained out. Schedule left unchanged.',
+    null);
 }
 
 // ── Rainout Modal — smarter reschedule with open-slot preview ─────────────────
