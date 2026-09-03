@@ -7278,10 +7278,9 @@ function _mountARKPICharts() {
 }
 
 // ── Time Reports ──────────────────────────────────────────────────────────────
-var _trFilterStart = '';
-var _trFilterEnd   = '';
-var _trFilterEmp   = '';
-var _trExpanded    = {};
+var _trFilterStart   = ''; // ISO date — Monday of the selected week
+var _trFilterEnd     = ''; // ISO date — Sunday of the selected week
+var _trFilterForeman = ''; // '' = All Foremen, or a foreman display name
 
 function _trWeekRange() {
   var today = new Date();
@@ -7301,67 +7300,114 @@ function _trFmtDate(dateStr) {
   return p.length === 3 ? p[1] + '/' + p[2] + '/' + p[0] : dateStr;
 }
 
-function _trDayName(dateStr) {
-  if (!dateStr) return '—';
-  var d = new Date(dateStr + 'T12:00:00');
-  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+// Week label for the header, e.g. "Week of Jun 2 – Jun 8".
+function _trWeekLabel(startDate, endDate) {
+  var s = new Date(startDate + 'T12:00:00');
+  var e = new Date(endDate + 'T12:00:00');
+  var sLbl = s.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  var eLbl = e.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  return 'Week of ' + sLbl + ' – ' + eLbl;
 }
 
-function _trLoadEntries() {
-  var entries = [];
-
-  // DJ self-reported hours
-  var _djHours = {};
-  try { _djHours = JSON.parse(localStorage.getItem('dmc_dj_daily_hours') || '{}'); } catch(e) {}
-  Object.keys(_djHours).forEach(function(date) {
-    var h = parseFloat(_djHours[date]) || 0;
-    if (h > 0) {
-      entries.push({
-        employeeName: 'Don Martin', username: 'dj',
-        date: date, hours: h,
-        jobLocation: '—', jobNum: '—', gcName: '—',
-        source: 'self', foremanName: '—'
-      });
-    }
+// Resolves an EMPLOYEE_HOURS_KEY username back to a display name — checks
+// team accounts (foremen/admins/staff) first, then the employee roster.
+function _trResolveDisplayName(username) {
+  var uLc = (username||'').toLowerCase();
+  var _allAccts = (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined') ? DEFAULT_TEAM_ACCOUNTS.slice() : [];
+  try {
+    var _dynAccts = JSON.parse(localStorage.getItem('pavescope_accounts') || '[]');
+    if (Array.isArray(_dynAccts)) _allAccts = _allAccts.concat(_dynAccts);
+  } catch(e) {}
+  var _acct = _allAccts.find(function(a){ return (a.username||'').toLowerCase() === uLc; });
+  if (_acct && _acct.displayName) return _acct.displayName;
+  var _empList = (typeof employees !== 'undefined' ? employees : []);
+  var _emp = _empList.find(function(e){
+    return typeof _deriveCrewUsername === 'function' && _deriveCrewUsername(e.name).toLowerCase() === uLc;
   });
+  if (_emp) return _emp.name;
+  return username;
+}
 
-  // Foreman report crew hours
-  var _fReports = [];
-  try { _fReports = JSON.parse(localStorage.getItem('dmc_foreman_reports') || '[]'); } catch(e) {}
-  _fReports.filter(function(r) { return r.status === 'complete'; })
-    .forEach(function(r) {
-      (r.crew || []).forEach(function(c) {
-        entries.push({
-          employeeName: c.name,
-          username: c.name.toLowerCase().replace(/\s+/g, ''),
-          date: r.date, hours: parseFloat(c.hours) || 0,
-          jobLocation: r.projectLocation || '—',
-          jobNum: r.jobNum || '—',
-          gcName: r.gcName || '—',
-          source: 'foreman_report',
-          foremanName: r.foremanName || '—'
-        });
-      });
-    });
+// Admin sees everyone; a foreman sees their own crew + themself; anyone else
+// sees only their own hours. Returns null for "no restriction" (admin).
+function _trAllowedUsernames() {
+  if (typeof isAdmin === 'function' && isAdmin()) return null;
+  var _cu = localStorage.getItem('dmc_u') || '';
+  var _cuLc = _cu.toLowerCase();
+  var _role = typeof getCurrentRole === 'function' ? getCurrentRole() : '';
+  if (_role === 'foreman' && typeof getCrewForForeman === 'function') {
+    var _crew = getCrewForForeman(_cu);
+    var _allowed = _crew.map(function(c){ return (c.username||'').toLowerCase(); });
+    if (_allowed.indexOf(_cuLc) === -1) _allowed.push(_cuLc);
+    return _allowed;
+  }
+  return [_cuLc];
+}
 
-  // Helio Monteiro (qc_manager) self-reported hours
-  var _hHours = {};
-  try { _hHours = JSON.parse(localStorage.getItem('dmc_hmonteiro_daily_hours') || '{}'); } catch(e) {}
-  Object.keys(_hHours).forEach(function(date) {
-    var h = parseFloat(_hHours[date]) || 0;
-    if (h > 0) {
-      entries.push({
-        employeeName: 'Helio Monteiro', username: 'hmonteiro',
-        date: date, hours: h,
-        jobLocation: '—', jobNum: '—', gcName: '—',
-        source: 'self', foremanName: '—'
-      });
-    }
-  });
+// One employee's card — daily rows (date, hours, foreman, job info) + week total.
+function _trEmployeeCardHtml(card) {
+  var _rowsHtml = card.rows.map(function(row) {
+    var _dLabel = new Date(row.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    var _jobBits = [];
+    if (row.jobNum)  _jobBits.push('#' + row.jobNum);
+    if (row.gcName)  _jobBits.push(row.gcName);
+    if (row.jobName) _jobBits.push(row.jobName);
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;">'+
+        '<div>'+
+          '<div style="color:var(--white);font-family:\'DM Mono\',monospace;">'+escHtml(_dLabel)+'</div>'+
+          (row.foreman ? '<div style="color:var(--concrete-dim);font-size:11px;margin-top:2px;">Foreman: '+escHtml(row.foreman)+'</div>' : '')+
+          (_jobBits.length ? '<div style="color:var(--concrete-dim);font-size:11px;margin-top:2px;">'+escHtml(_jobBits.join(' · '))+'</div>' : '')+
+        '</div>'+
+        '<div style="color:#a78bfa;font-weight:700;white-space:nowrap;">'+_frExactNum(row.hours)+' hrs</div>'+
+      '</div>';
+  }).join('');
+  return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:12px;">'+
+    '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:8px;">'+escHtml(card.displayName)+'</div>'+
+    _rowsHtml+
+    '<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:var(--white);">'+
+      '<span>Week Total:</span><span style="color:#a78bfa;">'+_frExactNum(card.weekTotal)+' hrs</span>'+
+    '</div>'+
+  '</div>';
+}
 
-  // Sort all entries by date descending
-  entries.sort(function(a, b) { return a.date > b.date ? -1 : a.date < b.date ? 1 : 0; });
-  return entries;
+// Prints the given cards' week as a clean 8.5x11 payroll-ready report.
+function _trPrintTimeReport(cards, startDate, endDate) {
+  var _label = _trWeekLabel(startDate, endDate);
+  var _sections = cards.length ? cards.map(function(card) {
+    var _rows = card.rows.map(function(row) {
+      var _dLabel = new Date(row.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+      var _jobBits = [];
+      if (row.jobNum)  _jobBits.push('#' + row.jobNum);
+      if (row.gcName)  _jobBits.push(row.gcName);
+      if (row.jobName) _jobBits.push(row.jobName);
+      return '<tr><td>'+escHtml(_dLabel)+'</td><td class="num">'+_frExactNum(row.hours)+'</td><td>'+escHtml(row.foreman||'')+'</td><td>'+escHtml(_jobBits.join(' · '))+'</td></tr>';
+    }).join('');
+    return '<section><div class="emp-name">'+escHtml(card.displayName)+'</div>'+
+      '<table><thead><tr><th>Date</th><th>Hours</th><th>Foreman</th><th>Job</th></tr></thead><tbody>'+_rows+'</tbody></table>'+
+      '<div class="week-total">Week Total: '+_frExactNum(card.weekTotal)+' hrs</div>'+
+    '</section>';
+  }).join('') : '<div style="text-align:center;color:#999;padding:60px 0;">No time records found for this week</div>';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Time Report — '+escHtml(_label)+'</title><style>'+
+    '*{margin:0;padding:0;box-sizing:border-box;}'+
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#111;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+    '@page{size:8.5in 11in;margin:0.5in;}'+
+    '.hdr{border-bottom:2px solid #1a1a2e;padding-bottom:6px;margin-bottom:14px;}'+
+    '.hdr-name{font-family:Arial Black,sans-serif;font-size:16pt;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#1a1a2e;}'+
+    '.hdr-sub{font-size:11pt;font-weight:700;color:#1a1a2e;margin-top:4px;}'+
+    'section{margin-bottom:16px;page-break-inside:avoid;}'+
+    '.emp-name{font-size:10pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#1a1a2e;color:#fff;padding:3px 8px;margin-bottom:4px;}'+
+    'table{width:100%;border-collapse:collapse;font-size:8pt;}'+
+    'th{background:#f5f5f5;border:1px solid #ccc;padding:2px 6px;font-size:7pt;text-transform:uppercase;font-weight:bold;text-align:left;}'+
+    'td{border:1px solid #ccc;padding:2px 6px;}'+
+    'td.num{text-align:center;font-weight:700;}'+
+    '.week-total{margin-top:4px;font-size:9pt;font-weight:700;text-align:right;}'+
+  '</style></head><body>'+
+    '<div class="hdr"><div class="hdr-name">Don Martin Corporation</div><div class="hdr-sub">Weekly Time Report — '+escHtml(_label)+'</div></div>'+
+    _sections+
+  '</body></html>';
+
+  _openWin(html, { print:true, delay:350 });
 }
 
 function renderTimeReports(container) {
@@ -7370,96 +7416,53 @@ function renderTimeReports(container) {
     _trFilterStart = _wr.start;
     _trFilterEnd   = _wr.end;
   }
+  var weekKey = (typeof getISOWeekKey === 'function') ? getISOWeekKey(_trFilterStart) : '';
 
-  var allEntries = _trLoadEntries();
+  var hoursMap = {};
+  try { hoursMap = JSON.parse(localStorage.getItem('dmc_employee_hours') || '{}'); } catch(e) {}
 
-  var _isQCMgr = typeof getCurrentRole === 'function' && getCurrentRole() === 'qc_manager' && !(typeof isAdmin === 'function' && isAdmin());
-  var _currentUser = (localStorage.getItem('dmc_u') || '').toLowerCase();
-  if (_isQCMgr) {
-    allEntries = allEntries.filter(function(e) { return (e.username || '').toLowerCase() === _currentUser; });
-  }
+  var _isAdminUser = typeof isAdmin === 'function' && isAdmin();
+  var _allowedUsernames = _trAllowedUsernames();
 
-  var empNames = [];
-  allEntries.forEach(function(e) { if (empNames.indexOf(e.employeeName) === -1) empNames.push(e.employeeName); });
-  empNames.sort();
+  // Build one card per employee who has hours this week (job context comes
+  // from dailyHours[date], saved alongside hours in saveForemanReport()).
+  var _cards = Object.keys(hoursMap).filter(function(un) {
+    if (_allowedUsernames && _allowedUsernames.indexOf(un.toLowerCase()) === -1) return false;
+    return hoursMap[un] && hoursMap[un][weekKey] && hoursMap[un][weekKey].dailyHours;
+  }).map(function(un) {
+    var _daily = hoursMap[un][weekKey].dailyHours || {};
+    var _rows = [];
+    var _weekTotal = 0;
+    Object.keys(_daily).sort().forEach(function(dk) {
+      var d = _daily[dk];
+      var _isObj = d && typeof d === 'object';
+      var _hrs = parseFloat(_isObj ? d.hours : d) || 0;
+      var _fore = _isObj ? (d.foreman||'') : '';
+      if (_trFilterForeman && _fore !== _trFilterForeman) return; // skip days not on the selected foreman's reports
+      _weekTotal += _hrs;
+      _rows.push({
+        date: dk, hours: _hrs, foreman: _fore,
+        jobNum:  _isObj ? (d.jobNum||'')  : '',
+        jobName: _isObj ? (d.jobName||'') : '',
+        gcName:  _isObj ? (d.gcName||'')  : ''
+      });
+    });
+    if (!_rows.length) return null;
+    return { username: un, displayName: _trResolveDisplayName(un), rows: _rows, weekTotal: _weekTotal };
+  }).filter(Boolean);
 
-  var filtered = allEntries.filter(function(e) { return e.date >= _trFilterStart && e.date <= _trFilterEnd; });
-  if (_trFilterEmp) filtered = filtered.filter(function(e) { return e.employeeName === _trFilterEmp; });
+  _cards.sort(function(a, b){ return a.displayName.localeCompare(b.displayName); });
 
-  var byEmp = {};
-  filtered.forEach(function(e) { if (!byEmp[e.employeeName]) byEmp[e.employeeName] = []; byEmp[e.employeeName].push(e); });
-  var empList = Object.keys(byEmp).sort();
-
-  var grandTotal = filtered.reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
-
-  var empDropdown = '<option value="">All Employees</option>'
-    + empNames.map(function(n) {
-        return '<option value="' + escHtml(n) + '"' + (_trFilterEmp === n ? ' selected' : '') + '>' + escHtml(n) + '</option>';
-      }).join('');
-
-  var cellStyle = 'padding:5px 8px;border-bottom:1px solid rgba(255,255,255,0.05);';
-  var thStyle   = 'padding:4px 8px;font-family:\'DM Mono\',monospace;font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);border-bottom:1px solid var(--asphalt-light);text-align:left;';
-
-  var accentColor = '#a78bfa';
-
-  var empSections = '';
-  if (empList.length === 0) {
-    empSections = '<div style="padding:40px 16px;text-align:center;font-family:\'DM Mono\',monospace;font-size:12px;color:var(--concrete-dim);">No time records found for this period</div>';
-  } else {
-    empSections = empList.map(function(empName) {
-      var rows = byEmp[empName].slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; });
-      var empTotal = rows.reduce(function(s, r) { return s + (parseFloat(r.hours) || 0); }, 0);
-      var isOpen = _trExpanded[empName] !== false;
-
-      var tableHtml = '';
-      if (isOpen) {
-        tableHtml = '<table style="width:100%;border-collapse:collapse;">'
-          + '<thead><tr>'
-          + '<th style="' + thStyle + '">Date</th>'
-          + '<th style="' + thStyle + 'text-align:center;">Day</th>'
-          + '<th style="' + thStyle + 'text-align:center;">Hours</th>'
-          + '<th style="' + thStyle + '">Job Location</th>'
-          + '<th style="' + thStyle + '">Job #</th>'
-          + '<th style="' + thStyle + '">GC</th>'
-          + '<th style="' + thStyle + '">Foreman</th>'
-          + '</tr></thead><tbody>'
-          + rows.map(function(r) {
-              return '<tr>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete);">' + _trFmtDate(r.date) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);text-align:center;">' + _trDayName(r.date) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:' + accentColor + ';text-align:center;">' + (parseFloat(r.hours) || 0).toFixed(1) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--white);">' + escHtml(r.jobLocation) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.jobNum) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.gcName) + '</td>'
-                + '<td style="' + cellStyle + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);">' + escHtml(r.foremanName) + '</td>'
-                + '</tr>';
-            }).join('')
-          + '<tr>'
-          + '<td colspan="7" style="padding:6px 8px;text-align:right;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:' + accentColor + ';border-top:1px solid var(--asphalt-light);">Total Hours: ' + empTotal.toFixed(1) + '</td>'
-          + '</tr>'
-          + '</tbody></table>';
-      }
-
-      return '<div style="border:1px solid var(--asphalt-light);border-radius:var(--radius);overflow:hidden;background:var(--asphalt);margin-bottom:6px;">'
-        + '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--asphalt-mid);'
-        + (isOpen ? 'border-bottom:1px solid var(--asphalt-light);' : '') + '" onclick="window._trToggleEmp(' + JSON.stringify(empName) + ')">'
-        + '<span style="font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;color:var(--white);flex:1;">' + escHtml(empName) + '</span>'
-        + '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + accentColor + ';font-weight:700;">' + empTotal.toFixed(1) + ' hrs</span>'
-        + '<span style="color:var(--concrete-dim);font-size:14px;margin-left:6px;">' + (isOpen ? '∨' : '›') + '</span>'
-        + '</div>'
-        + tableHtml
-        + '</div>';
-    }).join('');
-  }
-
-  var grandTotalBar = empList.length > 0
-    ? '<div style="margin-top:16px;padding:12px 16px;background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;">'
-    + '<span style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">' + (_isQCMgr ? 'My Total' : 'All Employees Total') + '</span>'
-    + '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:' + accentColor + ';font-weight:700;">' + grandTotal.toFixed(1) + ' hours</span>'
-    + '</div>'
-    : '';
+  var _cardsHtml = _cards.length
+    ? _cards.map(_trEmployeeCardHtml).join('')
+    : '<div style="padding:40px 16px;text-align:center;font-family:\'DM Mono\',monospace;font-size:12px;color:var(--concrete-dim);">No time records found for this week</div>';
 
   var btnStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete);font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;';
+  var accentColor = '#a78bfa';
+  var _foremanChoices = ['', 'Filipe Joaquim', 'Louie Medeiros'];
+  var _foremanDropdown = _foremanChoices.map(function(f) {
+    return '<option value="'+escHtml(f)+'"'+(f===_trFilterForeman?' selected':'')+'>'+escHtml(f||'All Foremen')+'</option>';
+  }).join('');
 
   container.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;min-height:0;height:100%;">'
     + '<div style="padding:12px 16px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--asphalt-mid);">'
@@ -7467,35 +7470,21 @@ function renderTimeReports(container) {
     +     '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--white);">⏱ Time Reports</div>'
     +     '<button style="background:none;border:none;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:10px;cursor:pointer;padding:0;margin-top:2px;" onclick="_rpBackToGallery()">← Back to Reports</button>'
     +   '</div>'
-    +   '<button onclick="window._trExportCsv()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:var(--radius);color:' + accentColor + ';font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:7px 14px;cursor:pointer;white-space:nowrap;">📥 Export CSV</button>'
+    +   '<button onclick="window._trPrintTimeReport()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.35);border-radius:var(--radius);color:' + accentColor + ';font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;padding:7px 14px;cursor:pointer;white-space:nowrap;">🖨️ Print Time Report</button>'
     + '</div>'
     + '<div style="padding:10px 16px;border-bottom:1px solid var(--asphalt-light);display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;">'
     +   '<button onclick="window._trShiftWeek(-1)" style="' + btnStyle + '">← Prev Week</button>'
-    +   '<label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">From</label>'
-    +   '<input type="date" value="' + _trFilterStart + '" onchange="window._trSetFilter(\'start\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
-    +   '<label style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--concrete-dim);">To</label>'
-    +   '<input type="date" value="' + _trFilterEnd + '" onchange="window._trSetFilter(\'end\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">'
+    +   '<span style="font-family:\'DM Mono\',monospace;font-size:11px;font-weight:700;color:var(--white);">' + escHtml(_trWeekLabel(_trFilterStart, _trFilterEnd)) + '</span>'
     +   '<button onclick="window._trShiftWeek(1)" style="' + btnStyle + '">Next Week →</button>'
-    +   (!_isQCMgr
-          ? '<select onchange="window._trSetFilter(\'emp\',this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">' + empDropdown + '</select>'
-          : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(167,139,250,0.7);">My Hours Only</span>')
+    +   (_isAdminUser
+          ? '<select onchange="window._trSetForeman(this.value)" style="background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Mono\',monospace;font-size:11px;padding:5px 8px;">' + _foremanDropdown + '</select>'
+          : '')
     + '</div>'
     + '<div style="flex:1;overflow-y:auto;padding:12px 16px;min-height:0;">'
-    +   empSections
-    +   grandTotalBar
+    +   _cardsHtml
     + '</div>'
     + '</div>';
 
-  window._trToggleEmp = function(empName) {
-    _trExpanded[empName] = (_trExpanded[empName] === false) ? true : false;
-    renderTimeReports(container);
-  };
-  window._trSetFilter = function(key, val) {
-    if (key === 'start') _trFilterStart = val;
-    else if (key === 'end') _trFilterEnd = val;
-    else _trFilterEmp = val;
-    renderTimeReports(container);
-  };
   window._trShiftWeek = function(dir) {
     function _shiftDate(dateStr, days) {
       var d = new Date(dateStr + 'T12:00:00');
@@ -7507,34 +7496,11 @@ function renderTimeReports(container) {
     _trFilterEnd   = _shiftDate(_trFilterEnd,   dir * 7);
     renderTimeReports(container);
   };
-  window._trExportCsv = function() {
-    var csvRows = [['Employee','Date','Day','Hours','Job Location','Job #','GC','Foreman','Source']];
-    empList.forEach(function(empName) {
-      byEmp[empName].slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; }).forEach(function(r) {
-        csvRows.push([
-          r.employeeName,
-          _trFmtDate(r.date),
-          _trDayName(r.date),
-          (parseFloat(r.hours) || 0).toFixed(1),
-          r.jobLocation,
-          r.jobNum,
-          r.gcName,
-          r.foremanName,
-          r.source
-        ]);
-      });
-    });
-    var csv = csvRows.map(function(row) {
-      return row.map(function(cell) {
-        var s = String(cell === null || cell === undefined ? '' : cell).replace(/"/g, '""');
-        return /[,"\n]/.test(s) ? '"' + s + '"' : s;
-      }).join(',');
-    }).join('\n');
-    var a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-    a.download = 'TimeReport_' + _trFilterStart + '_to_' + _trFilterEnd + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  window._trSetForeman = function(val) {
+    _trFilterForeman = val;
+    renderTimeReports(container);
+  };
+  window._trPrintTimeReport = function() {
+    _trPrintTimeReport(_cards, _trFilterStart, _trFilterEnd);
   };
 }

@@ -24938,7 +24938,14 @@ function saveForemanReport(report) {
     hoursMap[username][report.weekKey].hours += hrs;
     hoursMap[username][report.weekKey].reportIds.push(report.id);
     hoursMap[username][report.weekKey].dailyHours = hoursMap[username][report.weekKey].dailyHours || {};
-    hoursMap[username][report.weekKey].dailyHours[report.date] = (hoursMap[username][report.weekKey].dailyHours[report.date] || 0) + hrs;
+    hoursMap[username][report.weekKey].dailyHours[report.date] = {
+      hours: hrs,
+      foreman: report.foreman || report.foremanDisplay,
+      jobNum: report.jobNum,
+      jobName: report.jobName,
+      gcName: report.gcName,
+      reportId: report.id
+    };
   });
 
   // Credit the foreman's own hours (they don't appear as a crew row) same as crew
@@ -24949,7 +24956,14 @@ function saveForemanReport(report) {
     hoursMap[_foremanUsername][report.weekKey].hours += report.foremanHours;
     hoursMap[_foremanUsername][report.weekKey].reportIds.push(report.id);
     hoursMap[_foremanUsername][report.weekKey].dailyHours = hoursMap[_foremanUsername][report.weekKey].dailyHours || {};
-    hoursMap[_foremanUsername][report.weekKey].dailyHours[report.date] = (hoursMap[_foremanUsername][report.weekKey].dailyHours[report.date] || 0) + report.foremanHours;
+    hoursMap[_foremanUsername][report.weekKey].dailyHours[report.date] = {
+      hours: report.foremanHours,
+      foreman: report.foreman || report.foremanDisplay,
+      jobNum: report.jobNum,
+      jobName: report.jobName,
+      gcName: report.gcName,
+      reportId: report.id
+    };
   }
 
   localStorage.setItem(EMPLOYEE_HOURS_KEY, JSON.stringify(hoursMap));
@@ -25398,7 +25412,8 @@ function widgetMyHours() {
 
   var _todayD = new Date();
   var todayKeyMH = _todayD.getFullYear() + '-' + String(_todayD.getMonth()+1).padStart(2,'0') + '-' + String(_todayD.getDate()).padStart(2,'0');
-  var todayHours = (myHours[thisWeek] && myHours[thisWeek].dailyHours && myHours[thisWeek].dailyHours[todayKeyMH]) || 0;
+  var _todayEntry = (myHours[thisWeek] && myHours[thisWeek].dailyHours && myHours[thisWeek].dailyHours[todayKeyMH]) || 0;
+  var todayHours = (_todayEntry && typeof _todayEntry === 'object') ? (parseFloat(_todayEntry.hours)||0) : (parseFloat(_todayEntry)||0);
   var todayHtml = '<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);">' +
     '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--concrete-dim);">Today</span>' +
     (todayHours > 0
