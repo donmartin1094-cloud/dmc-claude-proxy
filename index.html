@@ -4208,6 +4208,7 @@ let _toMeasurements = [];
 var _toPageMeasurements = {}; // keyed by page number: { 1: [...], 2: [...] } — _toMeasurements always aliases the current page's array
 let _toPdfDoc       = null;
 let _toPdfPage      = 1;
+var _toCurrentRenderTask = null; // pdf.js RenderTask for the in-flight _toRenderPage() call — cancelled before starting a new one
 let _toLineColor    = '#f5c518';
 let _toDotColor     = '#ffffff';
 let _toFillColor    = '#f5c518';
@@ -4359,7 +4360,22 @@ async function _toRenderPage(_resetView) {
   const canvas = document.getElementById('toCanvas');
   if (!canvas) return;
   canvas.width = vp.width; canvas.height = vp.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  if (_toCurrentRenderTask) {
+    try { _toCurrentRenderTask.cancel(); } catch(e) {}
+    _toCurrentRenderTask = null;
+  }
+  const _renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport: vp });
+  _toCurrentRenderTask = _renderTask;
+  try {
+    await _renderTask.promise;
+  } catch(e) {
+    if (e && e.name === 'RenderingCancelledException') return;
+    console.error('[takeoff] render error:', e);
+    _toUpdateStatus('Error: ' + (e.message || e));
+    return;
+  } finally {
+    if (_toCurrentRenderTask === _renderTask) _toCurrentRenderTask = null;
+  }
   const svg = document.getElementById('toSvgOverlay');
   if (svg) { svg.setAttribute('width', vp.width); svg.setAttribute('height', vp.height); svg.style.width = vp.width+'px'; svg.style.height = vp.height+'px'; }
   const pi = document.getElementById('toPageInfo');
@@ -6738,11 +6754,16 @@ async function _toConfirmSavePage() {
     folder.pages.push(_newPageRecord);
   }
   folder.updatedAt = Date.now();
-  _toFoldersSave();
+  var _saveOk = _toFoldersSave();
   var _dlg = document.getElementById('toSaveDlg');
   if (_dlg) _dlg.remove();
   _toSaveTempData = null;
   _toRefreshCardStacks();
+  if (!_saveOk) {
+    _toUpdateStatus('⚠️ Save failed — device storage is full');
+    alert('This page could not be saved — your device\'s local storage is full.\n\nFree up space (clear old takeoffs or browser data) and try saving again. Your changes have NOT been saved.');
+    return;
+  }
   _toUpdateStatus('Saved to folder: ' + folder.name);
   var _smModal = document.createElement('div');
   _smModal.id = 'toSaveSuccessModal';

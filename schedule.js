@@ -2424,7 +2424,23 @@ function saveAiaReqs() {
 const TAKEOFFS_KEY = 'dmc_takeoffs';
 var takeoffFolders = [];
 function _toFoldersLoad() { try { takeoffFolders = JSON.parse(localStorage.getItem(TAKEOFFS_KEY)||'[]'); } catch(e) { takeoffFolders=[]; } }
-function _toFoldersSave() { localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders)); _checkLocalStorageSize(); try { if (typeof db !== 'undefined' && db) fbSet('takeoff_folders', takeoffFolders); } catch(e) {} }
+function _toFoldersSave() {
+  var _localOk = true;
+  try {
+    localStorage.setItem(TAKEOFFS_KEY, JSON.stringify(takeoffFolders));
+    _checkLocalStorageSize();
+  } catch(e) {
+    _localOk = false;
+    if (typeof _logFbError === 'function') _logFbError('_toFoldersSave localStorage', e);
+    console.error('[takeoff] localStorage save failed — quota exceeded?', e);
+  }
+  try {
+    if (typeof db !== 'undefined' && db) fbSet('takeoff_folders', takeoffFolders);
+  } catch(e) {
+    if (typeof _logFbError === 'function') _logFbError('_toFoldersSave Firebase', e);
+  }
+  return _localOk;
+}
 _toFoldersLoad();
 _slipsLoad();
 
