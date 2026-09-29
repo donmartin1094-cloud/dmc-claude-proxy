@@ -5365,6 +5365,11 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
     // foreman->slot convention already used by _invGetSchedFields/_inv3DayBlock.
     var _rainedTop    = !!(typeof schedData !== 'undefined' && schedData[dk] && schedData[dk].top    && schedData[dk].top.rainedOut);
     var _rainedBottom = !!(typeof schedData !== 'undefined' && schedData[dk] && schedData[dk].bottom && schedData[dk].bottom.rainedOut);
+    // Set by _inv3DeleteStub() when a stub is deleted with no invoice recreated
+    // afterward — otherwise Priority 2 below just re-renders an equivalent grey
+    // block from the still-existing foremanReports record every time.
+    var _noInvTop    = !!(typeof schedData !== 'undefined' && schedData[dk] && schedData[dk].top    && schedData[dk].top.noInvoiceNeeded);
+    var _noInvBottom = !!(typeof schedData !== 'undefined' && schedData[dk] && schedData[dk].bottom && schedData[dk].bottom.noInvoiceNeeded);
     var _rainStyle = 'background:rgba(59,130,246,0.1);border:1px solid #3b82f6;border-radius:4px;padding:3px 6px;font-size:10px;color:#93c5fd;font-family:\'DM Mono\',monospace;text-align:center;width:100%;box-sizing:border-box;margin-bottom:2px;';
     if (_rainedTop && _rainedBottom) {
       html += '<div style="'+_rainStyle+'">🌧 Rain Out</div>';
@@ -5401,6 +5406,7 @@ function _inv3RenderMonthGrid(monthKey, canEdit) {
       if (_rendered[fKey]) return;
       _rendered[fKey] = true;
       if (fKey.indexOf('filipe') !== -1 ? _rainedTop : _rainedBottom) return;
+      if (fKey.indexOf('filipe') !== -1 ? _noInvTop : _noInvBottom) return;
       html += _inv3DayBlock(dk, r, null, canEdit);
     });
 
@@ -5657,9 +5663,15 @@ function _inv3EditStub(dateKey, slot, foremanName) {
 
 // Deletes the invoiceList stub tied to this date+foreman (created by
 // _inv3OnVerify() or a prior _inv3SaveStubEdit()) — same removal shape as
-// _invModalDelete() (filter by id, saveInvoiceList(), renderInvoiceTracker())
-// so the calendar block disappears immediately. Only reachable when the Edit
-// Stub overlay found an existing entry, so there is always something to remove.
+// _invModalDelete() (filter by id, saveInvoiceList(), renderInvoiceTracker()).
+// Removing the invoiceList record alone is not enough: if a verified
+// foremanReports record still exists for this date+foreman, the calendar's
+// Priority-2 fallback (_inv3RenderMonthGrid, "empty block for verified
+// reports that have no invoice yet") immediately re-renders an equivalent
+// grey block from that report, so the delete appears to do nothing. Setting
+// schedData[dateKey][slot].noInvoiceNeeded tells that fallback to skip this
+// slot until a new invoice is (re)created for it — see the two call sites
+// below that clear the flag.
 function _inv3DeleteStub(dateKey, slot, foremanName) {
   if (!confirm('Delete this invoice? This cannot be undone.')) return;
   var _existing = (invoiceList||[]).find(function(i){
@@ -5668,6 +5680,12 @@ function _inv3DeleteStub(dateKey, slot, foremanName) {
   if (!_existing) { document.getElementById('_inv3EditStubOverlay')?.remove(); return; }
   invoiceList = invoiceList.filter(function(i) { return i.id !== _existing.id; });
   saveInvoiceList();
+  if (typeof schedData !== 'undefined') {
+    if (!schedData[dateKey]) schedData[dateKey] = {};
+    if (!schedData[dateKey][slot]) schedData[dateKey][slot] = {};
+    schedData[dateKey][slot].noInvoiceNeeded = true;
+    if (typeof saveSchedData === 'function') saveSchedData();
+  }
   document.getElementById('_inv3EditStubOverlay')?.remove();
   renderInvoiceTracker();
 }
@@ -5715,6 +5733,12 @@ function _inv3SaveStubEdit(dateKey, slot, foremanName) {
 
   if (_existingIdx >= 0) invoiceList[_existingIdx] = _stub; else invoiceList.unshift(_stub);
   saveInvoiceList();
+  // Saving here (re)creates an invoice for this slot, so a prior
+  // _inv3DeleteStub() dismissal no longer applies.
+  if (typeof schedData !== 'undefined' && schedData[dateKey] && schedData[dateKey][slot] && schedData[dateKey][slot].noInvoiceNeeded) {
+    schedData[dateKey][slot].noInvoiceNeeded = false;
+    if (typeof saveSchedData === 'function') saveSchedData();
+  }
   document.getElementById('_inv3EditStubOverlay')?.remove();
   renderInvoiceTracker();
 }
@@ -5889,6 +5913,13 @@ function _inv3OnVerify(r) {
   var _slot = (r.foreman||'').toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom';
   var _schedSlot = (typeof schedData!=='undefined' && schedData[r.date]) ? schedData[r.date][_slot] : null;
   var _f = (_schedSlot && _schedSlot.fields) ? _schedSlot.fields : {};
+  // A prior stub for this slot may have been deleted (_inv3DeleteStub), which
+  // sets noInvoiceNeeded so the report-only fallback stops recreating it.
+  // We're creating a fresh invoice here, so that dismissal no longer applies.
+  if (_schedSlot && _schedSlot.noInvoiceNeeded) {
+    _schedSlot.noInvoiceNeeded = false;
+    if (typeof saveSchedData === 'function') saveSchedData();
+  }
 
   var stub = {
     id: 'inv_stub_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
