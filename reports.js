@@ -5581,7 +5581,7 @@ function _inv3DayBlock(dateKey, report, invoice, canEdit) {
     }
     var _trParts = [];
     if (_tdBlk) {
-      var _dmcUsers = ['ttengburg', 'swall', 'igiron'];
+      var _dmcUsers = ['ttengburg', 'swall', 'igiron', 'hmathews'];
       var _dmc = Array.isArray(_tdBlk.assignedDrivers) ? _tdBlk.assignedDrivers.filter(function(u) { return _dmcUsers.indexOf((u || '').toLowerCase()) !== -1; }).length : 0;
       var _brkC = {};
       (_tdBlk.brokerTrucks || []).forEach(function(b) { if (b && b.trim()) _brkC[b.trim()] = (_brkC[b.trim()] || 0) + 1; });
