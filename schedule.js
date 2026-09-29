@@ -12133,7 +12133,7 @@ document.addEventListener('DOMContentLoaded', function() {
       '<button id="_saiClose" onclick="window._schedAI.close()">✕</button>' +
     '</div>' +
     '<div id="_saiActions">' +
-      '<button id="_saiLowbedBtn" onclick="window._schedAI.generateLowbed()" title="AI generates lowbed driver assignments from the schedule">🚛 Generate Lowbed Assignments</button>' +
+      '<button id="_saiLowbedBtn" onclick="window._schedAI.generateLowbed()" title="Compiles a read-only list of equipment moves needed from the schedule">🚛 Generate Lowbed Assignments</button>' +
       '<button id="_saiVerifyBtn" onclick="window._schedAI.verify()" title="Review and verify the pending lowbed plan">📋 Verify Moves</button>' +
     '</div>' +
     '<div id="_saiMsgs"></div>' +
@@ -12870,7 +12870,7 @@ Return ONLY valid JSON (no markdown fences, no explanation):
     open: _open,
     close: _close,
     send: () => { if (!_canUseAI()) return; const t=document.getElementById('_saiText')?.value; if(t?.trim()) sendMessage(t); },
-    generateLowbed: () => { if (!_canUseAI()) return; _generateLowbedAssignments(); },
+    generateLowbed: () => { if (!_canUseAI()) return; _lowbedShowPreGenModal(); },
     verify: () => { if (!_canUseAI()) return; _openLowbedVerification(); }
   };
 
@@ -12893,6 +12893,247 @@ Return ONLY valid JSON (no markdown fences, no explanation):
   })();
 })();
 });
+
+// ── Lowbed move-list generator (deterministic, read-only) ───────────────────
+// Wired to the same "Generate Lowbed Assignments" button as the old AI plan
+// flow (_generateLowbedAssignments, now unused — see window._schedAI.generateLowbed
+// above). This version does no AI call and writes nothing to schedData or
+// lowbedGroups: it diffs fields.equipment across consecutive schedule days to
+// compile a read-only list of which equipment needs to move where, for the
+// admin to hand off to lowbed drivers manually. The separate "Verify Moves"
+// button/_openLowbedVerification() manual-assignment flow is untouched.
+// Declared at top level (not inside the Schedule AI IIFE above) so the
+// modals' inline onclick handlers — which run in global scope — can find them.
+var _lowbedPreGenState = { days: null, startToday: false };
+var _lowbedLastMoves = [];
+var _lowbedLastRangeLabel = '';
+
+function _lowbedOptBtnStyle(selected) {
+  return selected
+    ? 'background:rgba(167,139,250,0.2);border:1px solid #a78bfa;color:#a78bfa;'
+    : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);';
+}
+
+function _lowbedShowPreGenModal() {
+  document.getElementById('_lowbedPreGenOverlay')?.remove();
+  _lowbedPreGenState = { days: null, startToday: false };
+  var overlay = document.createElement('div');
+  overlay.id = '_lowbedPreGenOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9800;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = _lowbedPreGenHtml();
+  document.body.appendChild(overlay);
+}
+
+function _lowbedPreGenHtml() {
+  var s = _lowbedPreGenState;
+  var dayBtn = function(n) {
+    return '<button onclick="_lowbedSetDays(' + n + ')" style="flex:1;padding:10px 6px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;' + _lowbedOptBtnStyle(s.days === n) + '">' + n + ' Day' + (n > 1 ? 's' : '') + '</button>';
+  };
+  var startBtn = function(label, isToday) {
+    return '<button onclick="_lowbedSetStart(' + isToday + ')" style="flex:1;padding:10px 6px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;' + _lowbedOptBtnStyle(s.startToday === isToday) + '">' + label + '</button>';
+  };
+  var genDisabled = s.days === null;
+  var genStyle = genDisabled
+    ? 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);opacity:0.5;cursor:not-allowed;'
+    : 'background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);color:#7ecb8f;cursor:pointer;';
+  return '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px;max-width:400px;width:100%;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--stripe);margin-bottom:18px;">🚛 Generate Lowbed Move List</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);margin-bottom:8px;">How many days to generate?</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:18px;">' + [1, 2, 3].map(dayBtn).join('') + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);margin-bottom:8px;">Start from:</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:22px;">' + startBtn('Today', true) + startBtn('Tomorrow', false) + '</div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button onclick="document.getElementById(\'_lowbedPreGenOverlay\').remove()" style="flex:1;padding:10px;background:none;border:1px solid var(--asphalt-light);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">Cancel</button>' +
+        '<button onclick="_lowbedRunGenerate()"' + (genDisabled ? ' disabled' : '') + ' style="flex:2;padding:10px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;' + genStyle + '">⚙️ Generate</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function _lowbedRefreshPreGenModal() {
+  var overlay = document.getElementById('_lowbedPreGenOverlay');
+  if (overlay) overlay.innerHTML = _lowbedPreGenHtml();
+}
+
+function _lowbedSetDays(n) {
+  _lowbedPreGenState.days = n;
+  _lowbedRefreshPreGenModal();
+}
+
+function _lowbedSetStart(isToday) {
+  _lowbedPreGenState.startToday = isToday;
+  _lowbedRefreshPreGenModal();
+}
+
+function _lowbedRunGenerate() {
+  var s = _lowbedPreGenState;
+  if (s.days === null) return;
+  document.getElementById('_lowbedPreGenOverlay')?.remove();
+  var start = new Date();
+  start.setHours(0, 0, 0, 0);
+  if (!s.startToday) start.setDate(start.getDate() + 1);
+  _lowbedShowResultsModal(start, s.days);
+}
+
+// Builds { equipmentName: {jobName, jobNum} } for one schedule day, reading
+// the same comma-separated fields.equipment convention used elsewhere in this
+// file (see schedCommitted in the old _generateLowbedAssignments above).
+function _lowbedEquipMapForDate(dateKey) {
+  var day = (typeof schedData !== 'undefined' ? schedData[dateKey] : null) || {};
+  var slots = [day.top, day.bottom].concat((day.extras || []).map(function(x) { return x && x.data; })).filter(Boolean);
+  var map = {};
+  slots.forEach(function(b) {
+    if (!b || b.type === 'blank' || !b.type) return;
+    var f = b.fields || {};
+    if (!f.equipment) return;
+    var jobName = f.jobName || f.jobNum || 'Unknown';
+    var jobNum = f.jobNum || '';
+    f.equipment.split(',').forEach(function(eq) {
+      var en = eq.trim();
+      if (!en) return;
+      map[en] = { jobName: jobName, jobNum: jobNum };
+    });
+  });
+  return map;
+}
+
+// Diffs one day's equipment map against the prior day's: a move is needed
+// when equipment is newly assigned, assigned to a different job than the day
+// before, or was assigned the day before and is no longer assigned today
+// (returns to Yard).
+function _lowbedDiffDay(dateKey, prevMap, currMap) {
+  var moves = [];
+  var seen = {};
+  Object.keys(currMap).sort().forEach(function(eq) {
+    seen[eq] = true;
+    var prev = prevMap[eq];
+    var curr = currMap[eq];
+    var prevKey = prev ? (prev.jobNum || prev.jobName) : null;
+    var currKey = curr.jobNum || curr.jobName;
+    if (!prev || prevKey !== currKey) {
+      moves.push({
+        equipmentName: eq,
+        from: prev ? prev.jobName : 'Yard',
+        to: curr.jobName + (curr.jobNum ? ' (#' + curr.jobNum + ')' : ''),
+        date: dateKey
+      });
+    }
+  });
+  Object.keys(prevMap).sort().forEach(function(eq) {
+    if (seen[eq]) return;
+    moves.push({ equipmentName: eq, from: prevMap[eq].jobName, to: 'Yard', date: dateKey });
+  });
+  return moves;
+}
+
+// Pure read of schedData — no writes, no schedData/lowbedGroups mutation.
+function _lowbedCompileMoves(startDate, dayCount) {
+  var allMoves = [];
+  var prevDate = new Date(startDate);
+  prevDate.setDate(prevDate.getDate() - 1);
+  var prevMap = _lowbedEquipMapForDate(dk(prevDate));
+  for (var i = 0; i < dayCount; i++) {
+    var d = new Date(startDate);
+    d.setDate(startDate.getDate() + i);
+    var dateKey = dk(d);
+    var currMap = _lowbedEquipMapForDate(dateKey);
+    allMoves = allMoves.concat(_lowbedDiffDay(dateKey, prevMap, currMap));
+    prevMap = currMap;
+  }
+  return allMoves;
+}
+
+function _lowbedFmtDateLong(d) {
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).replace(',', '');
+}
+
+function _lowbedGroupMovesByDate(moves) {
+  var byDate = {}, dateOrder = [];
+  moves.forEach(function(m) {
+    if (!byDate[m.date]) { byDate[m.date] = []; dateOrder.push(m.date); }
+    byDate[m.date].push(m);
+  });
+  return { byDate: byDate, dateOrder: dateOrder };
+}
+
+function _lowbedShowResultsModal(startDate, dayCount) {
+  var moves = _lowbedCompileMoves(startDate, dayCount);
+  var endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + dayCount - 1);
+  var rangeLabel = _lowbedFmtDateLong(startDate) + (dayCount > 1 ? ' – ' + _lowbedFmtDateLong(endDate) : '');
+  _lowbedLastMoves = moves;
+  _lowbedLastRangeLabel = rangeLabel;
+
+  document.getElementById('_lowbedResultsOverlay')?.remove();
+  var overlay = document.createElement('div');
+  overlay.id = '_lowbedResultsOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9800;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+  var bodyHtml;
+  if (!moves.length) {
+    bodyHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--concrete-dim);text-align:center;padding:30px 10px;">No equipment moves needed for this period</div>';
+  } else {
+    var grouped = _lowbedGroupMovesByDate(moves);
+    bodyHtml = grouped.dateOrder.map(function(dateKey) {
+      var dLabel = _lowbedFmtDateLong(new Date(dateKey + 'T12:00:00'));
+      var rows = grouped.byDate[dateKey].map(function(m) {
+        return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-family:\'DM Mono\',monospace;font-size:12px;">' +
+          '<span style="flex:0 0 160px;color:var(--white);">🚧 ' + escHtml(m.equipmentName) + '</span>' +
+          '<span style="color:var(--concrete-dim);flex:1;">' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</span>' +
+        '</div>';
+      }).join('');
+      return '<div style="margin-bottom:16px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:4px;">' + dLabel + '</div>' +
+        '<div style="border-top:1px solid rgba(255,255,255,0.15);margin-bottom:6px;"></div>' +
+        rows +
+      '</div>';
+    }).join('');
+  }
+
+  overlay.innerHTML =
+    '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--stripe);margin-bottom:14px;">⚙️ Lowbed Moves — ' + escHtml(rangeLabel) + '</div>' +
+      '<div style="overflow-y:auto;flex:1;margin-bottom:14px;">' + bodyHtml + '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid rgba(255,255,255,0.15);padding-top:14px;">' +
+        '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);flex:1;">' + moves.length + ' move' + (moves.length !== 1 ? 's' : '') + ' required</span>' +
+        '<button onclick="_lowbedPrintMoves()" style="padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;cursor:pointer;">🖨️ Print</button>' +
+        '<button onclick="document.getElementById(\'_lowbedResultsOverlay\').remove()" style="padding:8px 14px;background:none;border:1px solid var(--asphalt-light);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;cursor:pointer;">✕ Close</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function _lowbedPrintMoves() {
+  var w = window.open('', '_blank');
+  if (!w) return;
+  var bodyHtml;
+  if (!_lowbedLastMoves.length) {
+    bodyHtml = '<p>No equipment moves needed for this period</p>';
+  } else {
+    var grouped = _lowbedGroupMovesByDate(_lowbedLastMoves);
+    bodyHtml = grouped.dateOrder.map(function(dateKey) {
+      var dLabel = _lowbedFmtDateLong(new Date(dateKey + 'T12:00:00'));
+      var rows = grouped.byDate[dateKey].map(function(m) {
+        return '<tr><td>' + escHtml(m.equipmentName) + '</td><td>' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</td></tr>';
+      }).join('');
+      return '<h3>' + dLabel + '</h3><table>' + rows + '</table>';
+    }).join('');
+  }
+  w.document.write(
+    '<html><head><title>Lowbed Moves — ' + escHtml(_lowbedLastRangeLabel) + '</title>' +
+    '<style>body{font-family:monospace;padding:24px;color:#111;} h1{font-size:18px;margin-bottom:4px;} ' +
+    'h3{margin-top:20px;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:4px;} ' +
+    'table{width:100%;border-collapse:collapse;} td{padding:4px 8px;font-size:13px;border-bottom:1px solid #eee;} ' +
+    'p.total{margin-top:20px;font-weight:700;}</style>' +
+    '</head><body>' +
+    '<h1>🚛 Lowbed Moves — ' + escHtml(_lowbedLastRangeLabel) + '</h1>' +
+    bodyHtml +
+    '<p class="total">' + _lowbedLastMoves.length + ' move' + (_lowbedLastMoves.length !== 1 ? 's' : '') + ' required</p>' +
+    '</body></html>'
+  );
+  w.document.close();
+  w.focus();
+  w.print();
+}
 
 // ── Special action edit/delete modal ─────────────────────────────────────────
 function _saEditModal(saId, dateKey, slot) {
