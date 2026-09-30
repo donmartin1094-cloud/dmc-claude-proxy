@@ -1658,9 +1658,18 @@
       top: 0 !important;
       z-index: 100 !important;
       height: auto !important;
-      min-height: 52px !important;
+      /* box-sizing is border-box (global * reset above), so the safe-area
+         padding below eats into min-height unless it's added on top here too
+         — otherwise the logo/sign-out row gets squeezed into a sliver instead
+         of pushed down. */
+      min-height: calc(52px + env(safe-area-inset-top, 44px)) !important;
       max-height: none !important;
-      padding: 0 !important;
+      /* Pushes the whole header (logo + sign-out button, both normal-flow
+         children of .hdr-top) below the iPhone status bar / Dynamic Island /
+         action button. env() resolves to 0 on devices with no inset, so this
+         is a no-op there — the 44px fallback only applies if env() itself
+         isn't supported at all. */
+      padding: env(safe-area-inset-top, 44px) 0 0 !important;
       flex-wrap: nowrap !important;
       gap: 0 !important;
       overflow: visible !important;
@@ -1693,7 +1702,10 @@
        The sub-header is the FIRST child of .app and sticks to top:52px,
        so .main (which comes after) gets the rest.                     */
     .app {
-      height: calc(100vh - 96px) !important;
+      /* header is now 52px + the safe-area inset tall (see rule above) —
+         without adding that same inset here, .app runs that much too tall
+         and its bottom edge gets clipped under the viewport. */
+      height: calc(100vh - 96px - env(safe-area-inset-top, 44px)) !important;
       flex-direction: column !important;
       overflow: hidden !important;
     }
@@ -32400,37 +32412,6 @@ function _updateThemeToggleBtn() {
   btn.style.borderColor = isLight ? '#cc8c00' : '';
 }
 
-// Auto-login (below) restores a session from localStorage.dmc_u with no
-// password available, so it can't call signInWithEmailAndPassword itself —
-// it can only wait and see whether Firebase Auth's own persisted session
-// restores on its own. If it doesn't within a few seconds, offer a dismissible
-// banner rather than silently leaving Storage uploads broken all session.
-function _watchAutoLoginAuthSession() {
-  if (typeof firebase === 'undefined' || !firebase.auth) return;
-  var _authTimeout = setTimeout(function() {
-    if (!firebase.auth().currentUser) {
-      console.warn('[auto-login] Firebase Auth session not restored — offering re-login for Storage access');
-      if (document.getElementById('autoLoginAuthBanner')) return;
-      var _banner = document.createElement('div');
-      _banner.id = 'autoLoginAuthBanner';
-      _banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:rgba(245,158,11,0.9);color:#000;padding:10px 16px;text-align:center;font-family:"DM Mono",monospace;font-size:12px;z-index:99999;cursor:pointer;';
-      _banner.textContent = '⚠️ File uploads require re-authentication — tap here to sign in again';
-      _banner.onclick = function(){
-        localStorage.removeItem('dmc_u');
-        location.reload();
-      };
-      document.body.appendChild(_banner);
-    }
-  }, 3000);
-  var _unsub = firebase.auth().onAuthStateChanged(function(user) {
-    if (user) {
-      clearTimeout(_authTimeout);
-      console.log('[auto-login] Firebase Auth session confirmed:', user.uid);
-      if (typeof _unsub === 'function') _unsub();
-    }
-  });
-}
-
 // ── Auto-login if session exists (runs after deferred CDN scripts are ready) ──
 document.addEventListener('DOMContentLoaded', function() {
   const savedUser = localStorage.getItem('dmc_u');
@@ -32443,7 +32424,6 @@ document.addEventListener('DOMContentLoaded', function() {
     )) || USERS[savedUser] || USERS[Object.keys(USERS).find(k => k.toLowerCase() === savedUser.toLowerCase()) || ''] || DEFAULT_TEAM_ACCOUNTS.find(a => (a.email||'').toLowerCase() === savedUser.toLowerCase());
     if (knownUser) {
       initApp(savedUser);
-      _watchAutoLoginAuthSession();
     } else {
       // Unknown user in localStorage — try Firebase before giving up
       (async () => {
@@ -32459,7 +32439,6 @@ document.addEventListener('DOMContentLoaded', function() {
               if (fbAccounts.find(a => (a.username||'').toLowerCase() === savedUser.toLowerCase())) {
                 saveAccounts(fbAccounts);
                 initApp(savedUser);
-                _watchAutoLoginAuthSession();
                 return;
               }
             }
