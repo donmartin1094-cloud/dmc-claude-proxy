@@ -13039,14 +13039,49 @@ function _lowbedSetStart(isToday) {
   _lowbedRefreshPreGenModal();
 }
 
-function _lowbedRunGenerate() {
+async function _lowbedRunGenerate() {
   var s = _lowbedPreGenState;
   if (s.days === null) return;
-  document.getElementById('_lowbedPreGenOverlay')?.remove();
+  var overlay = document.getElementById('_lowbedPreGenOverlay');
+  if (overlay) overlay.innerHTML = '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px 32px;font-family:\'DM Mono\',monospace;font-size:12px;color:var(--concrete-dim);text-align:center;">⏳ Loading schedule data…</div>';
   var start = new Date();
   start.setHours(0, 0, 0, 0);
   if (!s.startToday) start.setDate(start.getDate() + 1);
+  // -1 covers the baseline day _lowbedCompileMoves diffs the first
+  // generated day against, matching its own date-range math below.
+  var dateKeys = [];
+  for (var i = -1; i < s.days; i++) {
+    var d = new Date(start);
+    d.setDate(start.getDate() + i);
+    dateKeys.push(dk(d));
+  }
+  await _lowbedEnsureSchedLoaded(dateKeys);
+  document.getElementById('_lowbedPreGenOverlay')?.remove();
   _lowbedShowResultsModal(start, s.days);
+}
+
+// Re-fetches schedData for every month touched by the given date range
+// directly from Firestore (schedule_YYYY_MM docs — same ids fbSetSchedule()
+// writes) before compiling moves. index.html's own initial load races
+// Firebase against a 10s timeout and proceeds either way; on a slower
+// connection — mobile far more often than desktop — schedData can still be
+// missing whole months by the time this generator is opened, so equipment
+// genuinely assigned on desktop reads back as empty here. This re-syncs the
+// exact months needed rather than trusting whatever schedData already has.
+async function _lowbedEnsureSchedLoaded(dateKeys) {
+  if (typeof fbGet !== 'function' || typeof schedData === 'undefined') return;
+  var months = [];
+  dateKeys.forEach(function(dateKey) {
+    var m = dateKey.slice(0, 7);
+    if (months.indexOf(m) === -1) months.push(m);
+  });
+  for (var i = 0; i < months.length; i++) {
+    var docId = 'schedule_' + months[i].replace('-', '_');
+    try {
+      var monthData = await fbGet(docId, null);
+      if (monthData) Object.assign(schedData, monthData);
+    } catch (e) {}
+  }
 }
 
 // Builds { equipmentName: {jobName, jobNum} } for one schedule day, reading
