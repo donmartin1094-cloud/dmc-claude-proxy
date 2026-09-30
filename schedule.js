@@ -3942,27 +3942,36 @@ function uspmSaveComboAll(key, slot) {
 
 // ── Combined modal: Equipment section (category grid + drill-down chips) ────
 
-// Labels for this modal's four equipment category buttons specifically —
+// Labels for this modal's equipment category buttons specifically —
 // intentionally not FLEET_TYPES (used elsewhere with different wording, e.g.
-// "Material Transfer Vehicle") since this grid always shows these exact four.
-const _USPM_EQ_CAT_LABELS = { paver:'Pavers', roller:'Rollers', skid_steer:'Skid Steers', mtv:'MTVs' };
+// "Material Transfer Vehicle") since this grid always shows these exact keys.
+const _USPM_EQ_CAT_LABELS = { paver:'Pavers', roller:'Rollers', skid_steer:'Skid Steers', mtv:'MTVs', excavator:'Excavators' };
+
+// Excavator-category match: normally e.type === 'excavator' (the only matching
+// option in FLEET_TYPES), but falls back to matching by name in case a unit
+// like the Mecalac was never given that type — same fallback for both the
+// category grid's count badge and the category panel's item list below.
+function _uspmEquipMatchesCat(e, tk) {
+  if (e.type === tk) return true;
+  return tk === 'excavator' && /mecalac|excavator/i.test(e.name || '');
+}
 
 function _uspmComboEquipSectionHtml(key, slot) {
   return _uspmComboEquipCat ? _uspmComboEquipCatPanelHtml(key, slot) : _uspmComboEquipCategoryGridHtml(key, slot);
 }
 
 function _uspmComboEquipCategoryGridHtml(key, slot) {
-  const SCHED_EQ_TYPES = ['paver', 'roller', 'skid_steer', 'mtv'];
+  const SCHED_EQ_TYPES = ['paver', 'roller', 'skid_steer', 'mtv', 'excavator'];
   const fleet = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : []);
   const catLabel = tk => _USPM_EQ_CAT_LABELS[tk] || tk;
   return '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + SCHED_EQ_TYPES.map(tk => {
     const count = _uspmComboEquipSelected.filter(name => {
       const e = fleet.find(x => x.name === name);
-      return e && e.type === tk;
+      return e && _uspmEquipMatchesCat(e, tk);
     }).length;
     const hasItems = count > 0;
     const label = catLabel(tk) + (hasItems ? ' (' + count + ')' : '');
-    const style = 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 16px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:12px;width:calc(50% - 4px);box-sizing:border-box;text-align:center;color:var(--concrete);' +
+    const style = 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 16px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:12px;width:calc(33.333% - 6px);box-sizing:border-box;text-align:center;color:var(--concrete);' +
       (hasItems ? 'border-color:#a78bfa;background:rgba(167,139,250,0.1);color:#a78bfa;' : '');
     return `<button style="${style}" onclick="_uspmComboEquipOpenCat('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${tk}')">${escHtml(label)}</button>`;
   }).join('') + '</div>';
@@ -3972,7 +3981,7 @@ function _uspmComboEquipCatPanelHtml(key, slot) {
   const tk = _uspmComboEquipCat;
   const catLabel = _USPM_EQ_CAT_LABELS[tk] || tk;
   const fleet = (typeof equipmentFleet !== 'undefined' ? equipmentFleet : [])
-    .filter(e => e.active !== false && e.type === tk)
+    .filter(e => e.active !== false && _uspmEquipMatchesCat(e, tk))
     .sort((a, b) => (a.name||'').localeCompare(b.name||''));
   const isCleanOut = _getBlockCleanOut(key, slot);
   const itemsHtml = fleet.length ? fleet.map(e => {
