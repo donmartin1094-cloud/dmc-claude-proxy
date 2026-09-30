@@ -727,7 +727,7 @@ function rainOutBlock(key, slot) {
   saveSchedDataDirect();
   renderSchedule();
 
-  const foreman = slot === 'top' ? 'Filipe Joaquim' : 'Louie Medeiros';
+  const foreman = slot === 'top' ? 'Filipe Joaquim' : 'Mario Arruda';
   pushNotif('info', '🌧 Rained Out',
     escHtml(foreman.split(' ')[0]) + '\'s block on ' + fmtScheduleDate(key) +
     ' marked as rained out. Schedule left unchanged.',
@@ -789,7 +789,7 @@ function _roOpenStep1() {
   var key   = _roPending.key;
   var slot  = _roPending.slot;
   var moves = _roPending.moves;
-  var foreman = slot === 'top' ? (foremanRoster[0] || 'Filipe Joaquim') : (foremanRoster[1] || 'Louie Medeiros');
+  var foreman = slot === 'top' ? (foremanRoster[0] || 'Filipe Joaquim') : (foremanRoster[1] || 'Mario Arruda');
   document.getElementById('_rainoutModal')?.remove();
   var modal = document.createElement('div');
   modal.id = '_rainoutModal';
@@ -872,7 +872,7 @@ function _roExecutePush() {
   saveSchedDataDirect();
   renderSchedule();
   document.getElementById('_rainoutModal')?.remove();
-  var foreman = slot === 'top' ? (foremanRoster[0] || 'Filipe Joaquim') : (foremanRoster[1] || 'Louie Medeiros');
+  var foreman = slot === 'top' ? (foremanRoster[0] || 'Filipe Joaquim') : (foremanRoster[1] || 'Mario Arruda');
   pushNotif('success', '🌧 Rainout — Schedule Pushed',
     escHtml(foreman.split(' ')[0]) + '\'s ' + moves.length + ' job' + (moves.length !== 1 ? 's' : '') +
     ' moved to next available open slots.',
@@ -940,7 +940,7 @@ function changeSchedZoom(delta) {
 
 // ── Foreman roster (for extra blocks) ──
 const FOREMAN_KEY = 'pavescope_foremans';
-const DEFAULT_FOREMANS = ['Filipe Joaquim','Louie Medeiros'];
+const DEFAULT_FOREMANS = ['Filipe Joaquim','Mario Arruda'];
 var foremanRoster = JSON.parse(localStorage.getItem(FOREMAN_KEY) || JSON.stringify(DEFAULT_FOREMANS));
 function saveForemanRoster() { localStorage.setItem(FOREMAN_KEY, JSON.stringify(foremanRoster)); _checkLocalStorageSize(); fbSet('foremans', foremanRoster); }
 var mobSchedForemanFilter = 'top'; // 'top' = first foreman, 'bottom' = second foreman
@@ -3073,7 +3073,7 @@ function openClearDayModal(key) {
   }
   const bottomData = (schedData[key]||{}).bottom;
   if (bottomData && bottomData.type && bottomData.type !== 'blank') {
-    occupiedBlocks.push({ slot: 'bottom', label: 'Louie Medeiros', jobName: bottomData.fields?.jobName || '(no job name)', type: bottomData.type });
+    occupiedBlocks.push({ slot: 'bottom', label: 'Mario Arruda', jobName: bottomData.fields?.jobName || '(no job name)', type: bottomData.type });
   }
   const extras = schedData[key]?.extras || [];
   extras.forEach((ex, idx) => {
@@ -3569,7 +3569,7 @@ function uspmSelectForeman(key, name) {
   // Check if this foreman already has a card on this day — offer second-stop placement
   const dayData = schedData[key] || {};
   const topName    = foremanRoster[0] || 'Filipe Joaquim';
-  const bottomName = foremanRoster[1] || 'Louie Medeiros';
+  const bottomName = foremanRoster[1] || 'Mario Arruda';
   let existingSlot = null;
   if (name === topName)    existingSlot = 'top';
   else if (name === bottomName) existingSlot = 'bottom';
@@ -3978,16 +3978,26 @@ function _uspmComboEquipCatPanelHtml(key, slot) {
   const itemsHtml = fleet.length ? fleet.map(e => {
     const sel = _uspmComboEquipSelected.indexOf(e.name) !== -1;
     let unavailReason = null;
+    let hardBlock = false;
     if (e.status === 'down') unavailReason = 'Down — unavailable';
     else if (e.status === 'maintenance') unavailReason = 'In maintenance';
-    else if (e.assignedJobName && !isCleanOut) unavailReason = `On ${e.assignedJobName}`;
+    else if (!sel) {
+      // Same-day schedData conflict (this exact equipment already scheduled on
+      // another slot today) is a hard block — physically impossible, no
+      // override. The fleet's assignedJobName is a separate, longer-lived
+      // "currently committed to a job" flag (set when a job is dispatched,
+      // cleared in _schedCompleteJob) and stays admin-overridable as before.
+      const _sameDayJob = _getEquipConflictJobName(key, slot, e.name);
+      if (_sameDayJob && !isCleanOut) { unavailReason = `Already on ${_sameDayJob} today`; hardBlock = true; }
+      else if (e.assignedJobName && !isCleanOut) unavailReason = `On ${e.assignedJobName}`;
+    }
     const blocked = !!unavailReason && !sel;
     let style = 'display:inline-flex;align-items:center;gap:4px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;margin:3px;';
     if (sel) style += 'background:rgba(167,139,250,0.15);border:1px solid #a78bfa;color:#a78bfa;';
     else if (blocked) style += 'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);cursor:not-allowed;';
     else style += 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);';
     const label = (blocked ? '⚠️ ' : '') + escHtml(e.name);
-    return `<span style="${style}" title="${blocked ? escHtml(unavailReason) : ''}" onclick="_uspmComboEquipToggle('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${e.name.replace(/'/g,"\\'")}',${blocked},'${(unavailReason||'').replace(/'/g,"\\'")}')">${label}</span>`;
+    return `<span style="${style}" title="${blocked ? escHtml(unavailReason) : ''}" onclick="_uspmComboEquipToggle('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${e.name.replace(/'/g,"\\'")}',${blocked},'${(unavailReason||'').replace(/'/g,"\\'")}',${hardBlock})">${label}</span>`;
   }).join('') : `<div class="uspm-empty">No ${escHtml(catLabel)} in fleet.</div>`;
   return '<div>' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
@@ -4016,9 +4026,10 @@ function _uspmComboEquipBack(key, slot) {
   _uspmComboEquipRefresh(key, slot);
 }
 
-function _uspmComboEquipToggle(key, slot, name, blocked, reason) {
+function _uspmComboEquipToggle(key, slot, name, blocked, reason, hardBlock) {
   if (blocked) {
-    if (!isAdmin()) return;
+    if (hardBlock) { alert(name + ' is already assigned to another job today.'); return; }
+    if (!isAdmin()) { alert(name + ' is ' + reason + '.'); return; }
     if (!confirm('This equipment is ' + reason + '. Select anyway?')) return;
   }
   const idx = _uspmComboEquipSelected.indexOf(name);
@@ -4026,31 +4037,49 @@ function _uspmComboEquipToggle(key, slot, name, blocked, reason) {
   _uspmComboEquipRefresh(key, slot);
 }
 
-// ── Combined modal: Operators section (shift-aware conflict detection) ──────
-
-function _uspmComboSlotShiftType(key, slot) {
-  if (slot.startsWith('extra_')) {
-    const idx = parseInt(slot.replace('extra_',''));
-    return (schedData[key]?.extras?.[idx]?.data?.type) || 'blank';
-  }
-  return (schedData[key]?.[slot]?.type) || 'blank';
-}
-
-// Returns the jobName of whichever OTHER same-shift-type slot on this day
-// already has this operator assigned, or '' if there's no conflict.
-function _getOperatorConflictJobName(dateKey, excludeSlot, shiftType, displayName) {
+// Returns the jobName of whichever OTHER slot on this day already has this
+// equipment assigned via schedData fields.equipment, or '' if there's no
+// same-day conflict. This is separate from the fleet's assignedJobName check
+// above _uspmComboEquipCatPanelHtml (a longer-lived "currently committed to a
+// job" flag) — this one looks only at what's actually on today's schedule.
+function _getEquipConflictJobName(dateKey, excludeSlot, equipName) {
   const _day = schedData[dateKey] || {};
   let _jobName = '';
   ['top', 'bottom'].forEach(s => {
     if (_jobName || s === excludeSlot) return;
-    if ((_day[s]?.type || 'blank') !== shiftType) return;
+    const _eq = (_day[s]?.fields?.equipment || '').split(',').map(x => x.trim()).filter(Boolean);
+    if (_eq.indexOf(equipName) !== -1) _jobName = _day[s].fields?.jobName || 'another job';
+  });
+  if (!_jobName) {
+    (_day.extras || []).forEach((ex, i) => {
+      if (_jobName || ('extra_' + i) === excludeSlot) return;
+      const _eq = (ex.data?.fields?.equipment || '').split(',').map(x => x.trim()).filter(Boolean);
+      if (_eq.indexOf(equipName) !== -1) _jobName = ex.data?.fields?.jobName || 'another job';
+    });
+  }
+  return _jobName;
+}
+
+// ── Combined modal: Operators section ────────────────────────────────────────
+// Previously gated by shift type (only flagged a conflict if the other slot
+// was the same DAY/NIGHT shift type), which let an operator be double-booked
+// across a day slot and a night slot on the same calendar day — a real person
+// can't actually be on two jobs at once regardless of shift label. Now checks
+// every other slot on the day with no shift-type filter.
+
+// Returns the jobName of whichever OTHER slot on this day already has this
+// operator assigned, or '' if there's no conflict.
+function _getOperatorConflictJobName(dateKey, excludeSlot, displayName) {
+  const _day = schedData[dateKey] || {};
+  let _jobName = '';
+  ['top', 'bottom'].forEach(s => {
+    if (_jobName || s === excludeSlot) return;
     const _ops = (_day[s]?.fields?.operators || '').split(',').map(x => x.trim()).filter(Boolean);
     if (_ops.indexOf(displayName) !== -1) _jobName = _day[s].fields?.jobName || 'another job';
   });
   if (!_jobName) {
     (_day.extras || []).forEach((ex, i) => {
       if (_jobName || ('extra_' + i) === excludeSlot) return;
-      if ((ex.data?.type || 'blank') !== shiftType) return;
       const _ops = (ex.data?.fields?.operators || '').split(',').map(x => x.trim()).filter(Boolean);
       if (_ops.indexOf(displayName) !== -1) _jobName = ex.data?.fields?.jobName || 'another job';
     });
@@ -4062,21 +4091,21 @@ function _uspmComboOperatorsSectionHtml(key, slot) {
   const roster = (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined' ? DEFAULT_TEAM_ACCOUNTS : [])
     .filter(a => a.role === 'operator' && a.active !== false);
   if (!roster.length) return '<div class="uspm-empty">No operator accounts yet.</div>';
-  const shiftType = _uspmComboSlotShiftType(key, slot);
   return '<div style="display:flex;flex-wrap:wrap;">' + roster.map(a => {
     const name = a.displayName || a.username;
     const safeName = name.replace(/'/g,"\\'");
     const sel = _uspmComboOperatorsSelected.indexOf(name) !== -1;
-    const conflictJob = sel ? '' : _getOperatorConflictJobName(key, slot, shiftType, name);
+    const conflictJob = sel ? '' : _getOperatorConflictJobName(key, slot, name);
     const overridden = !!_uspmComboOperatorOverrides[name];
     const isConflict = !!conflictJob && !overridden;
     let style = 'display:inline-flex;align-items:center;gap:6px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;margin:3px;';
     if (sel) style += 'background:rgba(167,139,250,0.15);border:1px solid #a78bfa;color:#a78bfa;cursor:pointer;';
-    else if (isConflict) style += 'background:rgba(245,158,11,0.1);border:1px solid #f59e0b;color:#f59e0b;';
+    else if (isConflict) style += 'background:rgba(245,158,11,0.1);border:1px solid #f59e0b;color:#f59e0b;cursor:pointer;';
     else style += 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);cursor:pointer;';
     if (isConflict) {
-      return `<span style="${style}">⚠️ ${escHtml(name)} already on ${escHtml(conflictJob)}` +
-        `<button onclick="_uspmComboOperatorOverride('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${safeName}')" style="background:none;border:1px solid #f59e0b;border-radius:10px;color:#f59e0b;font-size:9px;padding:2px 8px;cursor:pointer;margin-left:4px;">Override ✓</button></span>`;
+      const safeJob = conflictJob.replace(/'/g,"\\'");
+      return `<span style="${style}" title="${escHtml(name)} already assigned to another job today" onclick="alert('${safeName} already assigned to ${safeJob} today')">⚠️ ${escHtml(name)} already on ${escHtml(conflictJob)}` +
+        `<button onclick="event.stopPropagation();_uspmComboOperatorOverride('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${safeName}')" style="background:none;border:1px solid #f59e0b;border-radius:10px;color:#f59e0b;font-size:9px;padding:2px 8px;cursor:pointer;margin-left:4px;">Override ✓</button></span>`;
     }
     return `<span style="${style}" onclick="_uspmComboOperatorToggle('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${safeName}')">${escHtml(name)}</span>`;
   }).join('') + '</div>';
@@ -4897,7 +4926,7 @@ function _mobCalOverallGrid() {
 
     var fmSlots = [
       { slot: 'top',    name: (typeof foremanRoster !== 'undefined' && foremanRoster[0]) || 'Filipe Joaquim' },
-      { slot: 'bottom', name: (typeof foremanRoster !== 'undefined' && foremanRoster[1]) || 'Louie Medeiros' }
+      { slot: 'bottom', name: (typeof foremanRoster !== 'undefined' && foremanRoster[1]) || 'Mario Arruda' }
     ];
 
     var anyJob = false;
@@ -5290,7 +5319,7 @@ function renderSchedule() {
                ${dragDropAttrs}>
             <div class="sched-block-header" style="${isAfterNight ? 'background:#4a4a4a;border-bottom:2px solid #666;' : ''}">
               <div class="sched-block-header-row1">
-                <span class="sched-foreman-name">${slot==='top'?(foremanRoster[0]||'Filipe Joaquim'):(foremanRoster[1]||'Louie Medeiros')}</span>
+                <span class="sched-foreman-name">${slot==='top'?(foremanRoster[0]||'Filipe Joaquim'):(foremanRoster[1]||'Mario Arruda')}</span>
                 ${((schedData[key]?.extras)||[]).some(x=>x.parentSlot===slot) ? `<span style="background:#f59e0b;color:#000;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;min-height:24px;white-space:nowrap;margin-left:4px;" onclick="event.stopPropagation();_toggleSecondStop('${key}','${slot}',event)">${_schedSecondStopOpen[key+'_'+slot] === false ? '▶' : '▼'} 2nd Stop Today</span>` : ''}
                 <span style="flex:1;"></span>
                 ${!lookaheadBlockout && isAdmin() ? `<button class="sched-rainout-btn${isRainedOut?' is-rained-out':''}" onclick="rainOutModal('${key}','${slot}')" title="${isRainedOut?'Remove rain-out flag':'Mark as rained out'}">🌧${isRainedOut?' Rained Out':''}</button>` : ''}
@@ -5424,7 +5453,7 @@ function renderSchedule() {
       // Build all slots (top, bottom, extras)
       const slotDefs = [
         { slot:'top',    foreman: foremanRoster[0]||'Filipe Joaquim' },
-        { slot:'bottom', foreman: foremanRoster[1]||'Louie Medeiros'  }
+        { slot:'bottom', foreman: foremanRoster[1]||'Mario Arruda'  }
       ];
       const extras = (schedData[key]?.extras) || [];
       extras.forEach((ex, ei) => {
@@ -5495,7 +5524,7 @@ function renderSchedule() {
   let calCells = [];
   // leading empties
   for (let i=0; i<startDow; i++) calCells.push('<div class="sched-mob-cal-cell empty"></div>');
-  // actual days — split into Filipe / Louie halves
+  // actual days — split into Filipe / Mario halves
   dates.forEach(d => {
     const key      = dk(d);
     const dow      = d.getDay();
@@ -5512,7 +5541,7 @@ function renderSchedule() {
     // Build crew block for selected foreman only
     const allSlotDefs = [
       { slot:'top',    foreman: foremanRoster[0]||'Filipe Joaquim', parentSlot:'top' },
-      { slot:'bottom', foreman: foremanRoster[1]||'Louie Medeiros',  parentSlot:'bottom' }
+      { slot:'bottom', foreman: foremanRoster[1]||'Mario Arruda',  parentSlot:'bottom' }
     ];
     const dayExtras = (schedData[key]?.extras) || [];
     dayExtras.forEach((ex,ei) => {
@@ -5659,7 +5688,7 @@ function renderSchedule() {
           <button class="sched-mob-fm-btn${mobSchedForemanFilter==='top'?' active':''}"
             onclick="mobSchedForemanFilter='top';renderSchedule()">${foremanRoster[0]||'Filipe Joaquim'}</button>
           <button class="sched-mob-fm-btn${mobSchedForemanFilter==='bottom'?' active':''}"
-            onclick="mobSchedForemanFilter='bottom';renderSchedule()">${foremanRoster[1]||'Louie Medeiros'}</button>
+            onclick="mobSchedForemanFilter='bottom';renderSchedule()">${foremanRoster[1]||'Mario Arruda'}</button>
         </div>` : ''}
         <!-- Calendar content: Overall shows full foreman list, By Foreman shows calendar grid -->
         <div class="sched-mob-cal">
@@ -8607,10 +8636,10 @@ function _launchDailyOrderModal(dateKey, slot) {
   var f = bdata.fields||{};
   var _fr2 = (typeof foremanRoster!=='undefined') ? foremanRoster : [];
   var foreman = slot==='top' ? (_fr2[0]||'Filipe Joaquim')
-    : slot==='bottom' ? (_fr2[1]||'Louie Medeiros')
+    : slot==='bottom' ? (_fr2[1]||'Mario Arruda')
     : (slot.startsWith('extra_')
         ? ((_exArr[parseInt(slot.replace('extra_',''))]||{}).foreman||_fr2[0]||'Filipe Joaquim')
-        : (_fr2[1]||'Louie Medeiros'));
+        : (_fr2[1]||'Mario Arruda'));
   var pts = dateKey.split('-');
   var jobDateObj = new Date(parseInt(pts[0]),parseInt(pts[1])-1,parseInt(pts[2]));
   var orderDate = jobDateObj.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -8801,7 +8830,7 @@ function djApproveAndGenerate(dateKey, slot, rowIdx) {
 // ════════════════════════════════════════════════════════════════════════════
 function buildAndSaveForemansReport(dateKey, slot, bdata, f) {
   const foreman = slot === 'top' ? 'Filipe Joaquim' :
-                  slot === 'bottom' ? 'Louie Medeiros' :
+                  slot === 'bottom' ? 'Mario Arruda' :
                   (bdata.foreman || 'Unknown');
 
   const parts  = dateKey.split('-');
@@ -9167,8 +9196,8 @@ function buildDailyOrder(dateKey, slot) {
   console.log('[Order] plant value:', fields && fields.plant);
   console.log('[Order] calling _isAmrizePlant:', typeof _isAmrizePlant);
   var foreman = slot === 'top' ? 'Filipe Joaquim'
-    : slot === 'bottom' ? 'Louie Medeiros'
-    : (slot.startsWith('extra_') ? (schedData[dateKey]?.extras?.[parseInt(slot.replace('extra_',''))]?.foreman || 'Extra Crew') : 'Louie Medeiros');
+    : slot === 'bottom' ? 'Mario Arruda'
+    : (slot.startsWith('extra_') ? (schedData[dateKey]?.extras?.[parseInt(slot.replace('extra_',''))]?.foreman || 'Extra Crew') : 'Mario Arruda');
   var parts = dateKey.split('-');
   var yr = parts[0], mo = parts[1], dy = parts[2];
   var dateObj = new Date(parseInt(yr), parseInt(mo)-1, parseInt(dy));
@@ -9749,7 +9778,7 @@ function buildLookaheadHTML(supplier, dateRange) {
             <div style="padding:5px;">
               ${blockCardHTML(key, 'top', 'Filipe Joaquim')}
               ${extras.map((_,i)=>i).filter(i=>extras[i]?.parentSlot==='top').map(i=>blockCardHTML(key,`extra_${i}`,extras[i]?.foreman||'Extra Crew')).join('')}
-              ${blockCardHTML(key, 'bottom', 'Louie Medeiros')}
+              ${blockCardHTML(key, 'bottom', 'Mario Arruda')}
               ${extras.map((_,i)=>i).filter(i=>extras[i]?.parentSlot==='bottom').map(i=>blockCardHTML(key,`extra_${i}`,extras[i]?.foreman||'Extra Crew')).join('')}
               ${extras.map((_,i)=>i).filter(i=>!extras[i]?.parentSlot).map(i=>blockCardHTML(key,`extra_${i}`,extras[i]?.foreman||'Extra Crew')).join('')}
             </div>
