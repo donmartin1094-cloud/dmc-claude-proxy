@@ -3974,7 +3974,36 @@ function _uspmComboEquipCategoryGridHtml(key, slot) {
     const style = 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 16px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:12px;width:calc(33.333% - 6px);box-sizing:border-box;text-align:center;color:var(--concrete);' +
       (hasItems ? 'border-color:#a78bfa;background:rgba(167,139,250,0.1);color:#a78bfa;' : '');
     return `<button style="${style}" onclick="_uspmComboEquipOpenCat('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${tk}')">${escHtml(label)}</button>`;
-  }).join('') + '</div>';
+  }).join('') + '</div>' + _uspmBroadCatChipsHtml(key, slot);
+}
+
+// General/broad equipment categories — a placeholder request ("we need *a*
+// full size paver that day") rather than a specific fleet unit. Stored as
+// plain labels directly in _uspmComboEquipSelected/fields.equipment alongside
+// real fleet names (setPickerItems just joins whatever strings are in that
+// array, so no save-path change was needed). Deliberately NOT routed through
+// _uspmComboEquipToggle/_getEquipConflictJobName — these never trigger
+// same-day conflict detection, since more than one job can need "a" full
+// size paver on the same day without it being a real double-booking.
+const _USPM_BROAD_EQ_CATS = ['Full Size Paver', 'Sidewalk Paver', 'Full Size Roller', 'Mid Size Roller', 'Small Roller', 'Skid Steer'];
+
+function _uspmBroadCatChipsHtml(key, slot) {
+  const chips = _USPM_BROAD_EQ_CATS.map(label => {
+    const sel = _uspmComboEquipSelected.indexOf(label) !== -1;
+    const style = 'min-height:44px;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;box-sizing:border-box;' +
+      (sel ? 'background:rgba(167,139,250,0.2);border:1px solid #a78bfa;color:#a78bfa;' : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);');
+    return `<button style="${style}" onclick="_uspmComboBroadCatToggle('${key.replace(/'/g,"\\'")}','${slot.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${escHtml(label)}</button>`;
+  }).join('');
+  return '<div style="margin-top:14px;">' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;color:var(--concrete-dim);margin-bottom:8px;">General Categories</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + chips + '</div>' +
+  '</div>';
+}
+
+function _uspmComboBroadCatToggle(key, slot, label) {
+  const idx = _uspmComboEquipSelected.indexOf(label);
+  if (idx >= 0) _uspmComboEquipSelected.splice(idx, 1); else _uspmComboEquipSelected.push(label);
+  _uspmComboEquipRefresh(key, slot);
 }
 
 function _uspmComboEquipCatPanelHtml(key, slot) {
@@ -13126,8 +13155,11 @@ function _lowbedShowResultsModal(startDate, dayCount) {
         // flex:0 0 160px (no shrink) plus no min-width:0 on the sibling span is
         // the classic flexbox overflow bug — on a narrow phone the row simply
         // overflowed instead of wrapping. Both spans now shrink and wrap.
+        var _isBroad = _USPM_BROAD_EQ_CATS.indexOf(m.equipmentName) !== -1;
+        var _icon = _isBroad ? '📋' : '🚧';
+        var _note = _isBroad ? ' <span style="color:var(--concrete-dim);font-style:italic;">(driver selects specific unit)</span>' : '';
         return '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 8px;padding:5px 0;font-family:\'DM Mono\',monospace;font-size:12px;">' +
-          '<span style="flex:0 1 140px;min-width:0;color:var(--white);word-break:break-word;white-space:normal;">🚧 ' + escHtml(m.equipmentName) + '</span>' +
+          '<span style="flex:0 1 140px;min-width:0;color:var(--white);word-break:break-word;white-space:normal;">' + _icon + ' ' + escHtml(m.equipmentName) + _note + '</span>' +
           '<span style="color:var(--concrete-dim);flex:1 1 120px;min-width:0;word-break:break-word;white-space:normal;">' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</span>' +
         '</div>';
       }).join('');
@@ -13171,7 +13203,10 @@ function _lowbedPrintMoves() {
     bodyHtml = grouped.dateOrder.map(function(dateKey) {
       var dLabel = _lowbedFmtDateLong(new Date(dateKey + 'T12:00:00'));
       var rows = grouped.byDate[dateKey].map(function(m) {
-        return '<tr><td>' + escHtml(m.equipmentName) + '</td><td>' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</td></tr>';
+        var _isBroad = _USPM_BROAD_EQ_CATS.indexOf(m.equipmentName) !== -1;
+        var _icon = _isBroad ? '📋' : '🚧';
+        var _note = _isBroad ? ' <em style="color:#777;">(driver selects specific unit)</em>' : '';
+        return '<tr><td>' + _icon + ' ' + escHtml(m.equipmentName) + _note + '</td><td>' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</td></tr>';
       }).join('');
       return '<h3>' + dLabel + '</h3><table>' + rows + '</table>';
     }).join('');
@@ -13206,8 +13241,11 @@ function _lowbedShowPrintFallback() {
     bodyHtml = grouped.dateOrder.map(function(dateKey) {
       var dLabel = _lowbedFmtDateLong(new Date(dateKey + 'T12:00:00'));
       var rows = grouped.byDate[dateKey].map(function(m) {
+        var _isBroad = _USPM_BROAD_EQ_CATS.indexOf(m.equipmentName) !== -1;
+        var _icon = _isBroad ? '📋' : '🚧';
+        var _note = _isBroad ? ' <span style="color:#777;font-style:italic;font-weight:400;">(driver selects specific unit)</span>' : '';
         return '<div style="display:flex;flex-wrap:wrap;gap:4px 8px;padding:5px 0;font-family:\'DM Mono\',monospace;font-size:13px;">' +
-          '<span style="flex:0 1 140px;min-width:0;color:#111;font-weight:700;word-break:break-word;white-space:normal;">🚧 ' + escHtml(m.equipmentName) + '</span>' +
+          '<span style="flex:0 1 140px;min-width:0;color:#111;font-weight:700;word-break:break-word;white-space:normal;">' + _icon + ' ' + escHtml(m.equipmentName) + _note + '</span>' +
           '<span style="color:#333;flex:1 1 120px;min-width:0;word-break:break-word;white-space:normal;">' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</span>' +
         '</div>';
       }).join('');
