@@ -12104,6 +12104,10 @@ document.addEventListener('DOMContentLoaded', function() {
       border-left:1px solid rgba(126,203,143,0.25);z-index:9500;display:flex;flex-direction:column;
       transition:right 0.32s cubic-bezier(0.4,0,0.2,1);box-shadow:-10px 0 50px rgba(0,0,0,0.7);}
     #_saiPanel.open{right:0;}
+    /* Fixed 420px width left the Generate Lowbed Assignments button (and the
+       rest of this panel) partly off-screen on any phone narrower than 420px —
+       there was no responsive override at all until this rule. */
+    @media (max-width:600px){ #_saiPanel{width:92vw;right:-96vw;} }
     #_saiHdr{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(126,203,143,0.15);background:#111;flex-shrink:0;}
     #_saiTitle{font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:2px;color:#7ecb8f;flex:1;}
     #_saiStatus{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 8px;
@@ -12964,25 +12968,29 @@ function _lowbedShowPreGenModal() {
 
 function _lowbedPreGenHtml() {
   var s = _lowbedPreGenState;
+  var _lbMobile = window.innerWidth <= 600;
   var dayBtn = function(n) {
-    return '<button onclick="_lowbedSetDays(' + n + ')" style="flex:1;padding:10px 6px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;' + _lowbedOptBtnStyle(s.days === n) + '">' + n + ' Day' + (n > 1 ? 's' : '') + '</button>';
+    return '<button onclick="_lowbedSetDays(' + n + ')" style="flex:1;min-height:44px;min-width:80px;padding:10px 6px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;' + _lowbedOptBtnStyle(s.days === n) + '">' + n + ' Day' + (n > 1 ? 's' : '') + '</button>';
   };
   var startBtn = function(label, isToday) {
-    return '<button onclick="_lowbedSetStart(' + isToday + ')" style="flex:1;padding:10px 6px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;' + _lowbedOptBtnStyle(s.startToday === isToday) + '">' + label + '</button>';
+    return '<button onclick="_lowbedSetStart(' + isToday + ')" style="flex:1;min-height:44px;min-width:80px;padding:10px 6px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;cursor:pointer;' + _lowbedOptBtnStyle(s.startToday === isToday) + '">' + label + '</button>';
   };
   var genDisabled = s.days === null;
   var genStyle = genDisabled
     ? 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--concrete-dim);opacity:0.5;cursor:not-allowed;'
     : 'background:rgba(126,203,143,0.15);border:1px solid rgba(126,203,143,0.4);color:#7ecb8f;cursor:pointer;';
-  return '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px;max-width:400px;width:100%;">' +
+  var footerStyle = _lbMobile ? 'display:flex;flex-direction:column;gap:8px;' : 'display:flex;gap:8px;';
+  var cancelStyle = 'min-height:44px;padding:10px;background:none;border:1px solid var(--asphalt-light);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;' + (_lbMobile ? 'width:100%;box-sizing:border-box;' : 'flex:1;');
+  var genBtnStyle = 'min-height:44px;padding:10px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;' + (_lbMobile ? 'width:100%;box-sizing:border-box;' : 'flex:2;') + genStyle;
+  return '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px;width:90vw;max-width:400px;box-sizing:border-box;">' +
       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--stripe);margin-bottom:18px;">🚛 Generate Lowbed Move List</div>' +
       '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);margin-bottom:8px;">How many days to generate?</div>' +
-      '<div style="display:flex;gap:8px;margin-bottom:18px;">' + [1, 2, 3].map(dayBtn).join('') + '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">' + [1, 2, 3].map(dayBtn).join('') + '</div>' +
       '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);margin-bottom:8px;">Start from:</div>' +
-      '<div style="display:flex;gap:8px;margin-bottom:22px;">' + startBtn('Today', true) + startBtn('Tomorrow', false) + '</div>' +
-      '<div style="display:flex;gap:8px;">' +
-        '<button onclick="document.getElementById(\'_lowbedPreGenOverlay\').remove()" style="flex:1;padding:10px;background:none;border:1px solid var(--asphalt-light);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:12px;cursor:pointer;">Cancel</button>' +
-        '<button onclick="_lowbedRunGenerate()"' + (genDisabled ? ' disabled' : '') + ' style="flex:2;padding:10px;border-radius:8px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;' + genStyle + '">⚙️ Generate</button>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;">' + startBtn('Today', true) + startBtn('Tomorrow', false) + '</div>' +
+      '<div style="' + footerStyle + '">' +
+        '<button onclick="document.getElementById(\'_lowbedPreGenOverlay\').remove()" style="' + cancelStyle + '">Cancel</button>' +
+        '<button onclick="_lowbedRunGenerate()"' + (genDisabled ? ' disabled' : '') + ' style="' + genBtnStyle + '">⚙️ Generate</button>' +
       '</div>' +
     '</div>';
 }
@@ -13106,6 +13114,7 @@ function _lowbedShowResultsModal(startDate, dayCount) {
   overlay.id = '_lowbedResultsOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9800;display:flex;align-items:center;justify-content:center;padding:20px;';
 
+  var _lbMobile = window.innerWidth <= 600;
   var bodyHtml;
   if (!moves.length) {
     bodyHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--concrete-dim);text-align:center;padding:30px 10px;">No equipment moves needed for this period</div>';
@@ -13114,9 +13123,12 @@ function _lowbedShowResultsModal(startDate, dayCount) {
     bodyHtml = grouped.dateOrder.map(function(dateKey) {
       var dLabel = _lowbedFmtDateLong(new Date(dateKey + 'T12:00:00'));
       var rows = grouped.byDate[dateKey].map(function(m) {
-        return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-family:\'DM Mono\',monospace;font-size:12px;">' +
-          '<span style="flex:0 0 160px;color:var(--white);">🚧 ' + escHtml(m.equipmentName) + '</span>' +
-          '<span style="color:var(--concrete-dim);flex:1;">' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</span>' +
+        // flex:0 0 160px (no shrink) plus no min-width:0 on the sibling span is
+        // the classic flexbox overflow bug — on a narrow phone the row simply
+        // overflowed instead of wrapping. Both spans now shrink and wrap.
+        return '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 8px;padding:5px 0;font-family:\'DM Mono\',monospace;font-size:12px;">' +
+          '<span style="flex:0 1 140px;min-width:0;color:var(--white);word-break:break-word;white-space:normal;">🚧 ' + escHtml(m.equipmentName) + '</span>' +
+          '<span style="color:var(--concrete-dim);flex:1 1 120px;min-width:0;word-break:break-word;white-space:normal;">' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</span>' +
         '</div>';
       }).join('');
       return '<div style="margin-bottom:16px;">' +
@@ -13127,22 +13139,30 @@ function _lowbedShowResultsModal(startDate, dayCount) {
     }).join('');
   }
 
+  var footerStyle = _lbMobile
+    ? 'display:flex;flex-direction:column;gap:8px;border-top:1px solid rgba(255,255,255,0.15);padding-top:14px;'
+    : 'display:flex;align-items:center;gap:10px;border-top:1px solid rgba(255,255,255,0.15);padding-top:14px;';
+  var countStyle = 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);' + (_lbMobile ? 'text-align:center;' : 'flex:1;');
+  var printBtnStyle = 'min-height:44px;padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;cursor:pointer;' + (_lbMobile ? 'width:100%;box-sizing:border-box;' : '');
+  var closeBtnStyle = 'min-height:44px;padding:8px 14px;background:none;border:1px solid var(--asphalt-light);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;cursor:pointer;' + (_lbMobile ? 'width:100%;box-sizing:border-box;' : '');
+
   overlay.innerHTML =
-    '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;">' +
+    '<div style="border-radius:12px;background:var(--asphalt-mid);padding:24px;width:95vw;max-width:600px;max-height:85vh;box-sizing:border-box;display:flex;flex-direction:column;">' +
       '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--stripe);margin-bottom:14px;">⚙️ Lowbed Moves — ' + escHtml(rangeLabel) + '</div>' +
       '<div style="overflow-y:auto;flex:1;margin-bottom:14px;">' + bodyHtml + '</div>' +
-      '<div style="display:flex;align-items:center;gap:10px;border-top:1px solid rgba(255,255,255,0.15);padding-top:14px;">' +
-        '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--concrete-dim);flex:1;">' + moves.length + ' move' + (moves.length !== 1 ? 's' : '') + ' required</span>' +
-        '<button onclick="_lowbedPrintMoves()" style="padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;cursor:pointer;">🖨️ Print</button>' +
-        '<button onclick="document.getElementById(\'_lowbedResultsOverlay\').remove()" style="padding:8px 14px;background:none;border:1px solid var(--asphalt-light);border-radius:8px;color:var(--concrete-dim);font-family:\'DM Mono\',monospace;font-size:11px;cursor:pointer;">✕ Close</button>' +
+      '<div style="' + footerStyle + '">' +
+        '<span style="' + countStyle + '">' + moves.length + ' move' + (moves.length !== 1 ? 's' : '') + ' required</span>' +
+        '<button onclick="_lowbedPrintMoves()" style="' + printBtnStyle + '">🖨️ Print</button>' +
+        '<button onclick="document.getElementById(\'_lowbedResultsOverlay\').remove()" style="' + closeBtnStyle + '">✕ Close</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(overlay);
 }
 
 function _lowbedPrintMoves() {
-  var w = window.open('', '_blank');
-  if (!w) return;
+  var w = null;
+  try { w = window.open('', '_blank'); } catch(e) {}
+  if (!w) { _lowbedShowPrintFallback(); return; }
   var bodyHtml;
   if (!_lowbedLastMoves.length) {
     bodyHtml = '<p>No equipment moves needed for this period</p>';
@@ -13171,6 +13191,44 @@ function _lowbedPrintMoves() {
   w.document.close();
   w.focus();
   w.print();
+}
+
+// Mobile browsers frequently block window.open() outright (no popup, no
+// error — w just comes back null/undefined). This shows the same move list
+// as a full-screen, light-themed overlay the user can screenshot instead.
+function _lowbedShowPrintFallback() {
+  document.getElementById('_lowbedPrintFallbackOverlay')?.remove();
+  var bodyHtml;
+  if (!_lowbedLastMoves.length) {
+    bodyHtml = '<div style="font-family:\'DM Mono\',monospace;font-size:13px;color:#555;text-align:center;padding:30px 10px;">No equipment moves needed for this period</div>';
+  } else {
+    var grouped = _lowbedGroupMovesByDate(_lowbedLastMoves);
+    bodyHtml = grouped.dateOrder.map(function(dateKey) {
+      var dLabel = _lowbedFmtDateLong(new Date(dateKey + 'T12:00:00'));
+      var rows = grouped.byDate[dateKey].map(function(m) {
+        return '<div style="display:flex;flex-wrap:wrap;gap:4px 8px;padding:5px 0;font-family:\'DM Mono\',monospace;font-size:13px;">' +
+          '<span style="flex:0 1 140px;min-width:0;color:#111;font-weight:700;word-break:break-word;white-space:normal;">🚧 ' + escHtml(m.equipmentName) + '</span>' +
+          '<span style="color:#333;flex:1 1 120px;min-width:0;word-break:break-word;white-space:normal;">' + escHtml(m.from) + ' → ' + escHtml(m.to) + '</span>' +
+        '</div>';
+      }).join('');
+      return '<div style="margin-bottom:16px;">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#111;margin-bottom:4px;border-bottom:1px solid #ccc;padding-bottom:4px;">' + dLabel + '</div>' +
+        rows +
+      '</div>';
+    }).join('');
+  }
+  var overlay = document.createElement('div');
+  overlay.id = '_lowbedPrintFallbackOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#f2f2f2;z-index:9900;overflow-y:auto;padding:20px;box-sizing:border-box;';
+  overlay.innerHTML =
+    '<div style="background:#fff;border-radius:12px;padding:20px;max-width:600px;width:100%;margin:0 auto;box-sizing:border-box;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;color:#111;margin-bottom:4px;">🚛 Lowbed Moves — ' + escHtml(_lowbedLastRangeLabel) + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:#666;margin-bottom:16px;">Your browser blocked the print window — screenshot this instead.</div>' +
+      bodyHtml +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#111;margin-top:6px;border-top:1px solid #ccc;padding-top:10px;">' + _lowbedLastMoves.length + ' move' + (_lowbedLastMoves.length !== 1 ? 's' : '') + ' required</div>' +
+      '<button onclick="document.getElementById(\'_lowbedPrintFallbackOverlay\').remove()" style="margin-top:18px;min-height:44px;width:100%;box-sizing:border-box;background:#e5e5e5;border:1px solid #ccc;border-radius:8px;color:#111;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;cursor:pointer;">✕ Close</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
 }
 
 // ── Special action edit/delete modal ─────────────────────────────────────────
