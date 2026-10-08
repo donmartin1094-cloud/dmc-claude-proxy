@@ -2749,12 +2749,15 @@ async function fbSetDoc(docName, value) {
 function saveBlockTypes() { localStorage.setItem('pavescope_blocktypes', JSON.stringify(blockTypes)); _checkLocalStorageSize(); try { if(db) fbSet('blocktypes', blockTypes); } catch(e){} }
 
 function _schedNoteToggle(chipId, taId) {
+  console.log('[note] toggle called', chipId, taId, 'time:', Date.now());
   var chip = document.getElementById(chipId);
   var ta   = document.getElementById(taId);
-  if (!chip || !ta) return;
+  console.log('[note] toggle lookup — chip found:', !!chip, 'ta found:', !!ta);
+  if (!chip || !ta) { console.log('[note] toggle ABORTED — missing element'); return; }
   chip.style.display = 'none';
   ta.style.display   = '';
   ta.dataset.openedAt = String(Date.now());
+  console.log('[note] toggle — chip hidden, ta shown, computed display:', getComputedStyle(ta).display);
   // Defer focus a tick — focusing in the same synchronous tap/click handler that
   // just flipped display:none -> visible can trigger an immediate spurious blur
   // on mobile (keyboard animation / focus-steal), which re-hides the field before
@@ -2763,22 +2766,29 @@ function _schedNoteToggle(chipId, taId) {
     ta.focus();
     var len = ta.value.length;
     try { ta.setSelectionRange(len, len); } catch (e) {}
+    console.log('[note] toggle — focus() called, activeElement is ta:', document.activeElement === ta);
   }, 0);
 }
 function _schedNoteBlur(chipId, taId) {
   var ta   = document.getElementById(taId);
   var chip = document.getElementById(chipId);
-  if (!ta || !chip) return;
-  var openedAt = parseInt(ta.dataset.openedAt || '0', 10);
-  if (openedAt && (Date.now() - openedAt) < 300) {
+  var openedAt = parseInt((ta && ta.dataset.openedAt) || '0', 10);
+  var elapsed = Date.now() - openedAt;
+  console.log('[note] blur fired', chipId, taId, 'elapsed since open:', elapsed, 'ms', 'ta found:', !!ta, 'chip found:', !!chip);
+  if (!ta || !chip) { console.log('[note] blur ABORTED — missing element'); return; }
+  if (openedAt && elapsed < 300) {
     // Spurious blur right after opening — not a real blur, keep editing open.
+    console.log('[note] blur — treated as spurious (elapsed < 300ms), re-focusing');
     setTimeout(function() { ta.focus(); }, 0);
     return;
   }
   if (ta.value.trim()) {
+    console.log('[note] blur — collapsing to chip, value:', JSON.stringify(ta.value));
     chip.querySelector('span').textContent = '📝 ' + ta.value.trim();
     chip.style.display = '';
     ta.style.display   = 'none';
+  } else {
+    console.log('[note] blur — value empty, leaving textarea open');
   }
 }
 
