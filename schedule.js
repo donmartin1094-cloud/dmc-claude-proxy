@@ -2754,12 +2754,27 @@ function _schedNoteToggle(chipId, taId) {
   if (!chip || !ta) return;
   chip.style.display = 'none';
   ta.style.display   = '';
-  ta.focus();
+  ta.dataset.openedAt = String(Date.now());
+  // Defer focus a tick — focusing in the same synchronous tap/click handler that
+  // just flipped display:none -> visible can trigger an immediate spurious blur
+  // on mobile (keyboard animation / focus-steal), which re-hides the field before
+  // the user can type.
+  setTimeout(function() {
+    ta.focus();
+    var len = ta.value.length;
+    try { ta.setSelectionRange(len, len); } catch (e) {}
+  }, 0);
 }
 function _schedNoteBlur(chipId, taId) {
   var ta   = document.getElementById(taId);
   var chip = document.getElementById(chipId);
   if (!ta || !chip) return;
+  var openedAt = parseInt(ta.dataset.openedAt || '0', 10);
+  if (openedAt && (Date.now() - openedAt) < 300) {
+    // Spurious blur right after opening — not a real blur, keep editing open.
+    setTimeout(function() { ta.focus(); }, 0);
+    return;
+  }
   if (ta.value.trim()) {
     chip.querySelector('span').textContent = '📝 ' + ta.value.trim();
     chip.style.display = '';
@@ -2976,6 +2991,8 @@ function renderExtraBlock(key, idx, ex, isLast) {
           data-key="${key}" data-slot="${slot}" data-field="${f.key}"
           onchange="saveSchedFieldExtra(this,'${key}',${idx})"
           oninput="autoResize(this)"
+          onclick="event.stopPropagation()"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
           onblur="_schedNoteBlur('${_nChipId}','${_nTaId}')">${fields[f.key]||''}</textarea>
       </div>`;
     }
@@ -5281,6 +5298,8 @@ function renderSchedule() {
                 data-key="${key}" data-slot="${slot}" data-field="${f.key}"
                 onchange="saveSchedField(this)"
                 oninput="autoResize(this);saveSchedField(this)"
+                onclick="event.stopPropagation()"
+                onkeydown="${canEdit ? "if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}" : ''}"
                 onblur="${canEdit ? `_schedNoteBlur('${_nChipId2}','${_nTaId2}')` : ''}"
                 ${canEdit?'':'readonly style="pointer-events:none;cursor:default;"'}
               >${fields[f.key]||''}</textarea>
