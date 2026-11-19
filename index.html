@@ -3657,7 +3657,7 @@ function _checkLocalStorageSize() {
 <script src="/ui-components.js?v=3"></script>
 <script src="/slips.js?v=3"></script>
 <script src="/schedule.js?v=16"></script>
-<script src="/reports.js?v=4"></script>
+<script src="/reports.js?v=5"></script>
 <script src="/mixslip-scanner.js?v=3"></script>
 <script>
 // Global crash reporter for production troubleshooting.
@@ -31815,7 +31815,8 @@ function _crewConfirmAlreadyDone(key) {
 function _crewConfirmGetScheduleBlocks(dateKey) {
   var dayData = schedData[dateKey] || {};
   var blocks = [];
-  var addBlock = function(slot, foremIdx) {
+  // Top/bottom foreman mapping is unchanged — still foremanRoster[0]/[1].
+  var addBlock = function(slot, foremIdx, slotId) {
     var bl = slot || {};
     if (!bl.type || bl.type === 'blank') return;
     var f = bl.fields || {};
@@ -31823,20 +31824,36 @@ function _crewConfirmGetScheduleBlocks(dateKey) {
     var jobLoc = f.jobName || f.jobNum || f.location || '';
     var gcN = f.gcName || f.owner || '';
     var plantLoc = f.plant || f.plantName || f.plantLocation || '';
-    blocks.push({ foreman: foremanName, jobLocation: jobLoc, gcName: gcN, plantLocation: plantLoc, jobNumber: f.jobNum || '', type: bl.type || '', isNight: !!(f.nightShift || f.night || (bl.type || '').toLowerCase().includes('night')) });
+    blocks.push({ slot: slotId, foreman: foremanName, jobLocation: jobLoc, gcName: gcN, plantLocation: plantLoc, jobNumber: f.jobNum || '', type: bl.type || '', isNight: !!(f.nightShift || f.night || (bl.type || '').toLowerCase().includes('night')) });
   };
-  addBlock(dayData.top, 0);
-  addBlock(dayData.bottom, 1);
+  addBlock(dayData.top, 0, 'top');
+  addBlock(dayData.bottom, 1, 'bottom');
+  // Extras have their own stored crew name (ex.foreman — same field the schedule
+  // card renders) and must never fall back to foremanRoster, which only has the
+  // top/bottom pair. No name → "Extra Crew N", not the bottom foreman.
   (dayData.extras || []).forEach(function(ex, i) {
-    if (ex && ex.data) addBlock(ex.data, i + 2);
+    if (!ex || !ex.data) return;
+    var bl = ex.data;
+    if (!bl.type || bl.type === 'blank') return;
+    var f = bl.fields || {};
+    var foremanName = ex.foreman || f.foreman || f.crew || ('Extra Crew ' + (i + 1));
+    var jobLoc = f.jobName || f.jobNum || f.location || '';
+    var gcN = f.gcName || f.owner || '';
+    var plantLoc = f.plant || f.plantName || f.plantLocation || '';
+    blocks.push({ slot: 'extra_' + i, foreman: foremanName, jobLocation: jobLoc, gcName: gcN, plantLocation: plantLoc, jobNumber: f.jobNum || '', type: bl.type || '', isNight: !!(f.nightShift || f.night || (bl.type || '').toLowerCase().includes('night')) });
   });
   return blocks;
 }
 
-// Check if a foreman's report already exists for a date + foreman combo
-function _crewConfirmReportExists(dateKey, foremanName) {
+// Check if a foreman's report already exists for a date + foreman combo.
+// When a slot id is given, prefer matching by the report's stored scheduleSlot
+// so an extra crew report is never conflated with the bottom-slot foreman's
+// report just because of a name collision.
+function _crewConfirmReportExists(dateKey, foremanName, slot) {
   return foremanReports.some(function(r) {
-    return r.date === dateKey && (r.foreman || '').toLowerCase() === (foremanName || '').toLowerCase();
+    if (r.date !== dateKey) return false;
+    if (slot && r.scheduleSlot) return r.scheduleSlot === slot;
+    return (r.foreman || '').toLowerCase() === (foremanName || '').toLowerCase();
   });
 }
 
@@ -31896,7 +31913,9 @@ function _adminVerifyShow(dateKey) {
   schedBlocks.forEach(function(block) {
     if (!block.foreman) return;
     var exists = (typeof foremanReports !== 'undefined' ? foremanReports : []).some(function(r) {
-      return r.date === dateKey && (r.foreman || '').toLowerCase() === (block.foreman || '').toLowerCase();
+      if (r.date !== dateKey) return false;
+      if (block.slot && r.scheduleSlot) return r.scheduleSlot === block.slot;
+      return (r.foreman || '').toLowerCase() === (block.foreman || '').toLowerCase();
     });
     if (!exists && typeof _crewConfirmBuildReport === 'function') {
       foremanReports.push(_crewConfirmBuildReport(dateKey, block, null));
@@ -31967,7 +31986,7 @@ function _adminVerifyOne(reportId, dateKey) {
   if (typeof saveForemanReports === 'function') saveForemanReports();
   var badge = document.getElementById('_avBadge_' + reportId);
   if (badge) badge.textContent = '✅';
-  _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman);
+  _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman, r.scheduleSlot);
   if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
   var _allRptsOne = (typeof foremanReports!=='undefined'?foremanReports:[]).filter(function(x){ return x.date===dateKey; });
   if (_allRptsOne.length && _allRptsOne.every(function(x){ return x.locationVerified===true || x.locationVerified===false; })) {
@@ -32006,7 +32025,7 @@ function _adminVerifyAll(dateKey) {
     r.updatedAt = Date.now();
     var badge = document.getElementById('_avBadge_' + r.id);
     if (badge) badge.textContent = '✅';
-    _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman);
+    _adminVerifyScheduleColor(dateKey, r.jobNumber, '#f97316', r.foreman, r.scheduleSlot);
     if (typeof _inv3OnVerify === 'function') _inv3OnVerify(r);
   });
   if (typeof saveForemanReports === 'function') saveForemanReports();
@@ -32037,7 +32056,7 @@ function _djLoginVerifyTrigger() {
   } catch(e) {}
 }
 
-function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman) {
+function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman, slot) {
   if (!dateKey || typeof schedData === 'undefined') return;
   var day = schedData[dateKey] || {};
   var slots = [['top', day.top], ['bottom', day.bottom]];
@@ -32046,6 +32065,13 @@ function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman) {
   slots.forEach(function(pair) {
     var slotName = pair[0]; var bdata = pair[1];
     if (!bdata) return;
+    // When the report carries its own schedule slot id, match on that alone —
+    // this is what keeps an extra crew's report from tinting Mario's bottom
+    // block (or vice versa) if their names ever happen to collide.
+    if (slot) {
+      if (slotName === slot) { bdata._verifiedColor = color; changed = true; }
+      return;
+    }
     var flds = bdata.fields || {};
     var matchByJob = jobNumber && (flds.jobNum || '').trim() === (jobNumber || '').trim();
     var matchByForeman = !matchByJob && foreman && (flds.foreman || '').toLowerCase().trim() === (foreman || '').toLowerCase().trim();

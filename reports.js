@@ -2514,7 +2514,7 @@ function renderForemanReports(containerEl) {
   _frCalInjectStyles();
   if (!_frCalMonth) _frCalMonth = _inv3DefaultMonth();
 
-  var foremanChoices = ['', 'Filipe Joaquim', 'Louie Medeiros'];
+  var foremanChoices = ['', 'Filipe Joaquim', 'Mario Arruda'];
   var selStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:3px;color:var(--white);font-family:\'DM Mono\',monospace;font-size:9px;padding:3px 6px;cursor:pointer;';
   var foremanOpts = foremanChoices.map(function(f){
     return '<option value="'+escHtml(f)+'"'+(f===_frCalForeman?' selected':'')+'>'+escHtml(f||'All Foremen')+'</option>';
@@ -3790,6 +3790,8 @@ function _crewConfirmBuildReport(dateKey, block, overrideLocation) {
     gcName:          gcN,
     plantLocation:   plantLoc,
     foreman:         block.foreman || '',
+    foremanDisplay:  block.foreman || '',
+    scheduleSlot:    block.slot || '',
     labor:           labor,
     workItems:       [],
     tackCostGal:     0,
@@ -3855,7 +3857,7 @@ function _crewConfirmShow(dateKey, shift) {
   if (!relevant.length) return;
 
   // Only show if at least one crew is missing a report
-  var missing = relevant.filter(function(b) { return !_crewConfirmReportExists(dateKey, b.foreman); });
+  var missing = relevant.filter(function(b) { return !_crewConfirmReportExists(dateKey, b.foreman, b.slot); });
   if (!missing.length) { _crewConfirmMark(sessionKey); return; }
 
   _crewConfirmShown[sessionKey] = true;
@@ -5092,7 +5094,9 @@ function _invSubGetBlockData(sched, dateKey, slot) {
 function _inv3GetForemanOrder(name) {
   var n = (name || '').toLowerCase();
   if (n.indexOf('filipe') >= 0) return 0;
-  if (n.indexOf('louie')  >= 0) return 1;
+  // 'louie' kept so historical reports filed under his name still sort into
+  // the second-foreman column; 'mario' added since he's now that column's foreman.
+  if (n.indexOf('louie') >= 0 || n.indexOf('mario') >= 0) return 1;
   return 2;
 }
 
@@ -5910,8 +5914,17 @@ function _inv3OnVerify(r) {
   });
   var gcName = (_bj&&_bj.gc) ? _bj.gc : (r.gcName||'');
 
-  var _slot = (r.foreman||'').toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom';
-  var _schedSlot = (typeof schedData!=='undefined' && schedData[r.date]) ? schedData[r.date][_slot] : null;
+  // Prefer the slot id stored on the report itself (set when the report was
+  // auto-drafted), then the name-based resolver that already knows about
+  // extras, and only fall back to the old filipe→top/else→bottom guess for
+  // legacy reports with neither — this is what used to pull an extra crew's
+  // invoice stub from Mario's bottom-slot job data.
+  var _slot = r.scheduleSlot
+    || (typeof _frResolveScheduleSlot === 'function' ? _frResolveScheduleSlot(r.date, r.foreman) : null)
+    || ((r.foreman||'').toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom');
+  var _schedSlot = (typeof schedData!=='undefined' && schedData[r.date] && typeof getSlotData==='function')
+    ? getSlotData(r.date, _slot)
+    : null;
   var _f = (_schedSlot && _schedSlot.fields) ? _schedSlot.fields : {};
   // A prior stub for this slot may have been deleted (_inv3DeleteStub), which
   // sets noInvoiceNeeded so the report-only fallback stops recreating it.
@@ -7642,7 +7655,7 @@ function renderTimeReports(container) {
 
   var btnStyle = 'background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete);font-family:\'DM Mono\',monospace;font-size:10px;padding:5px 10px;cursor:pointer;';
   var accentColor = '#a78bfa';
-  var _foremanChoices = ['', 'Filipe Joaquim', 'Louie Medeiros'];
+  var _foremanChoices = ['', 'Filipe Joaquim', 'Mario Arruda'];
   var _foremanDropdown = _foremanChoices.map(function(f) {
     return '<option value="'+escHtml(f)+'"'+(f===_trFilterForeman?' selected':'')+'>'+escHtml(f||'All Foremen')+'</option>';
   }).join('');
