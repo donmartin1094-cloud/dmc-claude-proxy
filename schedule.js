@@ -118,8 +118,13 @@ function addDayNoteSA(key, saId) {
     return;
   }
   if (saInfo && _saIsLocationAction(saInfo)) {
+    const isGraderSA = _saIsGraderAction(saInfo);
     openSALocationPicker(key, null, saId, function(loc) {
-      _commitDayNoteSAWithLocation(key, saId, loc);
+      if (isGraderSA) {
+        openGraderDaysModal(key, saId, loc);
+      } else {
+        _commitDayNoteSAWithLocation(key, saId, loc);
+      }
     });
     return;
   }
@@ -134,8 +139,172 @@ function removeDayNoteSA(key, saId) {
   if (!schedData[key]) return;
   schedData[key].dayNoteSA = (schedData[key].dayNoteSA || []).filter(id => id !== saId);
   if (schedData[key].dayNoteSALocations) delete schedData[key].dayNoteSALocations[saId];
+  if (schedData[key].dayNoteSAGroups) delete schedData[key].dayNoteSAGroups[saId];
   saveSchedDataDirect();
   renderSchedule();
+}
+
+// Removing a day-note chip that belongs to a multi-day grader stay asks
+// whether to remove just this day or every day of that stay (groupId).
+function removeDayNoteSAChip(key, saId) {
+  var grp = (schedData[key] && schedData[key].dayNoteSAGroups) ? schedData[key].dayNoteSAGroups[saId] : null;
+  if (!grp) { removeDayNoteSA(key, saId); return; }
+  _graderGroupRemovePrompt(key, saId, grp);
+}
+
+function _graderGroupRemovePrompt(key, saId, groupId) {
+  document.getElementById('graderGroupRemoveModal')?.remove();
+  var sa = specialActions.find(function(s) { return s.id === saId; });
+  var label = sa ? sa.label : 'Grader';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'graderGroupRemoveModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:22px;width:90vw;max-width:360px;box-sizing:border-box;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:19px;letter-spacing:1px;color:var(--stripe);margin-bottom:8px;">🚜 ' + escHtml(label) + '</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--white);margin-bottom:16px;line-height:1.4;">Remove just this day, or all days of this grader stay?</div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;">' +
+        '<button id="ggrThis" style="min-height:44px;background:#3a0a0a;border:1px solid rgba(255,100,100,0.4);border-radius:var(--radius);color:#ff8080;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">This day</button>' +
+        '<button id="ggrAll" style="min-height:44px;background:#3a0a0a;border:1px solid rgba(255,100,100,0.4);border-radius:var(--radius);color:#ff8080;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">All days</button>' +
+        '<button id="ggrCancel" style="min-height:44px;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('mousedown', function(e) { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('ggrThis').onclick = function() { overlay.remove(); removeDayNoteSA(key, saId); };
+  document.getElementById('ggrAll').onclick = function() { overlay.remove(); removeGraderGroup(groupId, saId); };
+  document.getElementById('ggrCancel').onclick = function() { overlay.remove(); };
+}
+
+function removeGraderGroup(groupId, saId) {
+  Object.keys(schedData).forEach(function(key) {
+    var dn = schedData[key];
+    if (!dn || !dn.dayNoteSAGroups || dn.dayNoteSAGroups[saId] !== groupId) return;
+    dn.dayNoteSA = (dn.dayNoteSA || []).filter(function(id) { return id !== saId; });
+    if (dn.dayNoteSALocations) delete dn.dayNoteSALocations[saId];
+    delete dn.dayNoteSAGroups[saId];
+  });
+  saveSchedDataDirect();
+  renderSchedule();
+}
+
+// Advances one day from dateKey; skips Sat/Sun unless includeWeekends is set.
+// Mirrors the skip-Sat/Sun pattern used by _nextBizDay for multi-shift jobs.
+function _graderNextDay(dateKey, includeWeekends) {
+  var d = new Date(dateKey + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  if (!includeWeekends) {
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  }
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function openGraderDaysModal(startKey, saId, loc) {
+  document.getElementById('graderDaysModal')?.remove();
+  var saInfo = specialActions.find(function(s) { return s.id === saId; });
+  var label = saInfo ? saInfo.label : 'Grader';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'graderDaysModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+
+  var numBtnsHtml = [1, 2, 3, 4, 5].map(function(n) {
+    return '<button class="grader-days-btn" data-n="' + n + '" style="min-height:44px;min-width:44px;flex:1;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:800;cursor:pointer;">' + n + '</button>';
+  }).join('');
+
+  overlay.innerHTML =
+    '<div style="background:var(--asphalt-mid);border:1px solid var(--asphalt-light);border-radius:var(--radius-lg);padding:22px;width:90vw;max-width:360px;box-sizing:border-box;">' +
+      '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--stripe);margin-bottom:4px;">🚜 ' + escHtml(label) + ' — how many days?</div>' +
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--concrete-dim);margin-bottom:14px;">Starting ' + escHtml(startKey) + '</div>' +
+      '<div style="display:flex;gap:6px;margin-bottom:10px;">' + numBtnsHtml + '</div>' +
+      '<div style="margin-bottom:14px;">' +
+        '<label style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:var(--concrete-dim);display:block;margin-bottom:4px;">Custom (1–30)</label>' +
+        '<input id="graderDaysCustom" type="number" min="1" max="30" placeholder="e.g. 10"' +
+          ' style="width:100%;min-height:44px;background:var(--asphalt);border:1px solid var(--asphalt-light);border-radius:var(--radius);padding:9px 12px;color:var(--white);font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:700;box-sizing:border-box;outline:none;" />' +
+      '</div>' +
+      '<label style="display:flex;align-items:center;gap:8px;font-family:\'DM Sans\',sans-serif;font-size:12px;color:var(--white);margin-bottom:18px;cursor:pointer;min-height:44px;">' +
+        '<input id="graderDaysIncludeWknd" type="checkbox" style="width:18px;height:18px;flex-shrink:0;" />' +
+        'Include weekends' +
+      '</label>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button id="graderDaysCancel" style="min-height:44px;flex:1;background:none;border:1px solid var(--asphalt-light);border-radius:var(--radius);color:var(--concrete-dim);font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>' +
+        '<button id="graderDaysAdd" style="min-height:44px;flex:1;background:#5c4000;border:1px solid rgba(245,197,24,0.5);border-radius:var(--radius);color:#f5c518;font-family:\'DM Sans\',sans-serif;font-size:13px;font-weight:800;cursor:pointer;">Add</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('mousedown', function(e) { if (e.target === overlay) overlay.remove(); });
+
+  var selectedN = 1;
+  var customInput = document.getElementById('graderDaysCustom');
+
+  function selectN(n, btn) {
+    selectedN = n;
+    if (customInput) customInput.value = '';
+    overlay.querySelectorAll('.grader-days-btn').forEach(function(b) {
+      b.style.background = 'var(--asphalt)';
+      b.style.color = 'var(--white)';
+    });
+    if (btn) { btn.style.background = '#5c4000'; btn.style.color = '#f5c518'; }
+  }
+  overlay.querySelectorAll('.grader-days-btn').forEach(function(b) {
+    b.onclick = function() { selectN(parseInt(b.dataset.n, 10), b); };
+  });
+  selectN(1, overlay.querySelector('.grader-days-btn[data-n="1"]'));
+
+  if (customInput) {
+    customInput.addEventListener('input', function() {
+      var v = parseInt(customInput.value, 10);
+      if (v) {
+        selectedN = Math.max(1, Math.min(30, v));
+        overlay.querySelectorAll('.grader-days-btn').forEach(function(b) {
+          b.style.background = 'var(--asphalt)';
+          b.style.color = 'var(--white)';
+        });
+      }
+    });
+  }
+
+  document.getElementById('graderDaysCancel').onclick = function() { overlay.remove(); };
+  document.getElementById('graderDaysAdd').onclick = function() {
+    var includeWeekends = !!document.getElementById('graderDaysIncludeWknd').checked;
+    var n = selectedN;
+    var customVal = customInput ? parseInt(customInput.value, 10) : NaN;
+    if (customVal) n = Math.max(1, Math.min(30, customVal));
+    overlay.remove();
+    applyGraderDays(startKey, saId, loc, n, includeWeekends);
+  };
+}
+
+function applyGraderDays(startKey, saId, loc, numDays, includeWeekends) {
+  var groupId = 'grader_' + Date.now();
+  var cur = startKey;
+  var filled = 0;
+  var guard = 0;
+  while (filled < numDays && guard < 400) {
+    guard++;
+    if (!schedData[cur]) schedData[cur] = {};
+    var curIds = schedData[cur].dayNoteSA || [];
+    if (!curIds.includes(saId)) {
+      schedData[cur].dayNoteSA = curIds.concat([saId]);
+      if (loc) {
+        schedData[cur].dayNoteSALocations = Object.assign({}, schedData[cur].dayNoteSALocations || {});
+        schedData[cur].dayNoteSALocations[saId] = loc;
+      }
+      schedData[cur].dayNoteSAGroups = Object.assign({}, schedData[cur].dayNoteSAGroups || {});
+      schedData[cur].dayNoteSAGroups[saId] = groupId;
+      filled++;
+    }
+    cur = _graderNextDay(cur, includeWeekends);
+  }
+  saveSchedDataDirect();
+  renderSchedule();
+  var saLabel = (specialActions.find(function(s) { return s.id === saId; }) || {}).label || 'Grader';
+  pushNotif('success', '🚜 Grader Scheduled', saLabel + ' — ' + filled + ' day' + (filled !== 1 ? 's' : '') + ' starting ' + startKey + '.', null);
 }
 
 // ── Day-note drag (moves the whole yellow bar + its data between days) ────────
@@ -2079,6 +2248,10 @@ function _saIsLocationAction(saInfo) {
 
 function _saIsMillingAction(saInfo) {
   return (saInfo && saInfo.label || '').toLowerCase().indexOf('milling') >= 0;
+}
+
+function _saIsGraderAction(saInfo) {
+  return (saInfo && saInfo.label || '').toLowerCase().indexOf('grader') >= 0;
 }
 
 function _saIsInternalGrader(label) {
@@ -5459,7 +5632,7 @@ function renderSchedule() {
                 ${canEditSched?`onclick="event.stopPropagation();_saEditModal('${sid}','${key}',null)"`:''}>
                 ${chipLabel}
                 ${canEditSched?`<button style="background:none;border:none;cursor:pointer;font-size:9px;padding:0 0 0 2px;line-height:1;color:${xColor};"
-                  onclick="event.stopPropagation();removeDayNoteSA('${key}','${sid}')">✕</button>`:''}
+                  onclick="event.stopPropagation();removeDayNoteSAChip('${key}','${sid}')">✕</button>`:''}
               </span>`;
             }).join('');
             return `<div class="sched-day-note-wrap sched-day-note-drag"
@@ -13428,6 +13601,10 @@ function _saEditModal(saId, dateKey, slot) {
 
   // Delete with confirm
   document.getElementById('saEditDel').onclick = function() {
+    if (isDayNote) {
+      var _grp = (schedData[dateKey] && schedData[dateKey].dayNoteSAGroups) ? schedData[dateKey].dayNoteSAGroups[saId] : null;
+      if (_grp) { overlay.remove(); removeDayNoteSAChip(dateKey, saId); return; }
+    }
     if (!confirm('Remove "' + sa.label + '" from this day?')) return;
     overlay.remove();
     if (isDayNote) {
