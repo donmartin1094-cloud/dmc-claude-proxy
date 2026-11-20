@@ -5922,9 +5922,18 @@ function _inv3OnVerify(r) {
   var _slot = r.scheduleSlot
     || (typeof _frResolveScheduleSlot === 'function' ? _frResolveScheduleSlot(r.date, r.foreman) : null)
     || ((r.foreman||'').toLowerCase().indexOf('filipe') !== -1 ? 'top' : 'bottom');
-  var _schedSlot = (typeof schedData!=='undefined' && schedData[r.date] && typeof getSlotData==='function')
-    ? getSlotData(r.date, _slot)
-    : null;
+  var _schedSlot = null;
+  if (typeof schedData!=='undefined' && schedData[r.date]) {
+    if (_slot === 'top_2nd' || _slot === 'bottom_2nd') {
+      // Second stop — its data lives in extras[], tagged by parentSlot, not
+      // under a 'top_2nd'/'bottom_2nd' key getSlotData knows how to read.
+      var _2ndParent = _slot.replace('_2nd', '');
+      var _2ndMatch = (schedData[r.date].extras || []).find(function(e) { return e && e.parentSlot === _2ndParent; });
+      _schedSlot = _2ndMatch ? _2ndMatch.data : null;
+    } else if (typeof getSlotData === 'function') {
+      _schedSlot = getSlotData(r.date, _slot);
+    }
+  }
   var _f = (_schedSlot && _schedSlot.fields) ? _schedSlot.fields : {};
   // A prior stub for this slot may have been deleted (_inv3DeleteStub), which
   // sets noInvoiceNeeded so the report-only fallback stops recreating it.

@@ -3657,7 +3657,7 @@ function _checkLocalStorageSize() {
 <script src="/ui-components.js?v=3"></script>
 <script src="/slips.js?v=3"></script>
 <script src="/schedule.js?v=16"></script>
-<script src="/reports.js?v=5"></script>
+<script src="/reports.js?v=6"></script>
 <script src="/mixslip-scanner.js?v=3"></script>
 <script>
 // Global crash reporter for production troubleshooting.
@@ -31828,19 +31828,35 @@ function _crewConfirmGetScheduleBlocks(dateKey) {
   };
   addBlock(dayData.top, 0, 'top');
   addBlock(dayData.bottom, 1, 'bottom');
-  // Extras have their own stored crew name (ex.foreman — same field the schedule
-  // card renders) and must never fall back to foremanRoster, which only has the
-  // top/bottom pair. No name → "Extra Crew N", not the bottom foreman.
+  // Extras come in two kinds, distinguished by ex.parentSlot:
+  //  - Second stops (parentSlot 'top'/'bottom') are the SAME crew as that main
+  //    slot, just a second job/location that day — label must always be the
+  //    live foremanRoster[0]/[1] name, never ex.foreman (which may be stale
+  //    or was set from a mis-pick in the unified crew picker), and never a
+  //    new/different person. Tracked under a distinct '<parent>_2nd' slot id
+  //    so its report never merges into the parent's main report.
+  //  - Standalone extra crews (parentSlot null) use their own stored crew
+  //    name (ex.foreman — same field the schedule card renders) and must
+  //    never fall back to foremanRoster, which only has the top/bottom pair.
+  //    No name → "Extra Crew N", not the bottom foreman.
   (dayData.extras || []).forEach(function(ex, i) {
     if (!ex || !ex.data) return;
     var bl = ex.data;
     if (!bl.type || bl.type === 'blank') return;
     var f = bl.fields || {};
-    var foremanName = ex.foreman || f.foreman || f.crew || ('Extra Crew ' + (i + 1));
     var jobLoc = f.jobName || f.jobNum || f.location || '';
     var gcN = f.gcName || f.owner || '';
     var plantLoc = f.plant || f.plantName || f.plantLocation || '';
-    blocks.push({ slot: 'extra_' + i, foreman: foremanName, jobLocation: jobLoc, gcName: gcN, plantLocation: plantLoc, jobNumber: f.jobNum || '', type: bl.type || '', isNight: !!(f.nightShift || f.night || (bl.type || '').toLowerCase().includes('night')) });
+    var isNight = !!(f.nightShift || f.night || (bl.type || '').toLowerCase().includes('night'));
+    if (ex.parentSlot === 'top' || ex.parentSlot === 'bottom') {
+      var parentIdx = ex.parentSlot === 'top' ? 0 : 1;
+      var parentDefault = ex.parentSlot === 'top' ? 'Filipe Joaquim' : 'Mario Arruda';
+      var parentName = foremanRoster[parentIdx] || parentDefault;
+      blocks.push({ slot: ex.parentSlot + '_2nd', foreman: parentName, jobLocation: jobLoc, gcName: gcN, plantLocation: plantLoc, jobNumber: f.jobNum || '', type: bl.type || '', isNight: isNight, isSecondStop: true });
+      return;
+    }
+    var foremanName = ex.foreman || f.foreman || f.crew || ('Extra Crew ' + (i + 1));
+    blocks.push({ slot: 'extra_' + i, foreman: foremanName, jobLocation: jobLoc, gcName: gcN, plantLocation: plantLoc, jobNumber: f.jobNum || '', type: bl.type || '', isNight: isNight });
   });
   return blocks;
 }
@@ -32060,7 +32076,14 @@ function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman, slot) {
   if (!dateKey || typeof schedData === 'undefined') return;
   var day = schedData[dateKey] || {};
   var slots = [['top', day.top], ['bottom', day.bottom]];
-  (day.extras || []).forEach(function(ex, i){ if (ex && ex.data) slots.push(['extra_'+i, ex.data]); });
+  // Second stops (ex.parentSlot === 'top'/'bottom') use the same '<parent>_2nd'
+  // slot id the crew-confirm system tags their report with — never 'extra_N',
+  // which is reserved for genuine standalone extra crews.
+  (day.extras || []).forEach(function(ex, i){
+    if (!ex || !ex.data) return;
+    var sId = (ex.parentSlot === 'top' || ex.parentSlot === 'bottom') ? (ex.parentSlot + '_2nd') : ('extra_' + i);
+    slots.push([sId, ex.data]);
+  });
   var changed = false;
   slots.forEach(function(pair) {
     var slotName = pair[0]; var bdata = pair[1];
@@ -32091,6 +32114,32 @@ function _adminVerifyScheduleColor(dateKey, jobNumber, color, foreman, slot) {
     saveSchedDataDirect();
     if (typeof renderSchedule === 'function') renderSchedule();
   }
+}
+
+// ── Manual cleanup for auto-drafted reports mislabeled by a past bug ────────
+// Console-only helpers (not wired to any button) — list first, then purge.
+// A "stale" report is one whose stored foreman name doesn't match ANY name
+// _crewConfirmGetScheduleBlocks currently derives for that date, i.e. it was
+// drafted under an old, now-fixed labeling bug and needs to regenerate.
+function _adminVerifyListStaleAutoDrafts(dateKey) {
+  var blocks = (typeof _crewConfirmGetScheduleBlocks === 'function') ? _crewConfirmGetScheduleBlocks(dateKey) : [];
+  var validNames = {};
+  blocks.forEach(function(b) { validNames[(b.foreman || '').toLowerCase().trim()] = true; });
+  var stale = (typeof foremanReports !== 'undefined' ? foremanReports : []).filter(function(r) {
+    return r.date === dateKey && r.autoGenerated && !validNames[(r.foreman || '').toLowerCase().trim()];
+  });
+  console.log('Stale auto-drafted reports for ' + dateKey + ':', stale.map(function(r) {
+    return { id: r.id, foreman: r.foreman, scheduleSlot: r.scheduleSlot || '(none)' };
+  }));
+  return stale;
+}
+function _adminVerifyPurgeStaleAutoDrafts(dateKey) {
+  var stale = _adminVerifyListStaleAutoDrafts(dateKey);
+  if (!stale.length) { console.log('Nothing to purge for ' + dateKey + '.'); return; }
+  var ids = stale.map(function(r) { return r.id; });
+  foremanReports = foremanReports.filter(function(r) { return ids.indexOf(r.id) === -1; });
+  if (typeof saveForemanReports === 'function') saveForemanReports();
+  console.log('Purged ' + ids.length + ' stale report(s) for ' + dateKey + '. Reopen Verify Shift Reports to redraft them.');
 }
 
 // ── Operator next-day assignment notification (6PM daily) ────────────────────
