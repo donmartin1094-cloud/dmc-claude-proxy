@@ -3454,8 +3454,12 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
         : `<div class="uspm-empty">No equipment in fleet yet.<br><span style="font-size:11px;">Add them on the Equipment page.</span></div>`);
 
     } else {
-      // Operators: original string-pool logic
-      const pool = operatorsList;
+      // Operators: live roster from employees (role === 'operator', active only) —
+      // operatorsList is no longer read here, same as the combo-modal picker.
+      const pool = (typeof employees !== 'undefined' ? employees : [])
+        .filter(e => e.role === 'operator' && e.status !== 'inactive' && e.name)
+        .map(e => e.name)
+        .sort((a, b) => a.localeCompare(b));
       listHtml = pool.length
         ? pool.map(item => {
             const sel = current.includes(item);
@@ -3463,7 +3467,7 @@ function openUnifiedSchedPicker({ type, title, key, slot, field, focusSection })
               <span class="uspm-item-icon">${icon}</span>${item}
             </div>`;
           }).join('')
-        : `<div class="uspm-empty">No operators in roster yet.<br><span style="font-size:11px;">Add them in ⚙️ Settings → Rosters.</span></div>`;
+        : `<div class="uspm-empty">No operators in roster yet.<br><span style="font-size:11px;">Add them in ⚙️ Settings → Rosters → Employees.</span></div>`;
     }
 
     addSectionHtml = `
@@ -4326,11 +4330,18 @@ function _getOperatorConflictJobName(dateKey, excludeSlot, displayName) {
 }
 
 function _uspmComboOperatorsSectionHtml(key, slot) {
-  const roster = (typeof DEFAULT_TEAM_ACCOUNTS !== 'undefined' ? DEFAULT_TEAM_ACCOUNTS : [])
-    .filter(a => a.role === 'operator' && a.active !== false);
-  if (!roster.length) return '<div class="uspm-empty">No operator accounts yet.</div>';
-  return '<div style="display:flex;flex-wrap:wrap;">' + roster.map(a => {
-    const name = a.displayName || a.username;
+  // Live roster: active operators from employees (Settings → Rosters → Employees),
+  // not the hardcoded DEFAULT_TEAM_ACCOUNTS — roster edits never reach a hardcoded list.
+  const activeNames = (typeof employees !== 'undefined' ? employees : [])
+    .filter(e => e.role === 'operator' && e.status !== 'inactive' && e.name)
+    .map(e => e.name);
+  // Union in anyone already assigned to this slot who isn't in the active
+  // roster (inactive or removed since), so past assignments keep showing.
+  const allNames = activeNames.slice();
+  _uspmComboOperatorsSelected.forEach(n => { if (allNames.indexOf(n) === -1) allNames.push(n); });
+  allNames.sort((a, b) => a.localeCompare(b));
+  if (!allNames.length) return '<div class="uspm-empty">No operators in roster yet.<br><span style="font-size:11px;">Add them in ⚙️ Settings → Rosters → Employees.</span></div>';
+  return '<div style="display:flex;flex-wrap:wrap;">' + allNames.map(name => {
     const safeName = name.replace(/'/g,"\\'");
     const sel = _uspmComboOperatorsSelected.indexOf(name) !== -1;
     const conflictJob = sel ? '' : _getOperatorConflictJobName(key, slot, name);
