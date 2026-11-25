@@ -5073,7 +5073,16 @@ function getWeeks(dates) {
       for (let p=0; p<d.getDay(); p++) week.push(null);
     }
     week.push(d);
-    if (week.length===7 || i===dates.length-1) { weeks.push(week); week=[]; }
+    if (week.length===7 || i===dates.length-1) {
+      // Pad end of last week to 7 slots too — a month that doesn't end on a
+      // Saturday leaves the final week short, and flexbox-based rows (the
+      // shared extra-crew row below the day columns) size each cell as 1/N
+      // of the row instead of a fixed 1/7 column, stretching that day's
+      // card across the rest of the row. The day grid itself uses a fixed
+      // 7-column CSS grid so it isn't affected, but this keeps both in sync.
+      while (week.length < 7) week.push(null);
+      weeks.push(week); week=[];
+    }
   });
   return weeks;
 }
